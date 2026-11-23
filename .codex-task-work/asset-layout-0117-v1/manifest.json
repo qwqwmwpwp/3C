@@ -1,0 +1,1645 @@
+{
+  "records": [
+    {
+      "old": "Assets/AnimationCamera/Editor/UmaCharacterTestWindow.cs",
+      "new": "Assets/Code/AnimCamera/Editor/UmaCharacterTestWindow.cs",
+      "before": "ad3158b5c767a46f377ec49e3e9b1f6ef17274a103a8f9301fe9ad1277efa3d0",
+      "after": "79f0256699aec5c366f4cba341c794034e3aee26ea4ec131906711ec33270623"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/AnimationCameraPlayer.cs",
+      "new": "Assets/Code/AnimCamera/Runtime/AnimationCameraPlayer.cs",
+      "before": "9ae992b7bf04af921d2697b05b7b80b3eb015251d33f45b728127a42fe80594d",
+      "after": "9ae992b7bf04af921d2697b05b7b80b3eb015251d33f45b728127a42fe80594d"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraEasing.cs",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraEasing.cs",
+      "before": "7c194574c09dfa41534456eb8d30b62fd23827e1f15043e26a24faeac5d3ff50",
+      "after": "7c194574c09dfa41534456eb8d30b62fd23827e1f15043e26a24faeac5d3ff50"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTargetBinding.cs",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTargetBinding.cs",
+      "before": "1cf10a8af05092d0b14a81d3e857e28d3cbfa4f635d18adde03dd166daa9a24a",
+      "after": "1cf10a8af05092d0b14a81d3e857e28d3cbfa4f635d18adde03dd166daa9a24a"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTimelineAsset.cs",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTimelineAsset.cs",
+      "before": "cd704f6eef716a98b340941089d9e0407a57800d96cf8fbbee7b27b27e57b7e8",
+      "after": "cd704f6eef716a98b340941089d9e0407a57800d96cf8fbbee7b27b27e57b7e8"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTimelineEvaluator.cs",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTimelineEvaluator.cs",
+      "before": "f6adeb1f89dbf27bf9ea72a1fd7868cd0f6e2c79579c630f291b2708e7688d71",
+      "after": "f6adeb1f89dbf27bf9ea72a1fd7868cd0f6e2c79579c630f291b2708e7688d71"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/AnimationCameraDemoControls.cs",
+      "new": "Assets/Code/AnimCamera/Samples/AnimationCameraDemoControls.cs",
+      "before": "76259bb3050ab6449632f9d02a0b505ec956ccff26ea26d6df3739b0c9fa7b3b",
+      "after": "76259bb3050ab6449632f9d02a0b505ec956ccff26ea26d6df3739b0c9fa7b3b"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/AnimationCameraTest.unity",
+      "new": "Assets/Scenes/动画相机测试.unity",
+      "before": "4b770864c84d5f5504da2809292d5d43e8c6911e20c13fa7dfdf208c6b82d0cd",
+      "after": "4b770864c84d5f5504da2809292d5d43e8c6911e20c13fa7dfdf208c6b82d0cd"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/DemoCameraTimeline.asset",
+      "new": "Assets/Data/AnimCamera/示例镜头时间轴.asset",
+      "before": "616aee61730d7d17b8a0bd252aae58e4300ec557d0423a3ed1a4d575313cbbe1",
+      "after": "364c9508d0977a8294b3d0a04aa176f839ed4e1e617624bf178ac46538b5b712"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Character.mat",
+      "new": "Assets/Art/AnimCamera/Materials/Character.mat",
+      "before": "9394d9a90eadf16ac54e436de527f1775eb8bbb1ded23674ed45aa9883dd6bbf",
+      "after": "9394d9a90eadf16ac54e436de527f1775eb8bbb1ded23674ed45aa9883dd6bbf"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Coral.mat",
+      "new": "Assets/Art/AnimCamera/Materials/Coral.mat",
+      "before": "d5fc4d123d56db7d2127d331a7288baebbb9e1540427d2444c00e50284d9f029",
+      "after": "d5fc4d123d56db7d2127d331a7288baebbb9e1540427d2444c00e50284d9f029"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Ground.mat",
+      "new": "Assets/Art/AnimCamera/Materials/Ground.mat",
+      "before": "4ba29dd363ae998f31646e683393b2630139483ac7fe196ed17163682830a7aa",
+      "after": "4ba29dd363ae998f31646e683393b2630139483ac7fe196ed17163682830a7aa"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Teal.mat",
+      "new": "Assets/Art/AnimCamera/Materials/Teal.mat",
+      "before": "5a741a3410c6a8d0677ec1331ae251554060e82537164ef74407ee52b595b290",
+      "after": "5a741a3410c6a8d0677ec1331ae251554060e82537164ef74407ee52b595b290"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaCharacter/UmaCharacterPlayback.cs",
+      "new": "Assets/Code/AnimCamera/Samples/UmaCharacterPlayback.cs",
+      "before": "a7b47d7d5728a5369a9e5c75d5ff6c0ead260783ca4896f4714d84e051023893",
+      "after": "a7b47d7d5728a5369a9e5c75d5ff6c0ead260783ca4896f4714d84e051023893"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaViewerModel/c1.fbx",
+      "new": "Assets/Art/AnimCamera/Models/c1.fbx",
+      "before": "13f026a524fe1a7a6f88dd428c9abcfc9817aa4b85667fc869aefbb84882cdae",
+      "after": "13f026a524fe1a7a6f88dd428c9abcfc9817aa4b85667fc869aefbb84882cdae"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaViewerModel/UmaViewerModelSample.cs",
+      "new": "Assets/Code/AnimCamera/Samples/UmaViewerModelSample.cs",
+      "before": "e7ae631ea28e8c07e286980569717046de46eadb77534608a1edb70d93ce212e",
+      "after": "e7ae631ea28e8c07e286980569717046de46eadb77534608a1edb70d93ce212e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterAnimationDebugWindow.cs",
+      "new": "Assets/Code/Character/Editor/CharacterAnimationDebugWindow.cs",
+      "before": "98bf7c1d4aaed5977224dd964e388ff5a3d8d7374702c30b25cd8e7045df38e1",
+      "after": "98bf7c1d4aaed5977224dd964e388ff5a3d8d7374702c30b25cd8e7045df38e1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterAnimationOverrideAudit.cs",
+      "new": "Assets/Code/Character/Editor/CharacterAnimationOverrideAudit.cs",
+      "before": "6e525f36c2bea4ef5fb1c68ca380950495697a7ef297efed10fc2d9c587f359f",
+      "after": "6e525f36c2bea4ef5fb1c68ca380950495697a7ef297efed10fc2d9c587f359f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterBehaviorChoiceDrawer.cs",
+      "new": "Assets/Code/Character/Editor/CharacterBehaviorChoiceDrawer.cs",
+      "before": "e44e287f82eb65724fb998005b6c90847fa3f13feac1442b6942be288f234eb2",
+      "after": "e44e287f82eb65724fb998005b6c90847fa3f13feac1442b6942be288f234eb2"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterClipLibraryBaker.cs",
+      "new": "Assets/Code/Character/Editor/CharacterClipLibraryBaker.cs",
+      "before": "9049f9cfa98bd87cc4a75609ef9228b3f89c4dde24cd123cc9b348f7a78afce0",
+      "after": "9049f9cfa98bd87cc4a75609ef9228b3f89c4dde24cd123cc9b348f7a78afce0"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastGhost.cs",
+      "new": "Assets/Code/Character/Editor/CharacterForecastGhost.cs",
+      "before": "efc0ea0d471d5e716e124094f7870880b50ed1293d549841c99e6e788013be13",
+      "after": "efc0ea0d471d5e716e124094f7870880b50ed1293d549841c99e6e788013be13"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastGhost.shader",
+      "new": "Assets/Code/Character/Editor/CharacterForecastGhost.shader",
+      "before": "9508472ae88ed8b6e22310c846fa5c56cd6ba5c4001ac8a4e80b11cddac7b10a",
+      "after": "9508472ae88ed8b6e22310c846fa5c56cd6ba5c4001ac8a4e80b11cddac7b10a"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastPose.cs",
+      "new": "Assets/Code/Character/Editor/CharacterForecastPose.cs",
+      "before": "edb37ecf0f4910c265c1605e6f4608b94041695d3332e1c80755d07a67d6aa4c",
+      "after": "edb37ecf0f4910c265c1605e6f4608b94041695d3332e1c80755d07a67d6aa4c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastRehearsal.cs",
+      "new": "Assets/Code/Character/Editor/CharacterForecastRehearsal.cs",
+      "before": "01cb5d15f62de2f6109089f60a31db2563bc222f50b1221a63855548642db0a5",
+      "after": "01cb5d15f62de2f6109089f60a31db2563bc222f50b1221a63855548642db0a5"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastSceneView.cs",
+      "new": "Assets/Code/Character/Editor/CharacterForecastSceneView.cs",
+      "before": "8d4d2f68c77f9553dd39ce5fff700658572b4dfdefbcbeb713be70e8fb8f4777",
+      "after": "8d4d2f68c77f9553dd39ce5fff700658572b4dfdefbcbeb713be70e8fb8f4777"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastTrail.cs",
+      "new": "Assets/Code/Character/Editor/CharacterForecastTrail.cs",
+      "before": "850abfb01a51cc83aea4abd5a726e6a71a949c156be4eb7a94eb3933b8bb3fb1",
+      "after": "850abfb01a51cc83aea4abd5a726e6a71a949c156be4eb7a94eb3933b8bb3fb1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterMotionDatabaseBaker.cs",
+      "new": "Assets/Code/Character/Editor/CharacterMotionDatabaseBaker.cs",
+      "before": "33a588404dd8bb3174b570c40888c68ed6413cfdeb8c79e664a8b63f6a5e600d",
+      "after": "33a588404dd8bb3174b570c40888c68ed6413cfdeb8c79e664a8b63f6a5e600d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterActionHandoff.cs",
+      "new": "Assets/Code/Character/Anim/CharacterActionHandoff.cs",
+      "before": "985ccb5a968da0811f3f7193e15d817211971a59d6740f5e553525287b3dca54",
+      "after": "985ccb5a968da0811f3f7193e15d817211971a59d6740f5e553525287b3dca54"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterActionPlayback.cs",
+      "new": "Assets/Code/Character/Anim/CharacterActionPlayback.cs",
+      "before": "569021b04461bf5bcb7b5bba101ec88864ab7ff4fade74c6ee695f519f0a0b10",
+      "after": "569021b04461bf5bcb7b5bba101ec88864ab7ff4fade74c6ee695f519f0a0b10"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationComposer.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationComposer.cs",
+      "before": "3c1efa3de51b907738756fb4dc3aa24ffcbcbc5e08bf405728a4fe3f73e6816f",
+      "after": "3c1efa3de51b907738756fb4dc3aa24ffcbcbc5e08bf405728a4fe3f73e6816f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationConfig.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationConfig.cs",
+      "before": "7b595e3b458d02e9364b8a92040ad28fe9ccf9dc7d79fe0ec30d4ce16daf2fff",
+      "after": "7b595e3b458d02e9364b8a92040ad28fe9ccf9dc7d79fe0ec30d4ce16daf2fff"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationDebugTrace.cs",
+      "new": "Assets/Code/Character/Replay/CharacterAnimationDebugTrace.cs",
+      "before": "2437ce5af080770a7c182e5a33fc3027073ded8a9ae41d0bfd992fb3fbf61d0d",
+      "after": "2437ce5af080770a7c182e5a33fc3027073ded8a9ae41d0bfd992fb3fbf61d0d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationIk.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationIk.cs",
+      "before": "e6b422202b91a9e0aeaa957f34cda23f65ecf7acf394ae20d624b3eef3dbabe0",
+      "after": "e6b422202b91a9e0aeaa957f34cda23f65ecf7acf394ae20d624b3eef3dbabe0"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationIntent.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationIntent.cs",
+      "before": "bccb57ec0d21d599fbd65234d07e1e84758777292af6da79d2cf122b3bb41a79",
+      "after": "bccb57ec0d21d599fbd65234d07e1e84758777292af6da79d2cf122b3bb41a79"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationLocomotion.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationLocomotion.cs",
+      "before": "528bde7291ccef2368e5516400bbbb8ea72e0dd603032bf1915611f26d4db7cc",
+      "after": "528bde7291ccef2368e5516400bbbb8ea72e0dd603032bf1915611f26d4db7cc"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationMotion.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationMotion.cs",
+      "before": "5006a8a0076a72b4cac507cf8120bc10241efd31b71130c0c5814f1e08573190",
+      "after": "5006a8a0076a72b4cac507cf8120bc10241efd31b71130c0c5814f1e08573190"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationPipeline.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationPipeline.cs",
+      "before": "cff9fef2092927f57e1dd6624a03cf0dd6b885a13d2186f6be17ed499a9d22b0",
+      "after": "cff9fef2092927f57e1dd6624a03cf0dd6b885a13d2186f6be17ed499a9d22b0"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationPlayer.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationPlayer.cs",
+      "before": "e91dd3df2641982e608247a8c5ec9e0daf57be1cc9293837527daea4bb0b050c",
+      "after": "e91dd3df2641982e608247a8c5ec9e0daf57be1cc9293837527daea4bb0b050c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationResourceCatalog.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationResourceCatalog.cs",
+      "before": "806cfdcb4789611af9db1920602d448cc55a49b7626feb376d1a8f2fb837641d",
+      "after": "806cfdcb4789611af9db1920602d448cc55a49b7626feb376d1a8f2fb837641d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationResourceResolver.cs",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationResourceResolver.cs",
+      "before": "8a669cb9a2c052902221d2254251ea6935ccb56a65006a18c426775900c4da9f",
+      "after": "8a669cb9a2c052902221d2254251ea6935ccb56a65006a18c426775900c4da9f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAttackCombo.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterAttackCombo.cs",
+      "before": "462cc09e31ac3a7390b26ac81ca32e5b978436c6411ffc8cbe1af9cc8156836d",
+      "after": "462cc09e31ac3a7390b26ac81ca32e5b978436c6411ffc8cbe1af9cc8156836d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehavior.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehavior.cs",
+      "before": "6ba870b2b97de0a6ae9d0bf350d75232eb9cd20491e2e08384b6ad8b5403990d",
+      "after": "6ba870b2b97de0a6ae9d0bf350d75232eb9cd20491e2e08384b6ad8b5403990d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorAnimationMapping.cs",
+      "new": "Assets/Code/Character/Anim/CharacterBehaviorAnimationMapping.cs",
+      "before": "4505c1f8498b17bffec95e44fc19f21891fd104639a73315624c93b9533b0f74",
+      "after": "4505c1f8498b17bffec95e44fc19f21891fd104639a73315624c93b9533b0f74"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorAnimator.cs",
+      "new": "Assets/Code/Character/Anim/CharacterBehaviorAnimator.cs",
+      "before": "3dde444241d7d852aa8363dc57d0accf681a7b942abe7db16b075818b8124ed3",
+      "after": "3dde444241d7d852aa8363dc57d0accf681a7b942abe7db16b075818b8124ed3"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorConfig.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorConfig.cs",
+      "before": "eb531da8d60c6986b4b0f9a6539f0a6c7e6a87026648a09f7cc7d4b306500ea1",
+      "after": "eb531da8d60c6986b4b0f9a6539f0a6c7e6a87026648a09f7cc7d4b306500ea1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorDriver.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorDriver.cs",
+      "before": "839d375c0be44b0605055d8a0a9d3b292c8c7085efd5cf6ad3e83725d54c32c7",
+      "after": "839d375c0be44b0605055d8a0a9d3b292c8c7085efd5cf6ad3e83725d54c32c7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorFlow.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorFlow.cs",
+      "before": "0dc8c74e51e37d8260e19c775873b5c1a7985299942dd8525be2b27c2cdf86f8",
+      "after": "0dc8c74e51e37d8260e19c775873b5c1a7985299942dd8525be2b27c2cdf86f8"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorFrameResult.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorFrameResult.cs",
+      "before": "51de6c06ab9ebdc977e3704a8324a05f955a1f37df656606645d2a2d6a827d92",
+      "after": "51de6c06ab9ebdc977e3704a8324a05f955a1f37df656606645d2a2d6a827d92"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorRules.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorRules.cs",
+      "before": "0c9a6b0b049e3bf544ee7f325bc05c19275a3cea0210d239bd0f24d2804605dd",
+      "after": "0c9a6b0b049e3bf544ee7f325bc05c19275a3cea0210d239bd0f24d2804605dd"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBodyPlaybackGraph.cs",
+      "new": "Assets/Code/Character/Anim/CharacterBodyPlaybackGraph.cs",
+      "before": "32bab5342cfca14559f349abed7d79489fdd963b94f8a5fe53baa1bac181b4c9",
+      "after": "32bab5342cfca14559f349abed7d79489fdd963b94f8a5fe53baa1bac181b4c9"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipLibrary.cs",
+      "new": "Assets/Code/Character/Anim/CharacterClipLibrary.cs",
+      "before": "3b7e01bdbcf0979833aa140c14444e5e2032390d5c8495b8b818f654ca1a630f",
+      "after": "3b7e01bdbcf0979833aa140c14444e5e2032390d5c8495b8b818f654ca1a630f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipMixer.cs",
+      "new": "Assets/Code/Character/Anim/CharacterClipMixer.cs",
+      "before": "0005252f8d65068cc5d83d135154e03b9b571a14429a78536462fcd68a57f880",
+      "after": "0005252f8d65068cc5d83d135154e03b9b571a14429a78536462fcd68a57f880"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipPlayback.cs",
+      "new": "Assets/Code/Character/Anim/CharacterClipPlayback.cs",
+      "before": "7aaae3d791cfdd2021c7d259ce9e4520a1f5b2a361903843b5158179f99e74f1",
+      "after": "7aaae3d791cfdd2021c7d259ce9e4520a1f5b2a361903843b5158179f99e74f1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterComboTable.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterComboTable.cs",
+      "before": "7d8a8b4ca0e52b3e5d3b668b35205e44839253a0e455d0a1c4913264ab20a570",
+      "after": "7d8a8b4ca0e52b3e5d3b668b35205e44839253a0e455d0a1c4913264ab20a570"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterControllerFrameResult.cs",
+      "new": "Assets/Code/Character/Anim/CharacterControllerFrameResult.cs",
+      "before": "c746e71781c408fe3d8b84cb51f479093424cece19dad43cd43b7c4e383bc159",
+      "after": "c746e71781c408fe3d8b84cb51f479093424cece19dad43cd43b7c4e383bc159"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterControllerPlayback.cs",
+      "new": "Assets/Code/Character/Anim/CharacterControllerPlayback.cs",
+      "before": "9c1fcca6bfe13f171d5900d6c656e31cf40e1e921cedb6b47f6f2e624f012386",
+      "after": "9c1fcca6bfe13f171d5900d6c656e31cf40e1e921cedb6b47f6f2e624f012386"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterDashBehavior.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterDashBehavior.cs",
+      "before": "1417140c5a92e734c84e7d467ac16d318a723a0683906f7596fb08eed4724f82",
+      "after": "1417140c5a92e734c84e7d467ac16d318a723a0683906f7596fb08eed4724f82"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterFootObservation.cs",
+      "new": "Assets/Code/Character/Anim/CharacterFootObservation.cs",
+      "before": "a76948db07a2406e74f4e2099df832de5d604c1e0c3fc436d31cb49ea119d2a9",
+      "after": "a76948db07a2406e74f4e2099df832de5d604c1e0c3fc436d31cb49ea119d2a9"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastConfig.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastConfig.cs",
+      "before": "899e7b7565c21131d533dd76c7ccc18e33a6c4b0727790b8c0eb348baa27f8d0",
+      "after": "899e7b7565c21131d533dd76c7ccc18e33a6c4b0727790b8c0eb348baa27f8d0"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastDiagnostics.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastDiagnostics.cs",
+      "before": "a6d4b32bacf97bed07c331d36155a0a0d36071c68e26bf6ace9a8e11b6f46aad",
+      "after": "a6d4b32bacf97bed07c331d36155a0a0d36071c68e26bf6ace9a8e11b6f46aad"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastGeometry.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastGeometry.cs",
+      "before": "c9441ae0df796a77fae157a8b4bb94d940e449baeff4f1d21a7fcd46c3832e21",
+      "after": "c9441ae0df796a77fae157a8b4bb94d940e449baeff4f1d21a7fcd46c3832e21"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastQuery.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastQuery.cs",
+      "before": "e82b3f64f51e5f965fd85c2e6a8b07d096303d5405f2c32cffc04313349c0207",
+      "after": "e82b3f64f51e5f965fd85c2e6a8b07d096303d5405f2c32cffc04313349c0207"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGroundSteering.cs",
+      "new": "Assets/Code/Character/Motion/CharacterGroundSteering.cs",
+      "before": "7d31fa3fd5334170f84e9057b836395908f0e52812cdc120d00015d5c0a75097",
+      "after": "7d31fa3fd5334170f84e9057b836395908f0e52812cdc120d00015d5c0a75097"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGroundTrajectory.cs",
+      "new": "Assets/Code/Character/Motion/CharacterGroundTrajectory.cs",
+      "before": "09d43d4fc7fce90982bd2bc0138d43f19f0c5a5d03c4e21765b5c5322c2e6a22",
+      "after": "09d43d4fc7fce90982bd2bc0138d43f19f0c5a5d03c4e21765b5c5322c2e6a22"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGuardBehavior.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterGuardBehavior.cs",
+      "before": "3103b44be77e9594128af3499bdde6e09b8c0eb115589998cca47cc95f11bceb",
+      "after": "3103b44be77e9594128af3499bdde6e09b8c0eb115589998cca47cc95f11bceb"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGuardPresentation.cs",
+      "new": "Assets/Code/Character/Anim/CharacterGuardPresentation.cs",
+      "before": "38da224f72c1f230b03887b8cf971b15efd9e911fe2a84849f443be5d61cdf8b",
+      "after": "38da224f72c1f230b03887b8cf971b15efd9e911fe2a84849f443be5d61cdf8b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterIkInput.cs",
+      "new": "Assets/Code/Character/Anim/CharacterIkInput.cs",
+      "before": "8cc103df39d6e28fbfe1a688c3c93adbc0cb359cec57ba9fc568a4bf0bf80478",
+      "after": "8cc103df39d6e28fbfe1a688c3c93adbc0cb359cec57ba9fc568a4bf0bf80478"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterIkJob.cs",
+      "new": "Assets/Code/Character/Anim/CharacterIkJob.cs",
+      "before": "a0a4d246bbd2e7c3f3a4851817cd8c525e0ac2a0a4010759afa3abc7f7fce305",
+      "after": "a0a4d246bbd2e7c3f3a4851817cd8c525e0ac2a0a4010759afa3abc7f7fce305"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterInputSnapshot.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterInputSnapshot.cs",
+      "before": "3d7974a52c0428d2a1dae798a0931fd4cb3f82ad1242a19269770829359f90a6",
+      "after": "3d7974a52c0428d2a1dae798a0931fd4cb3f82ad1242a19269770829359f90a6"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLegacyAnimationSettings.cs",
+      "new": "Assets/Code/Character/Anim/CharacterLegacyAnimationSettings.cs",
+      "before": "6813e1f8cb590fcf369372c406504c5a1ff989c76d7edb71fb010671eb35ba98",
+      "after": "6813e1f8cb590fcf369372c406504c5a1ff989c76d7edb71fb010671eb35ba98"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLegacyMotionMatcher.cs",
+      "new": "Assets/Code/Character/Anim/CharacterLegacyMotionMatcher.cs",
+      "before": "15e4b7d704662f28174387c56d9351781abe7e5cfee0f6db14e04af66fba4636",
+      "after": "15e4b7d704662f28174387c56d9351781abe7e5cfee0f6db14e04af66fba4636"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLightAttackBehavior.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterLightAttackBehavior.cs",
+      "before": "b1d71856aecf36df1537f56f1a6acb57212447c7567d050492b3a1b27696f1e4",
+      "after": "b1d71856aecf36df1537f56f1a6acb57212447c7567d050492b3a1b27696f1e4"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLocomotionGaitPhase.cs",
+      "new": "Assets/Code/Character/Anim/CharacterLocomotionGaitPhase.cs",
+      "before": "d0ddb0b6054ba70273615e808ab8f6378bf110efcd379fc61ccc6d1a5c3a4674",
+      "after": "d0ddb0b6054ba70273615e808ab8f6378bf110efcd379fc61ccc6d1a5c3a4674"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLocomotionPoseSelector.cs",
+      "new": "Assets/Code/Character/Anim/CharacterLocomotionPoseSelector.cs",
+      "before": "5e829d74415edf2123ded9c034ea07fd8bb6e3a69089028b54d36b054519681b",
+      "after": "5e829d74415edf2123ded9c034ea07fd8bb6e3a69089028b54d36b054519681b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMatchReplay.cs",
+      "new": "Assets/Code/Character/Replay/CharacterMatchReplay.cs",
+      "before": "58cc4244e152e775eb6a431e51965eb228dc53e04b0c307d18303c47a9a02b97",
+      "after": "58cc4244e152e775eb6a431e51965eb228dc53e04b0c307d18303c47a9a02b97"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMatchTrajectory.cs",
+      "new": "Assets/Code/Character/Anim/CharacterMatchTrajectory.cs",
+      "before": "fcebb1950a3c1788a91b28e17372c382bf4932627c1f05bcd55f3fe0ab26282c",
+      "after": "fcebb1950a3c1788a91b28e17372c382bf4932627c1f05bcd55f3fe0ab26282c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterModelBindings.cs",
+      "new": "Assets/Code/Character/Anim/CharacterModelBindings.cs",
+      "before": "de511bb7bb41c5b798b756d2809a997e1e75578b6f97231fddde727c7f560db7",
+      "after": "de511bb7bb41c5b798b756d2809a997e1e75578b6f97231fddde727c7f560db7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotionDatabase.cs",
+      "new": "Assets/Code/Character/Anim/CharacterMotionDatabase.cs",
+      "before": "ff53a9cbaf1ae1040fc8da5035c7234ed5b6aaca8788e29578e8691061daa1c1",
+      "after": "ff53a9cbaf1ae1040fc8da5035c7234ed5b6aaca8788e29578e8691061daa1c1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotionMatcher.cs",
+      "new": "Assets/Code/Character/Anim/CharacterMotionMatcher.cs",
+      "before": "17b4fd5e9052e81c9d1be15766e1d8a886b3b5809a0caab70bc0738d818868fd",
+      "after": "17b4fd5e9052e81c9d1be15766e1d8a886b3b5809a0caab70bc0738d818868fd"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotorSettings.cs",
+      "new": "Assets/Code/Character/Motion/CharacterMotorSettings.cs",
+      "before": "a43aa3b9a6c1d6b09058a7a12df316bab3bef39571477d2fa4952bdf2311125a",
+      "after": "a43aa3b9a6c1d6b09058a7a12df316bab3bef39571477d2fa4952bdf2311125a"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotorStep.cs",
+      "new": "Assets/Code/Character/Motion/CharacterMotorStep.cs",
+      "before": "47ca2744d4f3c6948490922417e0f30d54804d3c9dfc0636b77cfc00c81e8a40",
+      "after": "47ca2744d4f3c6948490922417e0f30d54804d3c9dfc0636b77cfc00c81e8a40"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMoveBehavior.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterMoveBehavior.cs",
+      "before": "736bc0d3da55d121d426be9f11af5c1628545ee8d3c20e5d872da095f585c7b9",
+      "after": "736bc0d3da55d121d426be9f11af5c1628545ee8d3c20e5d872da095f585c7b9"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementConfig.cs",
+      "new": "Assets/Code/Character/Motion/CharacterMovementConfig.cs",
+      "before": "6cd6f31645ef092e3342e7f71fe40fa7c890ba122eb564eee05548dcee8f1b7d",
+      "after": "6cd6f31645ef092e3342e7f71fe40fa7c890ba122eb564eee05548dcee8f1b7d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementForecast.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterMovementForecast.cs",
+      "before": "8c847fae20fb8d9551f70a9ba5a5f121e924144f2e5b32d7edf9562715c98e05",
+      "after": "8c847fae20fb8d9551f70a9ba5a5f121e924144f2e5b32d7edf9562715c98e05"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementPredictor.cs",
+      "new": "Assets/Code/Character/Forecast/CharacterMovementPredictor.cs",
+      "before": "38151c1c985554a7453d6e660a048bc012c93064687770aaeffb7c970dd22b6c",
+      "after": "38151c1c985554a7453d6e660a048bc012c93064687770aaeffb7c970dd22b6c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPlaybackCounters.cs",
+      "new": "Assets/Code/Character/Anim/CharacterPlaybackCounters.cs",
+      "before": "3d4b95332d5142bf2fdebdfaab11e38d6601f3677087a58ef0a49e333141b06c",
+      "after": "3d4b95332d5142bf2fdebdfaab11e38d6601f3677087a58ef0a49e333141b06c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPlaybackObservation.cs",
+      "new": "Assets/Code/Character/Anim/CharacterPlaybackObservation.cs",
+      "before": "5d641ecfcf9aedc7703866ea37922a3cd108a02eea19dd9dbafbc218ff127f01",
+      "after": "5d641ecfcf9aedc7703866ea37922a3cd108a02eea19dd9dbafbc218ff127f01"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPoseInertia.cs",
+      "new": "Assets/Code/Character/Anim/CharacterPoseInertia.cs",
+      "before": "9c5e80b3269ad1c0a2e063b1aae9559c242342e2b1a2f02c6a38d8cad358508d",
+      "after": "9c5e80b3269ad1c0a2e063b1aae9559c242342e2b1a2f02c6a38d8cad358508d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPoseInertiaSettings.cs",
+      "new": "Assets/Code/Character/Anim/CharacterPoseInertiaSettings.cs",
+      "before": "8c9d3307d98dc0129b6bd142e53ae2068cfb134c6d9baeaa71bf86f6638920cf",
+      "after": "8c9d3307d98dc0129b6bd142e53ae2068cfb134c6d9baeaa71bf86f6638920cf"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterProfile.cs",
+      "new": "Assets/Code/Character/Behavior/CharacterProfile.cs",
+      "before": "2267a204310327dd93c89e1390d4bad71326bf1e4202134c2073e4051a66ef9d",
+      "after": "2267a204310327dd93c89e1390d4bad71326bf1e4202134c2073e4051a66ef9d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterProfileAnimation.cs",
+      "new": "Assets/Code/Character/Anim/CharacterProfileAnimation.cs",
+      "before": "9d7e1c25514b163c112b48f05e37e3a814ce9807fbeca687d8d77f82d6f84823",
+      "after": "9d7e1c25514b163c112b48f05e37e3a814ce9807fbeca687d8d77f82d6f84823"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterRenderPosition.cs",
+      "new": "Assets/Code/Character/Motion/CharacterRenderPosition.cs",
+      "before": "d28761b5febc51bdeac2154333ee0c508dfb0b3a57dcd18527e9244a84dcd1a7",
+      "after": "d28761b5febc51bdeac2154333ee0c508dfb0b3a57dcd18527e9244a84dcd1a7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayEventProbe.cs",
+      "new": "Assets/Code/Character/Replay/CharacterReplayEventProbe.cs",
+      "before": "ac0c6b99ce34a15e8ddf57b889c23e474e3dfb52e1175f8073fa8010e8228295",
+      "after": "ac0c6b99ce34a15e8ddf57b889c23e474e3dfb52e1175f8073fa8010e8228295"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayEvents.cs",
+      "new": "Assets/Code/Character/Replay/CharacterReplayEvents.cs",
+      "before": "20f4ecd0da6d539ed37b56a2ef5477135e75f58eff2a9788425962457f102dc4",
+      "after": "20f4ecd0da6d539ed37b56a2ef5477135e75f58eff2a9788425962457f102dc4"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayTrace.cs",
+      "new": "Assets/Code/Character/Replay/CharacterReplayTrace.cs",
+      "before": "bfd0321be1cd916a9afcfcdb13033f3ad58c91100059d67b0ac2719d8b3cfe8e",
+      "after": "bfd0321be1cd916a9afcfcdb13033f3ad58c91100059d67b0ac2719d8b3cfe8e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterRigidbodyMotor.cs",
+      "new": "Assets/Code/Character/Motion/CharacterRigidbodyMotor.cs",
+      "before": "36543b0ee4a774a02302c9010eec57618517dafc18ecd2bf4b8dbb406afab0c4",
+      "after": "36543b0ee4a774a02302c9010eec57618517dafc18ecd2bf4b8dbb406afab0c4"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterStepProbe.cs",
+      "new": "Assets/Code/Character/Motion/CharacterStepProbe.cs",
+      "before": "70b029120f640a727c689df85ba667ce1c0e2e23199571f253e01a81d132e09e",
+      "after": "70b029120f640a727c689df85ba667ce1c0e2e23199571f253e01a81d132e09e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterTurnReplay.cs",
+      "new": "Assets/Code/Character/Replay/CharacterTurnReplay.cs",
+      "before": "f794e09a8f0602b7b934ce93bf85966f7e07d92f1b7aaab0a1485aabe8ed0f63",
+      "after": "f794e09a8f0602b7b934ce93bf85966f7e07d92f1b7aaab0a1485aabe8ed0f63"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/GroundMotionPath.cs",
+      "new": "Assets/Code/Character/Anim/GroundMotionPath.cs",
+      "before": "d5b74aa38bbff9633b8cb7455b466a85a47c39b2696ee6ff96f97abbf9225b4c",
+      "after": "d5b74aa38bbff9633b8cb7455b466a85a47c39b2696ee6ff96f97abbf9225b4c"
+    },
+    {
+      "old": "Assets/player/GameInput.cs",
+      "new": "Assets/Code/Player/Input/GameInput.cs",
+      "before": "7a18e8a585ea59e4f982a8ca73aae835398765957cda85f4b6cb69381cecaec0",
+      "after": "31c66d846c14e73fad3a2e1dfcb5aa28140bec20ba1eede5aca71e3bfed4e922"
+    },
+    {
+      "old": "Assets/player/GameInput.inputactions",
+      "new": "Assets/Data/Player/Input/GameInput.inputactions",
+      "before": "e7699b1ab488f5398996089a7a06b87abb6c46eac36c8330bded4d3ccb51876c",
+      "after": "e7699b1ab488f5398996089a7a06b87abb6c46eac36c8330bded4d3ccb51876c"
+    },
+    {
+      "old": "Assets/player/LocomotionStops.fbx",
+      "new": "Assets/Art/Player/Anim/移动急停.fbx",
+      "before": "28f7aa24dc06b0f0febc82de0507ae1e4bde72753a25e215216be977a9c68e3f",
+      "after": "28f7aa24dc06b0f0febc82de0507ae1e4bde72753a25e215216be977a9c68e3f"
+    },
+    {
+      "old": "Assets/player/LocomotionTurns.fbx",
+      "new": "Assets/Art/Player/Anim/移动转向.fbx",
+      "before": "51cf31a121b3ff03c834ca99bda473afbe1600851e037a0b4269e7d36bd93a04",
+      "after": "51cf31a121b3ff03c834ca99bda473afbe1600851e037a0b4269e7d36bd93a04"
+    },
+    {
+      "old": "Assets/player/player 1.prefab",
+      "new": "Assets/Art/Player/Prefabs/玩家.prefab",
+      "before": "aefd55bfaaef2f3315334e3b2f8ac06fe712bf825bacd1a7e1f157c2aaa9e774",
+      "after": "29cc1d210d627a356cd524cfcddcb9472d5c492cac8a6d3fda80aa4173baf422"
+    },
+    {
+      "old": "Assets/player/player.controller",
+      "new": "Assets/Art/Player/Anim/玩家动画.controller",
+      "before": "965f2e8339c0bc1fe163df6ef9adf6db0efeb426ff67b0690587eb426a805a20",
+      "after": "1161802fa874f8b24a6585ac06120b6850656d520e72bac650bb5ea982f2e930"
+    },
+    {
+      "old": "Assets/player/PlayerCapsule.physicMaterial",
+      "new": "Assets/Art/Player/Materials/玩家胶囊体.physicMaterial",
+      "before": "12630df376fd9b79cbb0e9d149d24b9adbf6b39870cebf665d31b422ed74904e",
+      "after": "bb0eeda36afc07702187c8e5bef6d6cd5b9647a1d5f65350550513e4ef047fb5"
+    },
+    {
+      "old": "Assets/player/PlayerInputSystem.cs",
+      "new": "Assets/Code/Player/Input/PlayerInputSystem.cs",
+      "before": "7db2704edfd28c81d3c5bfa207bb2da19c9a596fac935f65e4e48511e05c0bf2",
+      "after": "7db2704edfd28c81d3c5bfa207bb2da19c9a596fac935f65e4e48511e05c0bf2"
+    },
+    {
+      "old": "Assets/player/Player_LowerBody.mask",
+      "new": "Assets/Art/Player/Anim/下半身.mask",
+      "before": "d73c9cad25464e944915d7b5f7e09b2f7b2520757914d49230ebdc552a3297ed",
+      "after": "dc7113455e9e09e0338d787a1c1ac85316d7e7f87cd1835a3bc661f83c5b5908"
+    },
+    {
+      "old": "Assets/player/Player_UpperBody.mask",
+      "new": "Assets/Art/Player/Anim/上半身.mask",
+      "before": "1af4d5f117ce5c66ca61623d515c9e750a637cd1a5fb687db6fac73d1f33f7a7",
+      "after": "af20eb8a9849a8c1b0b0d88cc4515bef695ef329538fb6496c139df47a9b6846"
+    },
+    {
+      "old": "Assets/player/ShieldCharacterProfile.asset",
+      "new": "Assets/Data/Player/Shield/盾牌角色配置.asset",
+      "before": "eb0276f765943f236fd17a2e5b8f80e1007a1aacfab8b8b9594092433ff4006b",
+      "after": "fcc95ed83387ae799fc5eea305ce63a92c38a4d054aad86eeeb5a0696c6275db"
+    },
+    {
+      "old": "Assets/player/ShieldGroundMotion.asset",
+      "new": "Assets/Data/Player/Shield/盾牌地面动作库.asset",
+      "before": "d500287db651e1c01fb6a8f8bf3a247e0400c35f2358a761123559abff3b4dc3",
+      "after": "6d361111ead9593874be9e034361c5d5589ca5067dfdf3c353341d69f52e35fb"
+    },
+    {
+      "old": "Assets/player/Resources/PlayerCombat.inputactions",
+      "new": "Assets/Data/Player/Input/Resources/PlayerCombat.inputactions",
+      "before": "181345fee8de2d453010192df442c72554e936975e8fd5ac9a90daff0da103b8",
+      "after": "181345fee8de2d453010192df442c72554e936975e8fd5ac9a90daff0da103b8"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/01 角色行为.asset",
+      "new": "Assets/Data/Player/Shield/01 角色行为.asset",
+      "before": "bb2a111be0c34e5734ef114531d9dbb3686ffcf50a5326317c39a89d1c868fa2",
+      "after": "bb2a111be0c34e5734ef114531d9dbb3686ffcf50a5326317c39a89d1c868fa2"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/02 连招表.asset",
+      "new": "Assets/Data/Player/Shield/02 连招表.asset",
+      "before": "5e1e5aed0351d23ca4353a113a7736fafa00c5f078e9a9472b42f60ed09d1a80",
+      "after": "5e1e5aed0351d23ca4353a113a7736fafa00c5f078e9a9472b42f60ed09d1a80"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/03 移动与物理.asset",
+      "new": "Assets/Data/Player/Shield/03 移动与物理.asset",
+      "before": "7fbe6dc4049b0920e71750ea2ac8ab3737ab6826ffa9d9aef5871eafb9089927",
+      "after": "7fbe6dc4049b0920e71750ea2ac8ab3737ab6826ffa9d9aef5871eafb9089927"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/04 动画表现.asset",
+      "new": "Assets/Data/Player/Shield/04 动画表现.asset",
+      "before": "7d370bf622f2fe7b5cc92dcfb62f85ed2c3eefc7485bf4df3f66f0e9502cf3fc",
+      "after": "7d370bf622f2fe7b5cc92dcfb62f85ed2c3eefc7485bf4df3f66f0e9502cf3fc"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/05 移动预测.asset",
+      "new": "Assets/Data/Player/Shield/05 移动预测.asset",
+      "before": "3eda4f273ab586650972a926e7c0ab187bd5674552b7a12380ad31f85f21640d",
+      "after": "3eda4f273ab586650972a926e7c0ab187bd5674552b7a12380ad31f85f21640d"
+    },
+    {
+      "old": "Assets/AnimationCamera/Editor/UmaCharacterTestWindow.cs.meta",
+      "new": "Assets/Code/AnimCamera/Editor/UmaCharacterTestWindow.cs.meta",
+      "before": "262f97eaf693ece1832fee6261cc2d5e62181c9f219eaa5129a2939f2c7ab601",
+      "after": "262f97eaf693ece1832fee6261cc2d5e62181c9f219eaa5129a2939f2c7ab601",
+      "guid": "bb9eea585b834e7fbaf48640d486469e"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/AnimationCameraPlayer.cs.meta",
+      "new": "Assets/Code/AnimCamera/Runtime/AnimationCameraPlayer.cs.meta",
+      "before": "de02827f4a9d16b10782afbacd1c3c6c7a53202c37014757f1db6ff470c352d2",
+      "after": "de02827f4a9d16b10782afbacd1c3c6c7a53202c37014757f1db6ff470c352d2",
+      "guid": "7c4861bf37984f309e7387458538c912"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraEasing.cs.meta",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraEasing.cs.meta",
+      "before": "48d0d3562ddf71ed89dd2f0596f204919fd307a113e79256fc89006459f3be03",
+      "after": "48d0d3562ddf71ed89dd2f0596f204919fd307a113e79256fc89006459f3be03",
+      "guid": "417261534be74f23856c921c4f8bcd23"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTargetBinding.cs.meta",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTargetBinding.cs.meta",
+      "before": "be40af9da116394c0b144ed82d4819123e6eb6f83d59169a48aea0d56532cbed",
+      "after": "be40af9da116394c0b144ed82d4819123e6eb6f83d59169a48aea0d56532cbed",
+      "guid": "8217cfcd224c4816a46a4f0f87499b25"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTimelineAsset.cs.meta",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTimelineAsset.cs.meta",
+      "before": "1d9755de14a65959c9a30d1bdd2c07294c64ba1de91266cc5635d26de8ea2fe5",
+      "after": "1d9755de14a65959c9a30d1bdd2c07294c64ba1de91266cc5635d26de8ea2fe5",
+      "guid": "54e73753239d4755bf168c895d59d132"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime/CameraTimelineEvaluator.cs.meta",
+      "new": "Assets/Code/AnimCamera/Runtime/CameraTimelineEvaluator.cs.meta",
+      "before": "f30ff4109c41d9402a48cfe6bb8afd514d63937d4f6cf50f7462ff28decb2e8f",
+      "after": "f30ff4109c41d9402a48cfe6bb8afd514d63937d4f6cf50f7462ff28decb2e8f",
+      "guid": "7256685d4daa42a99f22b331ac51c3f1"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/AnimationCameraDemoControls.cs.meta",
+      "new": "Assets/Code/AnimCamera/Samples/AnimationCameraDemoControls.cs.meta",
+      "before": "b7bb6bb074637265f6c33fc95b944ab9640357b6aee1e58f8dfd640ef9f8f19a",
+      "after": "b7bb6bb074637265f6c33fc95b944ab9640357b6aee1e58f8dfd640ef9f8f19a",
+      "guid": "fd37caa378405998b0eb3cf3bcb3b641"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/AnimationCameraTest.unity.meta",
+      "new": "Assets/Scenes/动画相机测试.unity.meta",
+      "before": "043b8bd595dff58e9117b33e719975eded144c5ca609828b2b8e6057b42f53b2",
+      "after": "043b8bd595dff58e9117b33e719975eded144c5ca609828b2b8e6057b42f53b2",
+      "guid": "f1fb83e964195cc899d40720942e5480"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/DemoCameraTimeline.asset.meta",
+      "new": "Assets/Data/AnimCamera/示例镜头时间轴.asset.meta",
+      "before": "f131a0240e44d67318cb993c92b90ec0606d98898befefd5fc33b62aeed060d1",
+      "after": "f131a0240e44d67318cb993c92b90ec0606d98898befefd5fc33b62aeed060d1",
+      "guid": "c5803772b95556e4ae4980a53cd23c04"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Character.mat.meta",
+      "new": "Assets/Art/AnimCamera/Materials/Character.mat.meta",
+      "before": "3fa5727df4a7da96615e275756162efba665322fa8aff1efb1dd80fc959a5815",
+      "after": "3fa5727df4a7da96615e275756162efba665322fa8aff1efb1dd80fc959a5815",
+      "guid": "3267455ba1645af68d2c4184295e0456"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Coral.mat.meta",
+      "new": "Assets/Art/AnimCamera/Materials/Coral.mat.meta",
+      "before": "0b76e3bfc6839789deacf04dcc08d4eb6c3be4c7cb0fa99862161a45ee8a4bca",
+      "after": "0b76e3bfc6839789deacf04dcc08d4eb6c3be4c7cb0fa99862161a45ee8a4bca",
+      "guid": "15daa5351ff4599aa93450e26ad4fbb5"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Ground.mat.meta",
+      "new": "Assets/Art/AnimCamera/Materials/Ground.mat.meta",
+      "before": "b315881b4fd5b5e5fce77518d4e2e72c5ed215cef4751842ef46078c46477a6e",
+      "after": "b315881b4fd5b5e5fce77518d4e2e72c5ed215cef4751842ef46078c46477a6e",
+      "guid": "a347e50b0b825a2fbd90eab2b6ce7563"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials/Teal.mat.meta",
+      "new": "Assets/Art/AnimCamera/Materials/Teal.mat.meta",
+      "before": "de3e79ceaf1b645af2ad3b383e3fb5381bb316d430ea765e6b5ce2db351855a8",
+      "after": "de3e79ceaf1b645af2ad3b383e3fb5381bb316d430ea765e6b5ce2db351855a8",
+      "guid": "1bab8aaf283f5c91b1dc0a34238e3d92"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaCharacter/UmaCharacterPlayback.cs.meta",
+      "new": "Assets/Code/AnimCamera/Samples/UmaCharacterPlayback.cs.meta",
+      "before": "fc2226fde1084095b44f780f655a4c3d8b6273bc215b9a15ffdaa95955749589",
+      "after": "fc2226fde1084095b44f780f655a4c3d8b6273bc215b9a15ffdaa95955749589",
+      "guid": "31a5a0dc43384e7caa3c5873466ac502"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaViewerModel/c1.fbx.meta",
+      "new": "Assets/Art/AnimCamera/Models/c1.fbx.meta",
+      "before": "b90bf63d740bb2dc5fe4f0846d5facbdceb2ce1e53551d4776ef1e156e66139c",
+      "after": "b90bf63d740bb2dc5fe4f0846d5facbdceb2ce1e53551d4776ef1e156e66139c",
+      "guid": "ba128457d0ea5e3439dbe4a53b9d1273"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaViewerModel/UmaViewerModelSample.cs.meta",
+      "new": "Assets/Code/AnimCamera/Samples/UmaViewerModelSample.cs.meta",
+      "before": "b3ebc87abe231e254e8053adb28c084a12f5d682cab1eb30cb7d8b5ed1511b3b",
+      "after": "b3ebc87abe231e254e8053adb28c084a12f5d682cab1eb30cb7d8b5ed1511b3b",
+      "guid": "987a02f93c5447b5a40afd427e2136bd"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterAnimationDebugWindow.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterAnimationDebugWindow.cs.meta",
+      "before": "984b9598050867295594cfab14c80e6c809885f49a3a746fd95e2a30de680ab9",
+      "after": "984b9598050867295594cfab14c80e6c809885f49a3a746fd95e2a30de680ab9",
+      "guid": "65295db98a694eb0ad532874e34d9daf"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterAnimationOverrideAudit.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterAnimationOverrideAudit.cs.meta",
+      "before": "48c65a3b82019691cf4975c6814cf77a296bf214404803b76c4a8cc6c1bfde5a",
+      "after": "48c65a3b82019691cf4975c6814cf77a296bf214404803b76c4a8cc6c1bfde5a",
+      "guid": "d9727ee72148484a84ee02dab6ce5bfe"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterBehaviorChoiceDrawer.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterBehaviorChoiceDrawer.cs.meta",
+      "before": "d25e54db08fdef18eceb6796336cd08e26296e55a7b72f6ec646c0b6c566028b",
+      "after": "d25e54db08fdef18eceb6796336cd08e26296e55a7b72f6ec646c0b6c566028b",
+      "guid": "e1cb1eec1a8c479e88f9fb09437f8812"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterClipLibraryBaker.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterClipLibraryBaker.cs.meta",
+      "before": "283aa1efe174e0ce10a01f4ab629e1ca898cfd800eab33f1b2d7516932226ea4",
+      "after": "283aa1efe174e0ce10a01f4ab629e1ca898cfd800eab33f1b2d7516932226ea4",
+      "guid": "98045f2076554596b90fc27123813042"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastGhost.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastGhost.cs.meta",
+      "before": "5f5189b7fa7b84a5b8bc20158d40f26a27c11ab07bd7340927429503b88cb5eb",
+      "after": "5f5189b7fa7b84a5b8bc20158d40f26a27c11ab07bd7340927429503b88cb5eb",
+      "guid": "12b89f457b1142e39976acd6081a860c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastGhost.shader.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastGhost.shader.meta",
+      "before": "203422b471cf1ce175a5e0e148701856306f4ecaa4cc51fe0d62e9df9e6b644a",
+      "after": "203422b471cf1ce175a5e0e148701856306f4ecaa4cc51fe0d62e9df9e6b644a",
+      "guid": "16ca3ac1d9e541cf832f3b44628528cd"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastPose.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastPose.cs.meta",
+      "before": "d6d5058f2ae03df7c40326eac7959f70980a52051c5a2a93cb5609167156ea7c",
+      "after": "d6d5058f2ae03df7c40326eac7959f70980a52051c5a2a93cb5609167156ea7c",
+      "guid": "1f6b44dacf7c4ba1bde8242623c0a718"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastRehearsal.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastRehearsal.cs.meta",
+      "before": "7c6334ce15cef238e20a9cd6c5ff094b35c9fa7630137378d2dbd0dda5919d54",
+      "after": "7c6334ce15cef238e20a9cd6c5ff094b35c9fa7630137378d2dbd0dda5919d54",
+      "guid": "8c5904435ba9415da290352ef79ec04c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastSceneView.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastSceneView.cs.meta",
+      "before": "a65e166b47f2ea40b0981c57eb3e163d8829e166b57b8ad61bd853d42586b5ee",
+      "after": "a65e166b47f2ea40b0981c57eb3e163d8829e166b57b8ad61bd853d42586b5ee",
+      "guid": "153260a5812448c79a0f18064c7635d9"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterForecastTrail.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterForecastTrail.cs.meta",
+      "before": "08f983bade57835ef66f8d09446756dbae7f37358abc2d09d22abab896bf1f66",
+      "after": "08f983bade57835ef66f8d09446756dbae7f37358abc2d09d22abab896bf1f66",
+      "guid": "2b05fca752e74c3f903e45af667a1ac6"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor/CharacterMotionDatabaseBaker.cs.meta",
+      "new": "Assets/Code/Character/Editor/CharacterMotionDatabaseBaker.cs.meta",
+      "before": "43f0baeaf59c0f82a3af1457769f7edf878f1c24a03d516165a6ee874dda332e",
+      "after": "43f0baeaf59c0f82a3af1457769f7edf878f1c24a03d516165a6ee874dda332e",
+      "guid": "c842d43c66ea4055861f12016f6eb73b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterActionHandoff.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterActionHandoff.cs.meta",
+      "before": "fc0bf5a1cf4779d609c65150a5bcba49978e3281b5ad5fabe9495be409ce3ab3",
+      "after": "fc0bf5a1cf4779d609c65150a5bcba49978e3281b5ad5fabe9495be409ce3ab3",
+      "guid": "c07852387ea146468a05cba5071c0e1e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterActionPlayback.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterActionPlayback.cs.meta",
+      "before": "eb8f4da717beb650d12373fe8afa0318e3b6c216363e93ed3f14702b006b59ac",
+      "after": "eb8f4da717beb650d12373fe8afa0318e3b6c216363e93ed3f14702b006b59ac",
+      "guid": "ff151a66f13d4d3abb528adb9bf984f7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationComposer.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationComposer.cs.meta",
+      "before": "e2c6a4ff5724a5f5cca5cb2a0947c88dcfc5ca75de741fd66c88466d472d6d58",
+      "after": "e2c6a4ff5724a5f5cca5cb2a0947c88dcfc5ca75de741fd66c88466d472d6d58",
+      "guid": "90c1215c8e1c47e98a2e6c67a56b5b4b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationConfig.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationConfig.cs.meta",
+      "before": "8fcc05f734df0849de2cf7f546cda259ba7acd0876b56638b4dc8935a5fd987d",
+      "after": "8fcc05f734df0849de2cf7f546cda259ba7acd0876b56638b4dc8935a5fd987d",
+      "guid": "8a7e6c86b1c6475ea4fdd17c5d06ab0b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationDebugTrace.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterAnimationDebugTrace.cs.meta",
+      "before": "199c5d86186048dfbbf858b65f25ae207a46c63b40ab9683405559a46a1e2033",
+      "after": "199c5d86186048dfbbf858b65f25ae207a46c63b40ab9683405559a46a1e2033",
+      "guid": "908c1b12ce754cdb9193f4759f2737b7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationIk.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationIk.cs.meta",
+      "before": "ba5a2c25c2d3074764b1506a128d2c7715f7c369080b3fdcd3b3e36b5bba8cbc",
+      "after": "ba5a2c25c2d3074764b1506a128d2c7715f7c369080b3fdcd3b3e36b5bba8cbc",
+      "guid": "fe235f431a4c8294a9f0d88b5c6845d8"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationIntent.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationIntent.cs.meta",
+      "before": "d39e73aa3a1ded95e0891408e46ef4cd2de6e145c295c0961eba0942c0f428b7",
+      "after": "d39e73aa3a1ded95e0891408e46ef4cd2de6e145c295c0961eba0942c0f428b7",
+      "guid": "491a9aec94c84d6aa19bc04edbe06b8c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationLocomotion.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationLocomotion.cs.meta",
+      "before": "88bd79f2fe879ab08266fd6a361221705e5d439b242f00359100b4f37e3d3c89",
+      "after": "88bd79f2fe879ab08266fd6a361221705e5d439b242f00359100b4f37e3d3c89",
+      "guid": "8837c02571024c46860464bbc4382b7d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationMotion.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationMotion.cs.meta",
+      "before": "3938eb0d1746f6252d012b5d1ec4deb0a5f7347b9e7dda25917ac9b43842fc9c",
+      "after": "3938eb0d1746f6252d012b5d1ec4deb0a5f7347b9e7dda25917ac9b43842fc9c",
+      "guid": "0ca2b3e517fe4bbbad8308827c736a52"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationPipeline.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationPipeline.cs.meta",
+      "before": "7d3c91c3ff98c5229bd436c4efc317132ccd43c44a34bf04a5a6d138a0a755a0",
+      "after": "7d3c91c3ff98c5229bd436c4efc317132ccd43c44a34bf04a5a6d138a0a755a0",
+      "guid": "56656506ceb840018904acb7c5d68b15"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationPlayer.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationPlayer.cs.meta",
+      "before": "1c6bf977b3674f211310fbb88c27bde0f05206403a1d90e20db83c0916aff466",
+      "after": "1c6bf977b3674f211310fbb88c27bde0f05206403a1d90e20db83c0916aff466",
+      "guid": "516e7ab5c9164616a024f07eb599f898"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationResourceCatalog.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationResourceCatalog.cs.meta",
+      "before": "3fb8866a3d2116a61a5989a4a7044302f747c136fd7faff0dc51c00ddc7c0b3e",
+      "after": "3fb8866a3d2116a61a5989a4a7044302f747c136fd7faff0dc51c00ddc7c0b3e",
+      "guid": "583490992de44916a39a2e2ab5fb8c3e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAnimationResourceResolver.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterAnimationResourceResolver.cs.meta",
+      "before": "f6a0d9fa2fcc9c8b3ffb6292ab108045700fe4fc50b798a7d36337ea330176ab",
+      "after": "f6a0d9fa2fcc9c8b3ffb6292ab108045700fe4fc50b798a7d36337ea330176ab",
+      "guid": "a55dfad59fe642b1bb3b4cdab9e21a65"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterAttackCombo.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterAttackCombo.cs.meta",
+      "before": "39110b1017a6482b83ba8eab6b5034bea07dc813e920be1a4026702d224e260c",
+      "after": "39110b1017a6482b83ba8eab6b5034bea07dc813e920be1a4026702d224e260c",
+      "guid": "ef55ca7cd9a349698bff8f74489314ad"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehavior.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehavior.cs.meta",
+      "before": "e921db2c33bf10a8e098bd4c4e7dda0735e8e0caa070ceb6fd098fb88b06e313",
+      "after": "e921db2c33bf10a8e098bd4c4e7dda0735e8e0caa070ceb6fd098fb88b06e313",
+      "guid": "a0a820bb74c046f59020ec727201e3d4"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorAnimationMapping.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterBehaviorAnimationMapping.cs.meta",
+      "before": "56b6eda66126e4c5c0ecf0d7b1b23a47e219937067d0d3ad1560aa803059e4a4",
+      "after": "56b6eda66126e4c5c0ecf0d7b1b23a47e219937067d0d3ad1560aa803059e4a4",
+      "guid": "ada8415b7e1f4b5c814cb487dbc36567"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorAnimator.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterBehaviorAnimator.cs.meta",
+      "before": "2435e58378b5689645ad284a28f3e197fe02c4f80a5951d027860bbc6e0fb1d7",
+      "after": "2435e58378b5689645ad284a28f3e197fe02c4f80a5951d027860bbc6e0fb1d7",
+      "guid": "5709af2e42bf4b64ba9f4f4eaf473647"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorConfig.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorConfig.cs.meta",
+      "before": "91947c432d50c352e21e88b6cd7ed9897c842be43d6eae005b5045dfaad2fc34",
+      "after": "91947c432d50c352e21e88b6cd7ed9897c842be43d6eae005b5045dfaad2fc34",
+      "guid": "f5da15a6c8564f5791063f215ffb4b03"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorDriver.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorDriver.cs.meta",
+      "before": "a4f29a566d9bf10338d2e88caa3eac9535665dcd72d52e13a75e17ad3429da0c",
+      "after": "a4f29a566d9bf10338d2e88caa3eac9535665dcd72d52e13a75e17ad3429da0c",
+      "guid": "1df9021b84314708ab4f5e735a67191c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorFlow.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorFlow.cs.meta",
+      "before": "4c21181d84f8b19e039b2d1a9820edcab3f1ee9f103d2fba371b97f04961d9cc",
+      "after": "4c21181d84f8b19e039b2d1a9820edcab3f1ee9f103d2fba371b97f04961d9cc",
+      "guid": "0d0b807384524310b6512558c372209f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorFrameResult.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorFrameResult.cs.meta",
+      "before": "05cf4ae6da40fc0dadc9187e34f6e48c9b970bf19f771904f0ec6871f868ff63",
+      "after": "05cf4ae6da40fc0dadc9187e34f6e48c9b970bf19f771904f0ec6871f868ff63",
+      "guid": "99ced3f8ad72435fb3735ef5ea15b280"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBehaviorRules.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterBehaviorRules.cs.meta",
+      "before": "33b5bef82749ea2447e54cbaddbf942925515a9f977e928c1571b356d0daf51a",
+      "after": "33b5bef82749ea2447e54cbaddbf942925515a9f977e928c1571b356d0daf51a",
+      "guid": "0e6c387b58584a33b5ef25a68f9fdeee"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterBodyPlaybackGraph.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterBodyPlaybackGraph.cs.meta",
+      "before": "4e786308c063496d82dc5ca3b9d3a877bd98d1a60d415e9b30b62aadd97c6c88",
+      "after": "4e786308c063496d82dc5ca3b9d3a877bd98d1a60d415e9b30b62aadd97c6c88",
+      "guid": "6dadfaad1d494455813783af91657e5f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipLibrary.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterClipLibrary.cs.meta",
+      "before": "d0956b5a55b26d97c96a754e564838ee234de4a53179aad50209cfc68177ba0c",
+      "after": "d0956b5a55b26d97c96a754e564838ee234de4a53179aad50209cfc68177ba0c",
+      "guid": "91ca58d98b5f40f8808bcfde34a5515d"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipMixer.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterClipMixer.cs.meta",
+      "before": "f8a36bfdf5947ea2a8cdf739c0e80b8d3afe3b3610d283f2ab2ba31a4bcc4558",
+      "after": "f8a36bfdf5947ea2a8cdf739c0e80b8d3afe3b3610d283f2ab2ba31a4bcc4558",
+      "guid": "0a27e6e62fa04ff89bcf5eced7166106"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterClipPlayback.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterClipPlayback.cs.meta",
+      "before": "8fba37b9c22560b06bdbbc63fe4a73d12a00264fe95fd60c64cd61d13f255834",
+      "after": "8fba37b9c22560b06bdbbc63fe4a73d12a00264fe95fd60c64cd61d13f255834",
+      "guid": "fa98b97ede35420c9bfb865571c0ad28"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterComboTable.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterComboTable.cs.meta",
+      "before": "c91a4245cbfe564edf269784142346ae93052a95d62fca06e2822831964c06a7",
+      "after": "c91a4245cbfe564edf269784142346ae93052a95d62fca06e2822831964c06a7",
+      "guid": "74bb49f4edc34fa7adbbcb41edc288db"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterControllerFrameResult.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterControllerFrameResult.cs.meta",
+      "before": "2bf79ab828d42c37001e3fdcf2fe9ece1316572d0887164ae8f0ae7f1c6e3b2f",
+      "after": "2bf79ab828d42c37001e3fdcf2fe9ece1316572d0887164ae8f0ae7f1c6e3b2f",
+      "guid": "d5beeb57c48d49948e3c4eee0409be44"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterControllerPlayback.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterControllerPlayback.cs.meta",
+      "before": "cf6b9ac771ddd5fde6ef21467ff2df74bb957d74715a0721a44934397ef3390b",
+      "after": "cf6b9ac771ddd5fde6ef21467ff2df74bb957d74715a0721a44934397ef3390b",
+      "guid": "53d304f7aef8452596c7646939f3e150"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterDashBehavior.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterDashBehavior.cs.meta",
+      "before": "fc965aa5cc32a1ab15f1cd4e999ab8e1caa9fcd5cc436bb07df0ac01a251574b",
+      "after": "fc965aa5cc32a1ab15f1cd4e999ab8e1caa9fcd5cc436bb07df0ac01a251574b",
+      "guid": "b546726c632f44928dca3ba64a192253"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterFootObservation.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterFootObservation.cs.meta",
+      "before": "b005083cd20fa001a5a8ae55551fd3f4df67101f9eeb15429e3711a65648559f",
+      "after": "b005083cd20fa001a5a8ae55551fd3f4df67101f9eeb15429e3711a65648559f",
+      "guid": "64f23f32da884dac88f3c7e20b2e7933"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastConfig.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastConfig.cs.meta",
+      "before": "f3136c610d0990a1d2e1213acc8c83984b5e50c3012cc14e7480da9a2b80ca07",
+      "after": "f3136c610d0990a1d2e1213acc8c83984b5e50c3012cc14e7480da9a2b80ca07",
+      "guid": "42befe4c69fa4222be5d9713ac85e24b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastDiagnostics.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastDiagnostics.cs.meta",
+      "before": "b6052f44511fb4cfe7aa95bd07b32d371d67cd0bb30fbd363396069d084eb655",
+      "after": "b6052f44511fb4cfe7aa95bd07b32d371d67cd0bb30fbd363396069d084eb655",
+      "guid": "433fb54a33494b76a789aedf4fc09714"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastGeometry.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastGeometry.cs.meta",
+      "before": "04a3aa347a2cfd7d52aa7ba3683ad0d9a60a77df81cd4fa704cb781dacaf917e",
+      "after": "04a3aa347a2cfd7d52aa7ba3683ad0d9a60a77df81cd4fa704cb781dacaf917e",
+      "guid": "16bc0e86c3b7416c9339722baf47a52e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterForecastQuery.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterForecastQuery.cs.meta",
+      "before": "99bfae2bafd85b911137c40b0a31efb41b3e74e7e166e53ac7bef798e009eacc",
+      "after": "99bfae2bafd85b911137c40b0a31efb41b3e74e7e166e53ac7bef798e009eacc",
+      "guid": "1e24a91beb164eb19661252382ac9f2f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGroundSteering.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterGroundSteering.cs.meta",
+      "before": "ed56126d9b2da4f94350eb10332634a68b2236c832dfd28e79795395847ceda4",
+      "after": "ed56126d9b2da4f94350eb10332634a68b2236c832dfd28e79795395847ceda4",
+      "guid": "3030921eda0245468b8125f4ecee12bf"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGroundTrajectory.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterGroundTrajectory.cs.meta",
+      "before": "13d60a3595abde87ca1bda27c8ea9e66e7f2a95a0d56fbe6ba57ae52fe88532c",
+      "after": "13d60a3595abde87ca1bda27c8ea9e66e7f2a95a0d56fbe6ba57ae52fe88532c",
+      "guid": "75f942a255c847f9b9b13f96df6a8d35"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGuardBehavior.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterGuardBehavior.cs.meta",
+      "before": "5fb30199f85651f1277c257d7c55c677abc0a94caf2043942358e5a5fe6eda0b",
+      "after": "5fb30199f85651f1277c257d7c55c677abc0a94caf2043942358e5a5fe6eda0b",
+      "guid": "571df2865aea4e089acb12f3e0317a99"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterGuardPresentation.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterGuardPresentation.cs.meta",
+      "before": "dc857b6bd200a86796818f78235e7e63ececb33da7c38c88d2de19ad07e4ffd4",
+      "after": "dc857b6bd200a86796818f78235e7e63ececb33da7c38c88d2de19ad07e4ffd4",
+      "guid": "0d537f85465147febdce49d36125777f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterIkInput.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterIkInput.cs.meta",
+      "before": "14d93313254c452bfea7243ef0331cbedcf915101dde513a30dc5a284fc45f81",
+      "after": "14d93313254c452bfea7243ef0331cbedcf915101dde513a30dc5a284fc45f81",
+      "guid": "6e4347d8c2745764b97596656298cfd0"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterIkJob.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterIkJob.cs.meta",
+      "before": "37ab84fba2b4b27f286216e9672d158c494c44242318703aa36bc5836bc14087",
+      "after": "37ab84fba2b4b27f286216e9672d158c494c44242318703aa36bc5836bc14087",
+      "guid": "995f9e6594b93a84c8adbbb4d2d47544"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterInputSnapshot.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterInputSnapshot.cs.meta",
+      "before": "aa2c5d5f997e3c93b85c0e9e9e03cb173fcbd123badad584393d693364486db7",
+      "after": "aa2c5d5f997e3c93b85c0e9e9e03cb173fcbd123badad584393d693364486db7",
+      "guid": "c9580519a7c14aaf9f2ff00397ef9769"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLegacyAnimationSettings.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterLegacyAnimationSettings.cs.meta",
+      "before": "46ec8d0e5dd20ddf5161fd93f521a0656bcc7a7342872f0cde3e76c765bb5798",
+      "after": "46ec8d0e5dd20ddf5161fd93f521a0656bcc7a7342872f0cde3e76c765bb5798",
+      "guid": "fec0127ace0143c6ab8cc893821bf70b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLegacyMotionMatcher.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterLegacyMotionMatcher.cs.meta",
+      "before": "d3d0eb93ad145470560d9c6ce373c33ad84ec49bed847233f12cfc2cd176fc88",
+      "after": "d3d0eb93ad145470560d9c6ce373c33ad84ec49bed847233f12cfc2cd176fc88",
+      "guid": "7453361962554bcba5f79f5de62ea812"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLightAttackBehavior.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterLightAttackBehavior.cs.meta",
+      "before": "6ab557ed8d294f5e8b367e9606edfa11b0712cb84706f7e88c78756bfed8f047",
+      "after": "6ab557ed8d294f5e8b367e9606edfa11b0712cb84706f7e88c78756bfed8f047",
+      "guid": "71aeae7c0e3d4cbea8f1e39df0918ba1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLocomotionGaitPhase.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterLocomotionGaitPhase.cs.meta",
+      "before": "43162529334468fac89437637888c64a8c35c5afc3a42b58afe4479953dcd4bf",
+      "after": "43162529334468fac89437637888c64a8c35c5afc3a42b58afe4479953dcd4bf",
+      "guid": "34022ed79d8f4ca7a4aaf54848101564"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterLocomotionPoseSelector.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterLocomotionPoseSelector.cs.meta",
+      "before": "b4199a9c21bfabb86caba002bbea69b882a7717f0d39842d7fbf754b80df1d24",
+      "after": "b4199a9c21bfabb86caba002bbea69b882a7717f0d39842d7fbf754b80df1d24",
+      "guid": "3039a1ec36314f7a89a75fe95767af52"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMatchReplay.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterMatchReplay.cs.meta",
+      "before": "cd1defb9b4c7ae79456c1292d3bcb550eb9bc923404c28c4953f0939e491f5bf",
+      "after": "cd1defb9b4c7ae79456c1292d3bcb550eb9bc923404c28c4953f0939e491f5bf",
+      "guid": "6e10e73ff930414bb0b62ee2fda6d2c4"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMatchTrajectory.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterMatchTrajectory.cs.meta",
+      "before": "84546b86a25f580eeb9c6a7214a879ff0788e2c2c3a20b84ea9cdd443f8f41f0",
+      "after": "84546b86a25f580eeb9c6a7214a879ff0788e2c2c3a20b84ea9cdd443f8f41f0",
+      "guid": "0e6cf49093914f5ba5d361c35d94281f"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterModelBindings.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterModelBindings.cs.meta",
+      "before": "a0d8876771e0a7a3c92f5687b5c0407e8b46db980840c8e967f04f2f02c10c14",
+      "after": "a0d8876771e0a7a3c92f5687b5c0407e8b46db980840c8e967f04f2f02c10c14",
+      "guid": "f74f24b097164665a170817756bcc44e"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotionDatabase.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterMotionDatabase.cs.meta",
+      "before": "a83baa32762f2807da451045d01bd6d9294eb66921280056beb321e7aef74300",
+      "after": "a83baa32762f2807da451045d01bd6d9294eb66921280056beb321e7aef74300",
+      "guid": "cb78eb5f42c74a5ab5db77696f76f573"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotionMatcher.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterMotionMatcher.cs.meta",
+      "before": "f1bbc97a81104f64d45c4d56572aa6329286c33a2af91912b0bd7612aca0d3a8",
+      "after": "f1bbc97a81104f64d45c4d56572aa6329286c33a2af91912b0bd7612aca0d3a8",
+      "guid": "681b5fdcdbc04f97b39c14dca51e9d69"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotorSettings.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterMotorSettings.cs.meta",
+      "before": "37df941ed04e0a4461f17a4ec87303680f6bffd8d9b8afb0611c10c472be3f1b",
+      "after": "37df941ed04e0a4461f17a4ec87303680f6bffd8d9b8afb0611c10c472be3f1b",
+      "guid": "8cfbf3d2321f4a059163f8fa4a4dd7fc"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMotorStep.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterMotorStep.cs.meta",
+      "before": "e16216f8294bbbd2fe30219b5d796ffe78c97bbc3cab4cc4f1072c6fa7bf79bb",
+      "after": "e16216f8294bbbd2fe30219b5d796ffe78c97bbc3cab4cc4f1072c6fa7bf79bb",
+      "guid": "a81db5b5754a452cb58371fdb27df0d5"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMoveBehavior.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterMoveBehavior.cs.meta",
+      "before": "a1f6a70e0863c94ac52eae70db8d5ae4771fcecab9d04d868b2f142d65234c8d",
+      "after": "a1f6a70e0863c94ac52eae70db8d5ae4771fcecab9d04d868b2f142d65234c8d",
+      "guid": "ffe53693e9f0405989e39cdc853f3d57"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementConfig.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterMovementConfig.cs.meta",
+      "before": "19d1e9cd5240fca96e19247ac8488dcaaebf368f8e546dbdd532e573c7f96e4d",
+      "after": "19d1e9cd5240fca96e19247ac8488dcaaebf368f8e546dbdd532e573c7f96e4d",
+      "guid": "509c9fcc753842f3b9aaa492263eb84b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementForecast.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterMovementForecast.cs.meta",
+      "before": "ba95b0ab5f339e9c78986b5995921bc91829ebaf40ed607dd23ecfd356b4a281",
+      "after": "ba95b0ab5f339e9c78986b5995921bc91829ebaf40ed607dd23ecfd356b4a281",
+      "guid": "2ae05a4220f048d189abb3102710b3e1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterMovementPredictor.cs.meta",
+      "new": "Assets/Code/Character/Forecast/CharacterMovementPredictor.cs.meta",
+      "before": "1eccf098d86abf1c857a1dd09b767365169c8094946a52136effc20566992b8c",
+      "after": "1eccf098d86abf1c857a1dd09b767365169c8094946a52136effc20566992b8c",
+      "guid": "c6d8488e599d424daf75e24538e0cf08"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPlaybackCounters.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterPlaybackCounters.cs.meta",
+      "before": "31bdb6bd56625cf5e7c7436a496cfa94425f3066f83d832bbbbf845425505b28",
+      "after": "31bdb6bd56625cf5e7c7436a496cfa94425f3066f83d832bbbbf845425505b28",
+      "guid": "d3c7195c0cd5450e8cb27fa14d92096c"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPlaybackObservation.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterPlaybackObservation.cs.meta",
+      "before": "913cc56365734dc90ac32c929f3aa286ed81cbd0b18631e10db7016c2c4304d3",
+      "after": "913cc56365734dc90ac32c929f3aa286ed81cbd0b18631e10db7016c2c4304d3",
+      "guid": "78ccd0b44c3c417cae5b55be5e6e6054"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPoseInertia.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterPoseInertia.cs.meta",
+      "before": "c5ac4d1e110f2930e2afc59bb779cd22c3d6b7912352a141ca4e8fa9bb8b0f85",
+      "after": "c5ac4d1e110f2930e2afc59bb779cd22c3d6b7912352a141ca4e8fa9bb8b0f85",
+      "guid": "3ebf01e115ca4c178a3ce3838f708c44"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterPoseInertiaSettings.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterPoseInertiaSettings.cs.meta",
+      "before": "386c02f5f04d2ffb35bd41f3b906c791bce7b1ab39dd16fd1e7bfb3d23691bc3",
+      "after": "386c02f5f04d2ffb35bd41f3b906c791bce7b1ab39dd16fd1e7bfb3d23691bc3",
+      "guid": "da88aedfd06f4d06b5ed6bfc6a2013b7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterProfile.cs.meta",
+      "new": "Assets/Code/Character/Behavior/CharacterProfile.cs.meta",
+      "before": "a2ed8da2186e873597e70aa7d1e44b5f3f21af012147e7dc6c386d93357cdd58",
+      "after": "a2ed8da2186e873597e70aa7d1e44b5f3f21af012147e7dc6c386d93357cdd58",
+      "guid": "70d9c1646370442a8682e19b9ddcd95a"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterProfileAnimation.cs.meta",
+      "new": "Assets/Code/Character/Anim/CharacterProfileAnimation.cs.meta",
+      "before": "d402a454954c441c2281f0edb8250af2631f7c53438847dccd542fb10746faee",
+      "after": "d402a454954c441c2281f0edb8250af2631f7c53438847dccd542fb10746faee",
+      "guid": "7333726a3ffc44f395fe9c5fd25578a5"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterRenderPosition.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterRenderPosition.cs.meta",
+      "before": "7636d67265714747053e5cc15c9bed43af93522b0846aa5b765b467ff961d123",
+      "after": "7636d67265714747053e5cc15c9bed43af93522b0846aa5b765b467ff961d123",
+      "guid": "469ee7b82b474e04ae64665e63a645f1"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayEventProbe.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterReplayEventProbe.cs.meta",
+      "before": "609d9c3945c8e1872455c46c8df4ad857e3fa365b74dbc5154bf1ae00d8d3bb0",
+      "after": "609d9c3945c8e1872455c46c8df4ad857e3fa365b74dbc5154bf1ae00d8d3bb0",
+      "guid": "133e550b8c6c469496eec7de138eb5cf"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayEvents.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterReplayEvents.cs.meta",
+      "before": "61c6c512b2bb2ce3904749c7ddb42bb073588c079c4a977339d43aa420014dd8",
+      "after": "61c6c512b2bb2ce3904749c7ddb42bb073588c079c4a977339d43aa420014dd8",
+      "guid": "4c7b30e7358e48df973009e09e344a2b"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterReplayTrace.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterReplayTrace.cs.meta",
+      "before": "6c6ab26e09c40d6fdc13eee19a3f40f7cf718f4e7607d73387ba12eea9cb1dc7",
+      "after": "6c6ab26e09c40d6fdc13eee19a3f40f7cf718f4e7607d73387ba12eea9cb1dc7",
+      "guid": "a19dbae8bcae428fa4d57a7aa30a3190"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterRigidbodyMotor.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterRigidbodyMotor.cs.meta",
+      "before": "d3b60bb3a14b29dec02fd8b002d5232351f452d54b155d550d7a61eb18251d3c",
+      "after": "d3b60bb3a14b29dec02fd8b002d5232351f452d54b155d550d7a61eb18251d3c",
+      "guid": "fad0090348cb84f4599dc39b381c4063"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterStepProbe.cs.meta",
+      "new": "Assets/Code/Character/Motion/CharacterStepProbe.cs.meta",
+      "before": "a87527f7fa85d11fbbce610c54d2f70ce9d6b83949876741a6cac9b9067cf324",
+      "after": "a87527f7fa85d11fbbce610c54d2f70ce9d6b83949876741a6cac9b9067cf324",
+      "guid": "26556c96528848e98deefc7a209b9617"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/CharacterTurnReplay.cs.meta",
+      "new": "Assets/Code/Character/Replay/CharacterTurnReplay.cs.meta",
+      "before": "cb96832d22d2ad9871d2f88112b5c7dee6e1c4c4e57e2645627662b828fe8d94",
+      "after": "cb96832d22d2ad9871d2f88112b5c7dee6e1c4c4e57e2645627662b828fe8d94",
+      "guid": "13773bd7097f4bae85310ac9296224bf"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime/GroundMotionPath.cs.meta",
+      "new": "Assets/Code/Character/Anim/GroundMotionPath.cs.meta",
+      "before": "375c47582dced14760c36c994168619a23674fef53605b075fa9a11ffe65f310",
+      "after": "375c47582dced14760c36c994168619a23674fef53605b075fa9a11ffe65f310",
+      "guid": "11ef8434eeed418f84e4556191f70e43"
+    },
+    {
+      "old": "Assets/player/GameInput.cs.meta",
+      "new": "Assets/Code/Player/Input/GameInput.cs.meta",
+      "before": "6fe66f2a75d9612e0b85819921fc0a269fe9763985e46c27e9e82756333ce8f2",
+      "after": "6fe66f2a75d9612e0b85819921fc0a269fe9763985e46c27e9e82756333ce8f2",
+      "guid": "fe2b671a2a872aa4dabf4db1afb618b1"
+    },
+    {
+      "old": "Assets/player/GameInput.inputactions.meta",
+      "new": "Assets/Data/Player/Input/GameInput.inputactions.meta",
+      "before": "f8e7ede339ba815814d5c26819eb716c23bda52c2e2325d29ea72da171592b07",
+      "after": "c4bbad2728a86186b401c36b058e63e4ced8c00dc910a8518b9edd5da7199124",
+      "guid": "10e7740716da666499e00f19b6ce4661"
+    },
+    {
+      "old": "Assets/player/LocomotionStops.fbx.meta",
+      "new": "Assets/Art/Player/Anim/移动急停.fbx.meta",
+      "before": "ebb9ed91a51a812b630d8236d59dec6034fba8e555be188b1d2cf1aa053ebb1f",
+      "after": "ebb9ed91a51a812b630d8236d59dec6034fba8e555be188b1d2cf1aa053ebb1f",
+      "guid": "78f5e9bddcdf4f558d19848ae1755c0f"
+    },
+    {
+      "old": "Assets/player/LocomotionTurns.fbx.meta",
+      "new": "Assets/Art/Player/Anim/移动转向.fbx.meta",
+      "before": "1ade015199fc112be8da6cf935d72934381ac62181e366cecc3d5393e8f24c04",
+      "after": "1ade015199fc112be8da6cf935d72934381ac62181e366cecc3d5393e8f24c04",
+      "guid": "f2bde4cb89d8417986f5fba8b64c3959"
+    },
+    {
+      "old": "Assets/player/player 1.prefab.meta",
+      "new": "Assets/Art/Player/Prefabs/玩家.prefab.meta",
+      "before": "cf0ff173cbd15ed1d76a1b23a37f32c83b21b0c0726b71dc8792fdebe09c0e78",
+      "after": "cf0ff173cbd15ed1d76a1b23a37f32c83b21b0c0726b71dc8792fdebe09c0e78",
+      "guid": "2d860ce6b9e4ce748b7485feea49e7a3"
+    },
+    {
+      "old": "Assets/player/player.controller.meta",
+      "new": "Assets/Art/Player/Anim/玩家动画.controller.meta",
+      "before": "9d195b873a5174508032397d8f9117186738572e34fec679683c2a20376048ce",
+      "after": "9d195b873a5174508032397d8f9117186738572e34fec679683c2a20376048ce",
+      "guid": "caa5306bc4ce2c441a340a8a3c209116"
+    },
+    {
+      "old": "Assets/player/PlayerCapsule.physicMaterial.meta",
+      "new": "Assets/Art/Player/Materials/玩家胶囊体.physicMaterial.meta",
+      "before": "75640b074d65f4c0bd7437f5d07c1b10ba39959dd070d914b26e052af48074d4",
+      "after": "75640b074d65f4c0bd7437f5d07c1b10ba39959dd070d914b26e052af48074d4",
+      "guid": "87e5378243a851e42be05a85668da1e7"
+    },
+    {
+      "old": "Assets/player/PlayerInputSystem.cs.meta",
+      "new": "Assets/Code/Player/Input/PlayerInputSystem.cs.meta",
+      "before": "08ac07a18ed37c5cfa38583d41e2bfab234c99aa813d4ec5a00abead8335188c",
+      "after": "08ac07a18ed37c5cfa38583d41e2bfab234c99aa813d4ec5a00abead8335188c",
+      "guid": "fb8b87fd63874d049f3e10a9198d56d1"
+    },
+    {
+      "old": "Assets/player/Player_LowerBody.mask.meta",
+      "new": "Assets/Art/Player/Anim/下半身.mask.meta",
+      "before": "86a27b6637965197f0c7f4e4cdd89fd680f7f931df9f4121c4bc3824c00c1ee9",
+      "after": "86a27b6637965197f0c7f4e4cdd89fd680f7f931df9f4121c4bc3824c00c1ee9",
+      "guid": "0da4119d6955e5f488cf931257435553"
+    },
+    {
+      "old": "Assets/player/Player_UpperBody.mask.meta",
+      "new": "Assets/Art/Player/Anim/上半身.mask.meta",
+      "before": "e0f83cec8b8fe59bbfe967a9312adfa80867fa96dae0edb2df8fb987c9b1f347",
+      "after": "e0f83cec8b8fe59bbfe967a9312adfa80867fa96dae0edb2df8fb987c9b1f347",
+      "guid": "8f4bf6e2231166d48a49f4f53dec9997"
+    },
+    {
+      "old": "Assets/player/ShieldCharacterProfile.asset.meta",
+      "new": "Assets/Data/Player/Shield/盾牌角色配置.asset.meta",
+      "before": "ab91d7ec6590c05f42d54e48692194f710af916c872fe2c5003d2eb8ddb20eb1",
+      "after": "ab91d7ec6590c05f42d54e48692194f710af916c872fe2c5003d2eb8ddb20eb1",
+      "guid": "effb554b881a495e9b1c73da8bd29cd3"
+    },
+    {
+      "old": "Assets/player/ShieldGroundMotion.asset.meta",
+      "new": "Assets/Data/Player/Shield/盾牌地面动作库.asset.meta",
+      "before": "8c52846a8bf01e1c1071cd3854e2a2072fd32228184aaf0264396c1644e1f07c",
+      "after": "8c52846a8bf01e1c1071cd3854e2a2072fd32228184aaf0264396c1644e1f07c",
+      "guid": "aaec0abe6a8e498db4858df95433ac5f"
+    },
+    {
+      "old": "Assets/player/Resources/PlayerCombat.inputactions.meta",
+      "new": "Assets/Data/Player/Input/Resources/PlayerCombat.inputactions.meta",
+      "before": "0e83578e86a3a14025305c07f0c6f029e41c72b63d1ee47e5577809d4a443abc",
+      "after": "0e83578e86a3a14025305c07f0c6f029e41c72b63d1ee47e5577809d4a443abc",
+      "guid": "495d6f64eb0a441faed6f8a4c40d4a52"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/01 角色行为.asset.meta",
+      "new": "Assets/Data/Player/Shield/01 角色行为.asset.meta",
+      "before": "7c6fadbb1a1fe5762bfec9befbaa181d80d4a46a3a5cd42e2494cee365a50a11",
+      "after": "7c6fadbb1a1fe5762bfec9befbaa181d80d4a46a3a5cd42e2494cee365a50a11",
+      "guid": "6e71a861ab6e49a4b1dff26f6be891ba"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/02 连招表.asset.meta",
+      "new": "Assets/Data/Player/Shield/02 连招表.asset.meta",
+      "before": "00ad7e45dd85d6f2792a6185836cc4ed12ba122d40a98e9a471d6831e5e3c2e2",
+      "after": "00ad7e45dd85d6f2792a6185836cc4ed12ba122d40a98e9a471d6831e5e3c2e2",
+      "guid": "67ab7b3c6a1d4207bff53004da339c7d"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/03 移动与物理.asset.meta",
+      "new": "Assets/Data/Player/Shield/03 移动与物理.asset.meta",
+      "before": "e9350ce0f1b7182eabd416307630843cbbe6c10b8761c510963241fe7b85b55a",
+      "after": "e9350ce0f1b7182eabd416307630843cbbe6c10b8761c510963241fe7b85b55a",
+      "guid": "84ab0168b7af423ea7220ed963050220"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/04 动画表现.asset.meta",
+      "new": "Assets/Data/Player/Shield/04 动画表现.asset.meta",
+      "before": "cc68a666e221381e6fd8ef5fd8001573f7afb629c26908260b3f6804b0ca07fe",
+      "after": "cc68a666e221381e6fd8ef5fd8001573f7afb629c26908260b3f6804b0ca07fe",
+      "guid": "c84e754933a04188a3214a2d117105b9"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置/05 移动预测.asset.meta",
+      "new": "Assets/Data/Player/Shield/05 移动预测.asset.meta",
+      "before": "a6171c871a09d1c64f2db459af9e3de04374e05c775a24e34f214ca016c2d053",
+      "after": "a6171c871a09d1c64f2db459af9e3de04374e05c775a24e34f214ca016c2d053",
+      "guid": "2125bd3ee4024a22b38e01e455aa32d7"
+    },
+    {
+      "old": "Assets/AnimationCamera.meta",
+      "new": "Assets/Code/AnimCamera.meta",
+      "before": "121f78f304f0fcf8b6c37de46a8d79094de15bada06d60380ba6590be668b5ad",
+      "after": "121f78f304f0fcf8b6c37de46a8d79094de15bada06d60380ba6590be668b5ad",
+      "guid": "c4536d21a48842ff92b3752d447b2681"
+    },
+    {
+      "old": "Assets/AnimationCamera/Editor.meta",
+      "new": "Assets/Code/AnimCamera/Editor.meta",
+      "before": "f2855a20fd02f24fdc6fe3244afe6be89f4d03a188929f2a9b510abd4a9a833b",
+      "after": "f2855a20fd02f24fdc6fe3244afe6be89f4d03a188929f2a9b510abd4a9a833b",
+      "guid": "8435bc81a1794377931531858cdadafa"
+    },
+    {
+      "old": "Assets/AnimationCamera/Runtime.meta",
+      "new": "Assets/Code/AnimCamera/Runtime.meta",
+      "before": "86047dd387d036c0eed0b0bd1a9eae17615cb21c37a000cccff8b26348256d59",
+      "after": "86047dd387d036c0eed0b0bd1a9eae17615cb21c37a000cccff8b26348256d59",
+      "guid": "9a8c0c9cb50f43d88271997a64f2dcd6"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples.meta",
+      "new": "Assets/Code/AnimCamera/Samples.meta",
+      "before": "0c47601a237898e312ab4020470dc0171ecf25bf4e8446457fcdd44b7c578981",
+      "after": "0c47601a237898e312ab4020470dc0171ecf25bf4e8446457fcdd44b7c578981",
+      "guid": "bddfd81f1c785e479bce9dd9469dc7e1"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/Materials.meta",
+      "new": "Assets/Art/AnimCamera/Materials.meta",
+      "before": "d9ae13b66a9f5cc3be1f711a0279b81e8bef58802f04136bd071c8d74fa28ac2",
+      "after": "d9ae13b66a9f5cc3be1f711a0279b81e8bef58802f04136bd071c8d74fa28ac2",
+      "guid": "f72f611ce2b859f68c8750aa522e950e"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaViewerModel.meta",
+      "new": "Assets/Art/AnimCamera/Models.meta",
+      "before": "208c23e41c95a023d15fc8801e10b418ac4a0e1a9eb39f39984fcc1ae731443a",
+      "after": "208c23e41c95a023d15fc8801e10b418ac4a0e1a9eb39f39984fcc1ae731443a",
+      "guid": "615969831c18413295a053ab59104212"
+    },
+    {
+      "old": "Assets/AnimationCamera/Samples/UmaCharacter.meta",
+      "new": "Assets/Art/AnimCamera.meta",
+      "before": "51cc5b837dc34dd503ecd50ccbd2b266335f269980e389ee71e1522c505a92bb",
+      "after": "51cc5b837dc34dd503ecd50ccbd2b266335f269980e389ee71e1522c505a92bb",
+      "guid": "8d8fdf6b720d4d758230b502ecaef0b2"
+    },
+    {
+      "old": "Assets/CharacterBehavior.meta",
+      "new": "Assets/Code/Character.meta",
+      "before": "bc0fb0ec0154d16bc406db7b0206d915ad22fd296ccbe7d5e492d3c38f25ca22",
+      "after": "bc0fb0ec0154d16bc406db7b0206d915ad22fd296ccbe7d5e492d3c38f25ca22",
+      "guid": "9d731ac8ba824567acda41113e88b8a9"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Editor.meta",
+      "new": "Assets/Code/Character/Editor.meta",
+      "before": "8041cd494e957a82e367a49c1d263bd6357997644098b622107ebb59ca75f0a0",
+      "after": "8041cd494e957a82e367a49c1d263bd6357997644098b622107ebb59ca75f0a0",
+      "guid": "548070e776fb4fe489e178409fa8add7"
+    },
+    {
+      "old": "Assets/CharacterBehavior/Runtime.meta",
+      "new": "Assets/Code/Character/Behavior.meta",
+      "before": "81adbe19ff63fe3fbe9e575d651756acbe8443c09ca5ebc5ba66fb7c01ac2be3",
+      "after": "81adbe19ff63fe3fbe9e575d651756acbe8443c09ca5ebc5ba66fb7c01ac2be3",
+      "guid": "5392fbca9f054fc6bda2fc578d5992e4"
+    },
+    {
+      "old": "Assets/player.meta",
+      "new": "Assets/Art/Player.meta",
+      "before": "8ff2346d3ae3641faf68322af5b7a9e5906efcafac27c96289b764fca464b2ec",
+      "after": "8ff2346d3ae3641faf68322af5b7a9e5906efcafac27c96289b764fca464b2ec",
+      "guid": "2df2d5bf6d8ea5a4c8d946a96c20c564"
+    },
+    {
+      "old": "Assets/player/Resources.meta",
+      "new": "Assets/Data/Player/Input/Resources.meta",
+      "before": "5e6cd2c02a045c981d91c2455103cc4e09ae8c6ae37aef2b7acc3fc42e51c031",
+      "after": "5e6cd2c02a045c981d91c2455103cc4e09ae8c6ae37aef2b7acc3fc42e51c031",
+      "guid": "311dff3fb7f74870837b6ea08faadc99"
+    },
+    {
+      "old": "Assets/player/盾牌角色配置.meta",
+      "new": "Assets/Data/Player/Shield.meta",
+      "before": "440b8584b9daa218d8dbf101ab61565ddbe0b13cfd0725a1feabed840b2a9c74",
+      "after": "440b8584b9daa218d8dbf101ab61565ddbe0b13cfd0725a1feabed840b2a9c74",
+      "guid": "2fe184bf58984a9d94cadba3b116e9cb"
+    },
+    {
+      "old": "Tools/Check-FollowCameraBoundary.ps1",
+      "new": "Tools/Check-FollowCameraBoundary.ps1",
+      "before": "138b80b889c10d59a81cb6cac4461f39f7670c09432adcac3bda3395b6394fac",
+      "after": "8bd469b4c9019700f3f4e8f28338c749c43c13d2b84f91249ff8e08ecdbd45c2"
+    }
+  ],
+  "new_meta": {
+    "Assets/Art/Player/Materials.meta": "168ca973356c414eb001f3ef3739e4c7",
+    "Assets/Code/Character/Replay.meta": "074823307a57478cb64f0cf7054a97d0",
+    "Assets/Art.meta": "b54ebfe77d8a4765942f8e2d7b0af553",
+    "Assets/Code/Character/Forecast.meta": "9be877e766734db0a84bbb2dc6506b15",
+    "Assets/Art/Player/Anim.meta": "3698c0680ef54ec69145f4c5cfbb09b4",
+    "Assets/Data/AnimCamera.meta": "eee51c16b9314a9ca9e9dc569dbeaa74",
+    "Assets/Data/Player.meta": "4ca6c3e3fdb94f56820394ff16551b9a",
+    "Assets/Code.meta": "a3a6800e86804455ad789aa12c61dc9e",
+    "Assets/Code/Character/Motion.meta": "5adc017e85824642b6606a29c97102f4",
+    "Assets/Data/Player/Input.meta": "4247e99bb5d848f5815a81bf90003995",
+    "Assets/Data.meta": "26e70e261e3c42ca92f29422fe081287",
+    "Assets/Code/Character/Anim.meta": "117a8279529a4ce7aa495e9ebdef5737",
+    "Assets/Code/Player/Input.meta": "39341c07402442888af5acbbab14e96c",
+    "Assets/Art/Player/Prefabs.meta": "91635a4d1b8e45b6a6fb8e34eb162b16",
+    "Assets/Code/Player.meta": "bdeb0435bb804406be147cc18a59a15c"
+  },
+  "unchanged": {
+    "Assets/Scenes/SampleScene.unity": "93ff4bd5410520f04df9f14709ad4e8d5136a12a22d1361adf66e075c1947c92",
+    "Assets/Scenes/SampleScene.unity.meta": "b5815a6b12afaf810577bc89041c4ce46516c7cd6609693f8db616f8e5584d80",
+    "Assets/Scenes/角色测试.unity": "99ab47cf8ec9bfc5d0921ff709da0dd19b8b9e751bb1aff0aefad0a4f8cdb1eb",
+    "Assets/Scenes/角色测试.unity.meta": "bfbb9093d66bf0a560fb820a9d19bc07287d1d12f751943cae6eb2fbb69c2a13"
+  }
+}

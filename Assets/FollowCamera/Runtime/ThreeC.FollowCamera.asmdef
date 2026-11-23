@@ -1,0 +1,17 @@
+{
+    "name": "ThreeC.FollowCamera",
+    "rootNamespace": "ThreeC.FollowCamera",
+    "references": [
+        "GUID:cba0304118e14d269845a7c2a0029a77",
+        "GUID:4f8caabe29504be586e406c956d50e33"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

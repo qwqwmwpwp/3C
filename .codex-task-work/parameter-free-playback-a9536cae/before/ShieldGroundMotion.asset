@@ -1,0 +1,1904 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: cb78eb5f42c74a5ab5db77696f76f573, type: 3}
+  m_Name: ShieldGroundMotion
+  m_EditorClassIdentifier:
+  Avatar: {fileID: 9000000, guid: b02f7765ace5dff4a866b767512e4a05, type: 3}
+  Controller: {fileID: 9100000, guid: caa5306bc4ce2c441a340a8a3c209116, type: 2}
+  Format: 1
+  BakedAvatar: {fileID: 9000000, guid: b02f7765ace5dff4a866b767512e4a05, type: 3}
+  BakedController: {fileID: 9100000, guid: caa5306bc4ce2c441a340a8a3c209116, type: 2}
+  Tracks:
+  - Clip: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    States:
+    - Base Layer.move
+    - Base Layer.locomotion_run_start
+    Use: 1
+    Gait: 2
+    Side: 0
+    Loop: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.66666667
+    Seconds: 0.66666667
+  - Clip: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    States:
+    - Base Layer.walk
+    - Base Layer.locomotion_walk_start
+    Use: 1
+    Gait: 1
+    Side: 0
+    Loop: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0
+    LastEntrySeconds: 1.1333333
+    Seconds: 1.1333333
+  - Clip: {fileID: -4657983491210734051, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.run_stop_left
+    Use: 4
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.09
+    Seconds: 0.43333333
+  - Clip: {fileID: -2752956362822285958, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.run_stop_right
+    Use: 4
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.09
+    Seconds: 0.43333333
+  - Clip: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    States:
+    - Base Layer.sprint
+    Use: 1
+    Gait: 3
+    Side: 0
+    Loop: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.6
+    Seconds: 0.6
+  - Clip: {fileID: -6309618109938871288, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.walk_stop_left
+    Use: 4
+    Gait: 1
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0.115
+    LastEntrySeconds: 0.065
+    Seconds: 0.36666667
+  - Clip: {fileID: 8255199267967100069, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.walk_stop_right
+    Use: 4
+    Gait: 1
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0.115
+    LastEntrySeconds: 0.065
+    Seconds: 0.36666667
+  - Clip: {fileID: 5107035181355359069, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.sprint_stop_left
+    Use: 4
+    Gait: 3
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.065
+    Seconds: 0.5
+  - Clip: {fileID: -5451072692694935678, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.sprint_stop_right
+    Use: 4
+    Gait: 3
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.065
+    Seconds: 0.5
+  - Clip: {fileID: 740381001100001, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_left_l
+    Use: 3
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: -0.12, y: 0.28}
+      Yaw: -32
+    - Seconds: 0.16
+      Position: {x: -0.42, y: 0.42}
+      Yaw: -68
+    - Seconds: 0.24
+      Position: {x: -0.8, y: 0.46}
+      Yaw: -88
+    - Seconds: 0.4
+      Position: {x: -1.59, y: 0.47}
+      Yaw: -90
+    - Seconds: 0.8
+      Position: {x: -3.58, y: 0.47}
+      Yaw: -90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+  - Clip: {fileID: 740381001100002, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_left_r
+    Use: 3
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: -0.12, y: 0.28}
+      Yaw: -32
+    - Seconds: 0.16
+      Position: {x: -0.42, y: 0.42}
+      Yaw: -68
+    - Seconds: 0.24
+      Position: {x: -0.8, y: 0.46}
+      Yaw: -88
+    - Seconds: 0.4
+      Position: {x: -1.59, y: 0.47}
+      Yaw: -90
+    - Seconds: 0.8
+      Position: {x: -3.58, y: 0.47}
+      Yaw: -90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+  - Clip: {fileID: 740381001100003, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_right_l
+    Use: 3
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: 0.12, y: 0.28}
+      Yaw: 32
+    - Seconds: 0.16
+      Position: {x: 0.42, y: 0.42}
+      Yaw: 68
+    - Seconds: 0.24
+      Position: {x: 0.8, y: 0.46}
+      Yaw: 88
+    - Seconds: 0.4
+      Position: {x: 1.59, y: 0.47}
+      Yaw: 90
+    - Seconds: 0.8
+      Position: {x: 3.58, y: 0.47}
+      Yaw: 90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+  - Clip: {fileID: 740381001100004, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_right_r
+    Use: 3
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: 0.12, y: 0.28}
+      Yaw: 32
+    - Seconds: 0.16
+      Position: {x: 0.42, y: 0.42}
+      Yaw: 68
+    - Seconds: 0.24
+      Position: {x: 0.8, y: 0.46}
+      Yaw: 88
+    - Seconds: 0.4
+      Position: {x: 1.59, y: 0.47}
+      Yaw: 90
+    - Seconds: 0.8
+      Position: {x: 3.58, y: 0.47}
+      Yaw: 90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+  BakedTracks:
+  - Clip: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    States:
+    - Base Layer.move
+    - Base Layer.locomotion_run_start
+    Use: 1
+    Gait: 2
+    Side: 0
+    Loop: 1
+    ScalesWithSpeed: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.66666667
+    Seconds: 0.66666667
+    Poses:
+    - Left: {x: -0.045537201, y: -0.79865842, z: 0.26010648}
+      Right: {x: 0.099195554, y: -0.30655479, z: -0.55789893}
+      LeftVelocity: {x: 0.35017739, y: 0.24025999, z: -3.3000096}
+      RightVelocity: {x: 0.22546942, y: 1.6076437, z: 3.7108254}
+      Contact: {x: 0.07407405, y: 0}
+    - Left: {x: -0.031637426, y: -0.77824824, z: 0.11490689}
+      Right: {x: 0.096242163, y: -0.28065223, z: -0.41036725}
+      LeftVelocity: {x: 0.41263278, y: 0.55194296, z: -4.4150516}
+      RightVelocity: {x: -0.1125191, y: 0.48084319, z: 4.2698474}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.018028349, y: -0.76186222, z: -0.034230292}
+      Right: {x: 0.091694281, y: -0.27449858, z: -0.27324244}
+      LeftVelocity: {x: 0.42320006, y: 0.17751183, z: -4.7265536}
+      RightVelocity: {x: -0.24754107, y: -0.59588224, z: 3.6928055}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.0034240894, y: -0.76641411, z: -0.20019668}
+      Right: {x: 0.079739425, y: -0.32037771, z: -0.16418022}
+      LeftVelocity: {x: 0.37478222, y: 0.086177588, z: -4.8752698}
+      RightVelocity: {x: -0.34396154, y: -1.9272763, z: 3.3374749}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0069571324, y: -0.75611705, z: -0.35924828}
+      Right: {x: 0.068763511, y: -0.40298367, z: -0.050744116}
+      LeftVelocity: {x: 0.15195594, y: 0.86240966, z: -4.2794663}
+      RightVelocity: {x: -0.058278982, y: -3.5510261, z: 4.0268916}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0067063067, y: -0.70892014, z: -0.48549443}
+      Right: {x: 0.07585416, y: -0.55711278, z: 0.10427922}
+      LeftVelocity: {x: -0.14442617, y: 1.6845413, z: -3.3822817}
+      RightVelocity: {x: 0.2770792, y: -4.7867087, z: 4.4282368}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.002671279, y: -0.6438143, z: -0.58473372}
+      Right: {x: 0.087235458, y: -0.72209758, z: 0.24447167}
+      LeftVelocity: {x: -0.44717467, y: 2.4459857, z: -2.6766327}
+      RightVelocity: {x: -0.067604687, y: -3.2238836, z: 3.5258514}
+      Contact: {x: 0.49999995, y: 0}
+    - Left: {x: -0.023105338, y: -0.54585442, z: -0.66393661}
+      Right: {x: 0.071347181, y: -0.77203836, z: 0.33933598}
+      LeftVelocity: {x: -0.48163113, y: 2.8088468, z: -1.9618267}
+      RightVelocity: {x: -0.60843943, y: -0.94497934, z: 2.2250408}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.034780021, y: -0.45655784, z: -0.71552217}
+      Right: {x: 0.046672829, y: -0.7850962, z: 0.39280772}
+      LeftVelocity: {x: -0.21025018, y: 2.6878618, z: -0.098517537}
+      RightVelocity: {x: -0.45109048, y: -0.53093679, z: 0.57032436}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.037122017, y: -0.36666363, z: -0.67050445}
+      Right: {x: 0.041274482, y: -0.80743414, z: 0.3773576}
+      LeftVelocity: {x: -0.11680749, y: 2.4754299, z: 2.2612095}
+      RightVelocity: {x: -0.13093804, y: -0.43412782, z: -1.3565505}
+      Contact: {x: 0, y: 0.074074074}
+    - Left: {x: -0.042567187, y: -0.29152918, z: -0.56477487}
+      Right: {x: 0.037943627, y: -0.81403805, z: 0.30237103}
+      LeftVelocity: {x: -0.23227018, y: 1.55435, z: 3.7058115}
+      RightVelocity: {x: -0.22761213, y: 0.27245689, z: -3.344847}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.052606695, y: -0.2630403, z: -0.42345035}
+      Right: {x: 0.02610034, y: -0.78927035, z: 0.1543678}
+      LeftVelocity: {x: -0.33612604, y: 0.30142754, z: 4.327907}
+      RightVelocity: {x: -0.38281344, y: 0.79942659, z: -4.8520625}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.06497559, y: -0.27143401, z: -0.27624774}
+      Right: {x: 0.012422731, y: -0.76074295, z: -0.021099806}
+      LeftVelocity: {x: -0.39208645, y: -0.86074859, z: 3.9024907}
+      RightVelocity: {x: -0.41804526, y: 0.34394626, z: -5.0094956}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.078745792, y: -0.32042354, z: -0.1632843}
+      Right: {x: -0.0017693434, y: -0.7663406, z: -0.17959857}
+      LeftVelocity: {x: -0.33915728, y: -1.9673315, z: 3.372134}
+      RightVelocity: {x: -0.36945828, y: -0.021161288, z: -4.6097374}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.087586075, y: -0.40258944, z: -0.051438808}
+      Right: {x: -0.012207821, y: -0.7621537, z: -0.32841563}
+      LeftVelocity: {x: -0.084656887, y: -3.3621177, z: 3.7185216}
+      RightVelocity: {x: -0.19779415, y: 0.59455834, z: -4.1504073}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.084389584, y: -0.54456472, z: 0.084617138}
+      Right: {x: -0.01495562, y: -0.72670338, z: -0.45629239}
+      LeftVelocity: {x: 0.15116114, y: -4.4482114, z: 3.8884592}
+      RightVelocity: {x: 0.13209097, y: 1.4293811, z: -3.4815645}
+      Contact: {x: 0, y: 0.49999985}
+    - Left: {x: -0.077508666, y: -0.69913687, z: 0.20779181}
+      Right: {x: -0.0034017563, y: -0.66686162, z: -0.56051993}
+      LeftVelocity: {x: 0.1968673, y: -3.2107287, z: 3.4088981}
+      RightVelocity: {x: 0.72977983, y: 2.4940579, z: -2.8751278}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.071265098, y: -0.7586133, z: 0.31187701}
+      Right: {x: 0.033696368, y: -0.56043285, z: -0.64796758}
+      LeftVelocity: {x: 0.20394725, y: -1.2237943, z: 2.4946725}
+      RightVelocity: {x: 1.0012577, y: 2.9890801, z: -2.2528517}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.063912182, y: -0.78072315, z: 0.37410331}
+      Right: {x: 0.06334876, y: -0.46758962, z: -0.71071005}
+      LeftVelocity: {x: 0.24423768, y: -0.53478397, z: 0.34545779}
+      RightVelocity: {x: 0.7127175, y: 2.5890657, z: -0.14682055}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.054982586, y: -0.79426557, z: 0.33490753}
+      Right: {x: 0.081210868, y: -0.38782847, z: -0.65775561}
+      LeftVelocity: {x: 0.27561766, y: -0.26899874, z: -1.7099762}
+      RightVelocity: {x: 0.53770295, y: 2.4155438, z: 2.292223}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.045537671, y: -0.7986564, z: 0.26010489}
+      Right: {x: 0.099195623, y: -0.30655336, z: -0.55789518}
+      LeftVelocity: {x: 0.35017739, y: 0.24025999, z: -3.3000096}
+      RightVelocity: {x: 0.22546942, y: 1.6076437, z: 3.7108254}
+      Contact: {x: 0.07407394, y: 0}
+  - Clip: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    States:
+    - Base Layer.walk
+    - Base Layer.locomotion_walk_start
+    Use: 1
+    Gait: 1
+    Side: 0
+    Loop: 1
+    ScalesWithSpeed: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0
+    LastEntrySeconds: 1.1333333
+    Seconds: 1.1333333
+    Poses:
+    - Left: {x: -0.027357008, y: -0.81651717, z: -0.34157653}
+      Right: {x: 0.027559349, y: -0.84156927, z: 0.26007696}
+      LeftVelocity: {x: -0.20509351, y: 0.35105422, z: -0.86769082}
+      RightVelocity: {x: -0.20416276, y: 0.096062534, z: 0.35311617}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.03417847, y: -0.80013128, z: -0.37477647}
+      Right: {x: 0.022983705, y: -0.8338832, z: 0.26098071}
+      LeftVelocity: {x: -0.19583325, y: 0.54677278, z: -1.0024124}
+      RightVelocity: {x: -0.13801516, y: 0.22706341, z: 0.10041625}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.040412558, y: -0.78006566, z: -0.40840402}
+      Right: {x: 0.018358339, y: -0.82643171, z: 0.26677138}
+      LeftVelocity: {x: -0.20677522, y: 0.61939493, z: -0.90406716}
+      RightVelocity: {x: -0.13844563, y: 0.18828727, z: 0.079179816}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.047963484, y: -0.75883828, z: -0.43504761}
+      Right: {x: 0.013753996, y: -0.82133072, z: 0.26625936}
+      LeftVelocity: {x: -0.25769343, y: 0.61757751, z: -0.58241598}
+      RightVelocity: {x: -0.13640148, y: 0.097976737, z: -0.28824348}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.05759212, y: -0.73889382, z: -0.44723175}
+      Right: {x: 0.0092649069, y: -0.81989992, z: 0.24755514}
+      LeftVelocity: {x: -0.2892805, y: 0.66154025, z: -0.14571704}
+      RightVelocity: {x: -0.16233532, y: -0.031468458, z: -1.1377878}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.067248851, y: -0.7147356, z: -0.44476208}
+      Right: {x: 0.0029316414, y: -0.82342862, z: 0.19040684}
+      LeftVelocity: {x: -0.22966915, y: 0.82669951, z: 0.2785673}
+      RightVelocity: {x: -0.17827833, y: -0.1467137, z: -1.7090981}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.072903397, y: -0.68378052, z: -0.4286606}
+      Right: {x: -0.0026203152, y: -0.82968084, z: 0.13361527}
+      LeftVelocity: {x: -0.10333708, y: 0.87886468, z: 0.70729673}
+      RightVelocity: {x: -0.1361593, y: -0.17942112, z: -1.6762222}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.074137989, y: -0.65614462, z: -0.39760897}
+      Right: {x: -0.0061456449, y: -0.83539002, z: 0.0786587}
+      LeftVelocity: {x: -0.025980799, y: 0.5614619, z: 1.1053558}
+      RightVelocity: {x: -0.075583225, y: -0.18258747, z: -1.6849349}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.07463545, y: -0.64634973, z: -0.35497022}
+      Right: {x: -0.0076591969, y: -0.84185334, z: 0.021286279}
+      LeftVelocity: {x: -0.041365139, y: -0.12709111, z: 1.5239257}
+      RightVelocity: {x: 0.0010477379, y: -0.16082235, z: -1.7107134}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.076895665, y: -0.66461736, z: -0.29601392}
+      Right: {x: -0.0060757957, y: -0.84611151, z: -0.035388857}
+      LeftVelocity: {x: -0.058062421, y: -0.78472808, z: 2.0415285}
+      RightVelocity: {x: 0.0781406, y: -0.10770377, z: -1.683463}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.078506278, y: -0.69866493, z: -0.21886832}
+      Right: {x: -0.0024498235, y: -0.84903359, z: -0.090944588}
+      LeftVelocity: {x: -0.015774826, y: -1.0232538, z: 2.4427973}
+      RightVelocity: {x: 0.12466251, y: -0.079344548, z: -1.6588072}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.07794732, y: -0.73283428, z: -0.13316077}
+      Right: {x: 0.0022350382, y: -0.85140115, z: -0.14597601}
+      LeftVelocity: {x: 0.046752915, y: -0.87956987, z: 2.4728823}
+      RightVelocity: {x: 0.15272322, y: -0.0086378306, z: -1.5508595}
+      Contact: {x: 0, y: 0.92996259}
+    - Left: {x: -0.075389417, y: -0.75730292, z: -0.054009497}
+      Right: {x: 0.0077317245, y: -0.84960944, z: -0.19433522}
+      LeftVelocity: {x: 0.14699943, y: -0.70908196, z: 1.9686967}
+      RightVelocity: {x: 0.1583975, y: 0.11926834, z: -1.3475928}
+      Contact: {x: 0, y: 0.45593359}
+    - Left: {x: -0.068147358, y: -0.78010641, z: -0.0019143224}
+      Right: {x: 0.012794872, y: -0.84344993, z: -0.23581553}
+      LeftVelocity: {x: 0.34845027, y: -0.79683267, z: 1.4978313}
+      RightVelocity: {x: 0.12906549, y: 0.19935217, z: -1.1484146}
+      Contact: {x: 0, y: 0.029609216}
+    - Left: {x: -0.052159399, y: -0.8104251, z: 0.045845926}
+      Right: {x: 0.016336091, y: -0.8363193, z: -0.2708962}
+      LeftVelocity: {x: 0.52235465, y: -0.9203057, z: 1.9032347}
+      RightVelocity: {x: 0.093592135, y: 0.21564413, z: -0.99249691}
+      Contact: {x: 0.1731123, y: 0}
+    - Left: {x: -0.033323715, y: -0.84146012, z: 0.12496799}
+      Right: {x: 0.019034347, y: -0.82907365, z: -0.30198199}
+      LeftVelocity: {x: 0.41061487, y: -0.61132025, z: 2.5300071}
+      RightVelocity: {x: 0.089615139, y: 0.23175336, z: -0.89684397}
+      Contact: {x: 0.69389253, y: 0}
+    - Left: {x: -0.024785074, y: -0.85117979, z: 0.21451306}
+      Right: {x: 0.022310433, y: -0.82086907, z: -0.33068579}
+      LeftVelocity: {x: 0.12720324, y: -0.0015483052, z: 2.2257131}
+      RightVelocity: {x: 0.14012894, y: 0.22771508, z: -0.77325225}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.0248435, y: -0.84156334, z: 0.27334887}
+      Right: {x: 0.028376277, y: -0.81389265, z: -0.35353214}
+      LeftVelocity: {x: 0.047584435, y: 0.13835952, z: 0.81582427}
+      RightVelocity: {x: 0.22156025, y: 0.30887604, z: -0.79866529}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.021612778, y: -0.84195582, z: 0.26890135}
+      Right: {x: 0.037081117, y: -0.80027734, z: -0.38393015}
+      LeftVelocity: {x: 0.11983391, y: 0.11715285, z: 0.015200973}
+      RightVelocity: {x: 0.27650895, y: 0.48779279, z: -0.90952724}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.016854572, y: -0.83375315, z: 0.27436227}
+      Right: {x: 0.046810207, y: -0.78137313, z: -0.41416728}
+      LeftVelocity: {x: 0.14991239, y: 0.29003151, z: 0.1132223}
+      RightVelocity: {x: 0.29561286, y: 0.60997523, z: -0.79577833}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.011618619, y: -0.82262038, z: 0.2764495}
+      Right: {x: 0.056788641, y: -0.75961232, z: -0.43698204}
+      LeftVelocity: {x: 0.15256817, y: 0.23400553, z: -0.21502912}
+      RightVelocity: {x: 0.30029103, y: 0.63689053, z: -0.47707379}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.0066833608, y: -0.81815279, z: 0.26002699}
+      Right: {x: 0.066829609, y: -0.73891376, z: -0.4459722}
+      LeftVelocity: {x: 0.16776515, y: 0.017553046, z: -1.0800326}
+      RightVelocity: {x: 0.28931696, y: 0.67314483, z: -0.090263486}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.00043427572, y: -0.82145018, z: 0.20444733}
+      Right: {x: 0.076076439, y: -0.714736, z: -0.4429996}
+      LeftVelocity: {x: 0.17755534, y: -0.14475524, z: -1.6730592}
+      RightVelocity: {x: 0.2473712, y: 0.81725679, z: 0.2659893}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0051536616, y: -0.82780313, z: 0.14848971}
+      Right: {x: 0.083321022, y: -0.68442997, z: -0.42823958}
+      LeftVelocity: {x: 0.13906161, y: -0.1874274, z: -1.6638002}
+      RightVelocity: {x: 0.18869315, y: 0.84005557, z: 0.67388535}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0088364985, y: -0.83394534, z: 0.093527317}
+      Right: {x: 0.088655982, y: -0.6587323, z: -0.39807391}
+      LeftVelocity: {x: 0.080350656, y: -0.19809298, z: -1.7006725}
+      RightVelocity: {x: 0.1476786, y: 0.4944022, z: 1.1245877}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.010510372, y: -0.84100933, z: 0.035111547}
+      Right: {x: 0.093166262, y: -0.65146983, z: -0.35326707}
+      LeftVelocity: {x: 0.0019405223, y: -0.17004568, z: -1.7534673}
+      RightVelocity: {x: 0.10693129, y: -0.17327026, z: 1.6786444}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0089658666, y: -0.84528172, z: -0.023370504}
+      Right: {x: 0.095784735, y: -0.67028365, z: -0.28616428}
+      LeftVelocity: {x: -0.077641094, y: -0.095546767, z: -1.7431748}
+      RightVelocity: {x: 0.014844183, y: -0.75744018, z: 2.3452163}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0053342991, y: -0.84737912, z: -0.081100106}
+      Right: {x: 0.094155874, y: -0.70196584, z: -0.19691932}
+      LeftVelocity: {x: -0.12315298, y: -0.059594996, z: -1.7259908}
+      RightVelocity: {x: -0.10319475, y: -0.94566554, z: 2.8085715}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.00075566769, y: -0.84925472, z: -0.13843656}
+      Right: {x: 0.088905085, y: -0.73332801, z: -0.098926187}
+      LeftVelocity: {x: -0.14808468, y: -0.0016896799, z: -1.6096652}
+      RightVelocity: {x: -0.17463293, y: -0.85095562, z: 2.8115898}
+      Contact: {x: 0.92996262, y: 0}
+    - Left: {x: -0.0045380127, y: -0.84749176, z: -0.18841112}
+      Right: {x: 0.082513679, y: -0.75869621, z: -0.0094799995}
+      LeftVelocity: {x: -0.15393921, y: 0.099797957, z: -1.3521194}
+      RightVelocity: {x: -0.19590765, y: -0.83939105, z: 2.4919671}
+      Contact: {x: 0.45593379, y: 0}
+    - Left: {x: -0.0095069464, y: -0.84260152, z: -0.22857785}
+      Right: {x: 0.075844575, y: -0.78928742, z: 0.067204952}
+      LeftVelocity: {x: -0.13272573, y: 0.16775753, z: -1.1152107}
+      RightVelocity: {x: -0.26704947, y: -0.91944873, z: 2.2362506}
+      Contact: {x: 0.02960934, y: 0}
+    - Left: {x: -0.013386395, y: -0.83630793, z: -0.26275849}
+      Right: {x: 0.064710381, y: -0.8199928, z: 0.13960338}
+      LeftVelocity: {x: -0.11252944, y: 0.18248409, z: -0.9263134}
+      RightVelocity: {x: -0.37399201, y: -0.69075041, z: 2.0264751}
+      Contact: {x: 0, y: 0.17311283}
+    - Left: {x: -0.017008909, y: -0.83043592, z: -0.29033208}
+      Right: {x: 0.050911774, y: -0.83533745, z: 0.20230329}
+      LeftVelocity: {x: -0.10678761, y: 0.19159555, z: -0.8125788}
+      RightVelocity: {x: -0.42173737, y: -0.30441865, z: 1.4675438}
+      Contact: {x: 0, y: 0.69389319}
+    - Left: {x: -0.020505569, y: -0.82353489, z: -0.31693041}
+      Right: {x: 0.036594556, y: -0.84028737, z: 0.23743963}
+      LeftVelocity: {x: -0.11329353, y: 0.20845592, z: -0.76527894}
+      RightVelocity: {x: -0.35028064, y: -0.09347029, z: 0.86663246}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.024561811, y: -0.81653886, z: -0.34135067}
+      Right: {x: 0.027559731, y: -0.8415688, z: 0.26007879}
+      LeftVelocity: {x: -0.20509351, y: 0.35105422, z: -0.86769082}
+      RightVelocity: {x: -0.20416276, y: 0.096062534, z: 0.35311617}
+      Contact: {x: 0, y: 1}
+  - Clip: {fileID: -4657983491210734051, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.run_stop_left
+    Use: 4
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.09
+    Seconds: 0.43333333
+    Poses:
+    - Left: {x: -0.19696603, y: -0.81562364, z: 0.27465638}
+      Right: {x: 0.020668686, y: -0.57051504, z: -0.45525498}
+      LeftVelocity: {x: 0.050973818, y: 0.093127415, z: -3.8296884}
+      RightVelocity: {x: 0.043243552, y: 0.059858859, z: 0.17888505}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.1952669, y: -0.81251939, z: 0.1470001}
+      Right: {x: 0.022110138, y: -0.56851974, z: -0.44929214}
+      LeftVelocity: {x: 0.091424799, y: 0.13564948, z: -3.3843756}
+      RightVelocity: {x: 0.069662123, y: 0.036667585, z: 0.5041146}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.19087104, y: -0.80658034, z: 0.049031338}
+      Right: {x: 0.025312828, y: -0.56807053, z: -0.42164734}
+      LeftVelocity: {x: 0.1424583, y: 0.1447634, z: -2.4937564}
+      RightVelocity: {x: 0.095972219, y: -0.12053937, z: 1.0772847}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.18576968, y: -0.8028685, z: -0.019250328}
+      Right: {x: 0.028508286, y: -0.5765557, z: -0.37747316}
+      LeftVelocity: {x: 0.1273493, y: -0.014418326, z: -1.6031285}
+      RightVelocity: {x: 0.063771321, y: -0.58362454, z: 1.4733907}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.18238109, y: -0.80754156, z: -0.057843898}
+      Right: {x: 0.029564249, y: -0.60697883, z: -0.32342129}
+      LeftVelocity: {x: 0.049921302, y: -0.25643729, z: -0.72139967}
+      RightVelocity: {x: -0.022142949, y: -1.3136838, z: 1.6699571}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.1824416, y: -0.81996432, z: -0.067343639}
+      Right: {x: 0.027032089, y: -0.66413462, z: -0.26614269}
+      LeftVelocity: {x: -0.057369992, y: -0.40333852, z: -0.14249678}
+      RightVelocity: {x: -0.1293022, y: -1.9497301, z: 1.6669656}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.18620576, y: -0.8344308, z: -0.067343684}
+      Right: {x: 0.020944103, y: -0.73696084, z: -0.21229025}
+      LeftVelocity: {x: -0.14797904, y: -0.41167539, z: -1.6922376e-06}
+      RightVelocity: {x: -0.21117691, y: -2.1275941, z: 1.4644112}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.19230687, y: -0.84740935, z: -0.067343752}
+      Right: {x: 0.012953629, y: -0.80597423, z: -0.16851528}
+      LeftVelocity: {x: -0.18188897, y: -0.34096755, z: 9.0640114e-07}
+      RightVelocity: {x: -0.22773034, y: -1.7310182, z: 1.0623143}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.19833169, y: -0.85716197, z: -0.067343623}
+      Right: {x: 0.0057620797, y: -0.85236206, z: -0.1414693}
+      LeftVelocity: {x: -0.145771, y: -0.2372852, z: 0.0053450744}
+      RightVelocity: {x: -0.16429567, y: -0.8999351, z: 0.48800456}
+      Contact: {x: 1, y: 0.60219823}
+    - Left: {x: -0.20202493, y: -0.86322836, z: -0.066987414}
+      Right: {x: 0.0020005838, y: -0.8659699, z: -0.13598164}
+      LeftVelocity: {x: -0.16790225, y: -0.089349635, z: 0.2125398}
+      RightVelocity: {x: -0.063277827, y: -0.25055554, z: 0.083482909}
+      Contact: {x: 0.94022731, y: 1}
+    - Left: {x: -0.20952517, y: -0.86311861, z: -0.053174304}
+      Right: {x: 0.001543558, y: -0.86906576, z: -0.13590377}
+      LeftVelocity: {x: -0.29747527, y: 0.0074823573, z: 0.5653973}
+      RightVelocity: {x: -0.0083929136, y: -0.062648803, z: 0.0016307424}
+      Contact: {x: 0.26612289, y: 1}
+    - Left: {x: -0.22185662, y: -0.86272953, z: -0.029294261}
+      Right: {x: 0.0014410562, y: -0.87014649, z: -0.13587292}
+      LeftVelocity: {x: -0.33920067, y: -0.051610954, z: 0.65765556}
+      RightVelocity: {x: -0.0018439925, y: -0.018806867, z: -0.00027001122}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23213855, y: -0.86655934, z: -0.0093305994}
+      Right: {x: 0.0014206251, y: -0.87031955, z: -0.13592177}
+      LeftVelocity: {x: -0.18778763, y: -0.074007399, z: 0.36359056}
+      RightVelocity: {x: -0.00028891581, y: -0.0026226416, z: -0.0020695683}
+      Contact: {x: 0.18110294, y: 1}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: -0.067117305, y: -0.033120587, z: 0.12827128}
+      RightVelocity: {x: 3.5101453e-05, y: -5.3420663e-05, z: -0.0026735616}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: -2752956362822285958, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.run_stop_right
+    Use: 4
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.09
+    Seconds: 0.43333333
+    Poses:
+    - Left: {x: -0.1725509, y: -0.58572614, z: -0.49528478}
+      Right: {x: 0.043396184, y: -0.83725905, z: 0.16712776}
+      LeftVelocity: {x: -0.092967416, y: 0.24646729, z: 0.27469273}
+      RightVelocity: {x: -0.058311375, y: 0.28034985, z: -3.82969}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.17564981, y: -0.57751057, z: -0.48612835}
+      Right: {x: 0.041452472, y: -0.82791406, z: 0.039471427}
+      LeftVelocity: {x: -0.20161783, y: 0.30760601, z: 0.77411508}
+      RightVelocity: {x: -0.10399179, y: 0.40834911, z: -3.3843758}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.18599209, y: -0.56521907, z: -0.44367711}
+      Right: {x: 0.036463398, y: -0.81003578, z: -0.058497293}
+      LeftVelocity: {x: -0.37148072, y: 0.16672701, z: 1.6542752}
+      RightVelocity: {x: -0.16285844, y: 0.43577906, z: -2.4937501}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.20041519, y: -0.56639543, z: -0.37584334}
+      Right: {x: 0.030595242, y: -0.79886212, z: -0.12677858}
+      LeftVelocity: {x: -0.43638232, y: -0.48254639, z: 2.2625386}
+      RightVelocity: {x: -0.15104407, y: 0.091772564, z: -1.6031271}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.21508424, y: -0.59738883, z: -0.2928412}
+      Right: {x: 0.026393794, y: -0.80391761, z: -0.16537243}
+      LeftVelocity: {x: -0.39709642, y: -1.3446893, z: 2.5643697}
+      RightVelocity: {x: -0.073695998, y: -0.2816391, z: -0.7214065}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.22688829, y: -0.65604138, z: -0.20488536}
+      Right: {x: 0.025682176, y: -0.81763806, z: -0.17487235}
+      LeftVelocity: {x: -0.28718761, y: -1.997659, z: 2.5597737}
+      RightVelocity: {x: 0.03564016, y: -0.44548228, z: -0.1425025}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23423008, y: -0.7305661, z: -0.12218962}
+      Right: {x: 0.028769804, y: -0.83361643, z: -0.1748726}
+      LeftVelocity: {x: -0.15409193, y: -2.1756888, z: 2.2487473}
+      RightVelocity: {x: 0.1295125, y: -0.45469411, z: -2.2231974e-06}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23716109, y: -0.8010873, z: -0.054968868}
+      Right: {x: 0.034316342, y: -0.847951, z: -0.1748725}
+      LeftVelocity: {x: -0.038554729, y: -1.7703307, z: 1.631287}
+      RightVelocity: {x: 0.16717372, y: -0.37659075, z: 2.0786457e-06}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.2368004, y: -0.84858815, z: -0.013437153}
+      Right: {x: 0.039914719, y: -0.85872248, z: -0.17487246}
+      LeftVelocity: {x: 0.037870811, y: -0.92654284, z: 0.74914284}
+      RightVelocity: {x: 0.12898651, y: -0.26238654, z: 0.0034937083}
+      Contact: {x: 0.60219823, y: 1}
+    - Left: {x: -0.23463636, y: -0.86285683, z: -0.0050260118}
+      Right: {x: 0.042915443, y: -0.86544344, z: -0.17463958}
+      LeftVelocity: {x: 0.036353101, y: -0.26530903, z: 0.12733922}
+      RightVelocity: {x: -0.089935581, y: -0.11071309, z: 0.13320518}
+      Contact: {x: 1, y: 0.94022731}
+    - Left: {x: -0.23437686, y: -0.86627541, z: -0.0049478715}
+      Right: {x: 0.033919013, y: -0.86610335, z: -0.16599212}
+      LeftVelocity: {x: 0.0038864157, y: -0.069195852, z: 0.0016334601}
+      RightVelocity: {x: -0.37601781, y: -0.008834973, z: 0.35336696}
+      Contact: {x: 1, y: 0.26612289}
+    - Left: {x: -0.23437727, y: -0.86746988, z: -0.0049171144}
+      Right: {x: 0.017847589, y: -0.86603244, z: -0.15108178}
+      LeftVelocity: {x: -3.5315708e-07, y: -0.020797402, z: -0.00027016675}
+      RightVelocity: {x: -0.4433568, y: -0.049003176, z: 0.41020893}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.23437688, y: -0.86766191, z: -0.0049658826}
+      Right: {x: 0.0043618936, y: -0.86937023, z: -0.13864485}
+      LeftVelocity: {x: 2.2166221e-05, y: -0.0029021502, z: -0.0020666342}
+      RightVelocity: {x: -0.24638691, y: -0.064333454, z: 0.22606337}
+      Contact: {x: 1, y: 0.18110294}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: 3.2727419e-05, y: -4.3585896e-05, z: -0.0026702228}
+      RightVelocity: {x: -0.088202953, y: -0.028533116, z: 0.079018814}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    States:
+    - Base Layer.sprint
+    Use: 1
+    Gait: 3
+    Side: 0
+    Loop: 1
+    ScalesWithSpeed: 1
+    Blend: 0.08
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.6
+    Seconds: 0.6
+    Poses:
+    - Left: {x: -0.0040638133, y: -0.7223242, z: 0.39708379}
+      Right: {x: -0.028258675, y: -0.21362352, z: -0.7097007}
+      LeftVelocity: {x: 0.23035661, y: -1.5944024, z: -3.5907314}
+      RightVelocity: {x: 0.1979297, y: 1.9709927, z: 2.0569257}
+      Contact: {x: 0.77, y: 0}
+    - Left: {x: 0.0022053774, y: -0.73019018, z: 0.24188798}
+      Right: {x: -0.0071349437, y: -0.17649621, z: -0.6046333}
+      LeftVelocity: {x: 0.14904572, y: -0.10927945, z: -4.9238129}
+      RightVelocity: {x: 0.66943214, y: 0.84940284, z: 3.5792734}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0058725681, y: -0.7296095, z: 0.068829596}
+      Right: {x: 0.016370135, y: -0.15699667, z: -0.47108248}
+      LeftVelocity: {x: 0.013275258, y: 0.15084933, z: -5.25196}
+      RightVelocity: {x: 0.63868404, y: -0.16616195, z: 4.3551533}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0030903947, y: -0.72013356, z: -0.10824269}
+      Right: {x: 0.035443992, y: -0.18757367, z: -0.31428975}
+      LeftVelocity: {x: -0.066226954, y: 0.47370974, z: -6.0521489}
+      RightVelocity: {x: 0.48421175, y: -1.1368909, z: 4.4202255}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.0014574379, y: -0.69802885, z: -0.334647}
+      Right: {x: 0.048650919, y: -0.2327894, z: -0.17640078}
+      LeftVelocity: {x: -0.11349445, y: 0.90714455, z: -6.7930833}
+      RightVelocity: {x: 0.32478718, y: -1.5404114, z: 3.9968893}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.0044759018, y: -0.65965725, z: -0.56111491}
+      Right: {x: 0.057096471, y: -0.29026777, z: -0.047830462}
+      LeftVelocity: {x: -0.10057936, y: 1.3382969, z: -4.6357128}
+      RightVelocity: {x: 0.19615856, y: -2.4440928, z: 3.2328629}
+      Contact: {x: 0.59111, y: 0}
+    - Left: {x: -0.0052478528, y: -0.60880905, z: -0.64369452}
+      Right: {x: 0.061728156, y: -0.39572892, z: 0.039123416}
+      LeftVelocity: {x: 0.23981258, y: 3.371697, z: -2.7437407}
+      RightVelocity: {x: -0.04330337, y: -4.0594507, z: 4.6981341}
+      Contact: {x: 0, y: 0}
+    - Left: {x: 0.011511604, y: -0.43487746, z: -0.74403095}
+      Right: {x: 0.05420958, y: -0.56089781, z: 0.26537848}
+      LeftVelocity: {x: 0.56586325, y: 4.9478155, z: -2.0675433}
+      RightVelocity: {x: -0.16414136, y: -3.4298003, z: 5.5651438}
+      Contact: {x: 0, y: 0}
+    - Left: {x: 0.032476364, y: -0.27895468, z: -0.78153074}
+      Right: {x: 0.050785399, y: -0.62438227, z: 0.410133}
+      LeftVelocity: {x: 0.25103773, y: 3.306554, z: 0.52048445}
+      RightVelocity: {x: -0.40414352, y: -2.4089666, z: 1.9699591}
+      Contact: {x: 0, y: 0}
+    - Left: {x: 0.028247452, y: -0.21444052, z: -0.70933199}
+      Right: {x: 0.027266678, y: -0.72149558, z: 0.39670908}
+      LeftVelocity: {x: -0.36261935, y: 1.6860715, z: 2.8814024}
+      RightVelocity: {x: -0.53494934, y: -1.5336074, z: -2.5093603}
+      Contact: {x: 0, y: 0.77}
+    - Left: {x: 0.008301741, y: -0.16654992, z: -0.58943725}
+      Right: {x: 0.01512211, y: -0.72662277, z: 0.24284232}
+      LeftVelocity: {x: -0.70733987, y: 1.0053268, z: 3.8427544}
+      RightVelocity: {x: -0.23978907, y: 0.032880306, z: -4.8297554}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.018908539, y: -0.14741874, z: -0.45314837}
+      Right: {x: 0.011280741, y: -0.71930356, z: 0.074725389}
+      LeftVelocity: {x: -0.70741192, y: -0.011257231, z: 4.5309806}
+      RightVelocity: {x: -0.033494204, y: 0.13138924, z: -5.2464169}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.038859054, y: -0.1673004, z: -0.28737187}
+      Right: {x: 0.012889163, y: -0.71786349, z: -0.10691881}
+      LeftVelocity: {x: -0.4591747, y: -1.1477029, z: 4.7537649}
+      RightVelocity: {x: 0.10388166, y: 0.60276859, z: -5.5656445}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.049520185, y: -0.22393227, z: -0.13623071}
+      Right: {x: 0.018206185, y: -0.67911899, z: -0.29631758}
+      LeftVelocity: {x: -0.17494833, y: -2.0227057, z: 3.9246798}
+      RightVelocity: {x: 0.02029425, y: 0.83438762, z: -6.8065846}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.050522275, y: -0.30214745, z: -0.025726557}
+      Right: {x: 0.014242113, y: -0.66223764, z: -0.56069112}
+      LeftVelocity: {x: 0.1279938, y: -3.0711369, z: 3.7629855}
+      RightVelocity: {x: 0.20658509, y: 0.94887502, z: -5.0686455}
+      Contact: {x: 0, y: 0.59111}
+    - Left: {x: -0.040987265, y: -0.42867473, z: 0.11463499}
+      Right: {x: 0.031978524, y: -0.61586066, z: -0.63422728}
+      LeftVelocity: {x: 0.32646582, y: -3.7621931, z: 4.9792743}
+      RightVelocity: {x: -0.55660281, y: 3.9892615, z: -2.3621821}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.028757887, y: -0.55296032, z: 0.30622506}
+      Right: {x: -0.022864741, y: -0.39628688, z: -0.71816993}
+      LeftVelocity: {x: 0.41753303, y: -2.9283294, z: 5.4995263}
+      RightVelocity: {x: -0.78463172, y: 4.619474, z: -1.6130161}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.01315173, y: -0.62389669, z: 0.48127007}
+      Right: {x: -0.020330257, y: -0.30789572, z: -0.74176168}
+      LeftVelocity: {x: 0.37168243, y: -2.5404355, z: 1.3629305}
+      RightVelocity: {x: -0.080853796, y: 2.7400298, z: 0.12710094}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.0039790586, y: -0.72232269, z: 0.3970871}
+      Right: {x: -0.028254994, y: -0.21361822, z: -0.70969653}
+      LeftVelocity: {x: 0.23035661, y: -1.5944024, z: -3.5907314}
+      RightVelocity: {x: 0.1979297, y: 1.9709927, z: 2.0569257}
+      Contact: {x: 0.77, y: 0}
+  - Clip: {fileID: -6309618109938871288, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.walk_stop_left
+    Use: 4
+    Gait: 1
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0.115
+    LastEntrySeconds: 0.065
+    Seconds: 0.36666667
+    Poses:
+    - Left: {x: -0.16997397, y: -0.85613016, z: 0.081133547}
+      Right: {x: -0.0014389539, y: -0.84817583, z: -0.24757606}
+      LeftVelocity: {x: 0.049356542, y: 0.13989978, z: -0.96659974}
+      RightVelocity: {x: 0.049838358, y: 0.24202377, z: 0.099171538}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16832875, y: -0.85146683, z: 0.048913556}
+      Right: {x: 0.00022232474, y: -0.84010837, z: -0.24427034}
+      LeftVelocity: {x: 0.083808436, y: 0.18527471, z: -0.80276822}
+      RightVelocity: {x: 0.08503646, y: 0.43485124, z: 0.25218538}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16438674, y: -0.84377851, z: 0.027615665}
+      Right: {x: 0.0042301435, y: -0.81918575, z: -0.2307637}
+      LeftVelocity: {x: 0.11863683, y: 0.14010273, z: -0.47511552}
+      RightVelocity: {x: 0.12113067, y: 0.55572677, z: 0.50850339}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16041962, y: -0.84212665, z: 0.017239188}
+      Right: {x: 0.0082977029, y: -0.80305992, z: -0.21037012}
+      LeftVelocity: {x: 0.086307755, y: -0.048305579, z: -0.17223359}
+      RightVelocity: {x: 0.089532004, y: 0.20995975, z: 0.65756636}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.15863289, y: -0.84699889, z: 0.016133426}
+      Right: {x: 0.010198944, y: -0.80518843, z: -0.18692595}
+      LeftVelocity: {x: 0.0077565503, y: -0.17520335, z: -0.016588887}
+      RightVelocity: {x: 0.011139747, y: -0.33213325, z: 0.69152483}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.15990252, y: -0.85380688, z: 0.016133262}
+      Right: {x: 0.0090403527, y: -0.82520214, z: -0.16426846}
+      LeftVelocity: {x: -0.069777472, y: -0.19425854, z: 4.2605919e-08}
+      RightVelocity: {x: -0.066786018, y: -0.67634504, z: 0.61037518}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16328472, y: -0.85994945, z: 0.016133429}
+      Right: {x: 0.0057465426, y: -0.8502781, z: -0.14623427}
+      LeftVelocity: {x: -0.10045236, y: -0.1568158, z: 3.833987e-06}
+      RightVelocity: {x: -0.098426918, y: -0.61384209, z: 0.41411293}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16659935, y: -0.86426126, z: 0.016133518}
+      Right: {x: 0.0024785581, y: -0.86612494, z: -0.13666093}
+      LeftVelocity: {x: -0.13811807, y: -0.083167814, z: -0.021750183}
+      RightVelocity: {x: -0.066264661, y: -0.28488301, z: 0.15417992}
+      Contact: {x: 1, y: 0.84486019}
+    - Left: {x: -0.17249259, y: -0.86549398, z: 0.014683417}
+      Right: {x: 0.0013288985, y: -0.8692703, z: -0.13595561}
+      LeftVelocity: {x: -0.4813273, y: 0.02670072, z: -0.14599035}
+      RightVelocity: {x: -0.016176796, y: -0.06050203, z: 0.011475448}
+      Contact: {x: 0.67397145, y: 1}
+    - Left: {x: -0.19868783, y: -0.86248121, z: 0.0064008274}
+      Right: {x: 0.001400105, y: -0.87015841, z: -0.1358959}
+      LeftVelocity: {x: -0.81436725, y: -0.0059968606, z: -0.25859784}
+      RightVelocity: {x: 0.0013790701, y: -0.01572635, z: 0.00047855559}
+      Contact: {x: 0.00043720956, y: 1}
+    - Left: {x: -0.22678374, y: -0.86589377, z: -0.0025564395}
+      Right: {x: 0.0014208366, y: -0.87031873, z: -0.1359237}
+      LeftVelocity: {x: -0.53531939, y: -0.077732205, z: -0.17183576}
+      RightVelocity: {x: 0.00032535224, y: -0.0024438277, z: -0.0017248206}
+      Contact: {x: 0.031869327, y: 1}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: -0.22776161, y: -0.053087845, z: -0.074953517}
+      RightVelocity: {x: 2.8758588e-05, y: -7.8231096e-05, z: -0.0026156666}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: 8255199267967100069, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.walk_stop_right
+    Use: 4
+    Gait: 1
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 1.55
+    BrakeSeconds: 0.115
+    LastEntrySeconds: 0.065
+    Seconds: 0.36666667
+    Poses:
+    - Left: {x: -0.1508296, y: -0.8495991, z: -0.21156552}
+      Right: {x: 0.034281125, y: -0.85852803, z: -0.0079202518}
+      LeftVelocity: {x: -0.12178155, y: 0.28865039, z: 0.1835827}
+      RightVelocity: {x: -0.049757754, y: 0.18267028, z: -0.96660376}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.15488898, y: -0.83997742, z: -0.2054461}
+      Right: {x: 0.032622533, y: -0.85243902, z: -0.040140377}
+      LeftVelocity: {x: -0.26759488, y: 0.50130833, z: 0.46680069}
+      RightVelocity: {x: -0.084475887, y: 0.24192162, z: -0.80276602}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.16866926, y: -0.81617855, z: -0.18044547}
+      Right: {x: 0.028649399, y: -0.84239992, z: -0.061437986}
+      LeftVelocity: {x: -0.48891092, y: 0.61927188, z: 0.9412469}
+      RightVelocity: {x: -0.1196749, y: 0.18387225, z: -0.47510911}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.18748304, y: -0.79869263, z: -0.1426963}
+      Right: {x: 0.024644207, y: -0.84018087, z: -0.071814318}
+      LeftVelocity: {x: -0.56492719, y: 0.23087449, z: 1.217177}
+      RightVelocity: {x: -0.087448776, y: -0.052972063, z: -0.17223244}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.20633107, y: -0.80078691, z: -0.099300338}
+      Right: {x: 0.022819481, y: -0.84593139, z: -0.072920149}
+      LeftVelocity: {x: -0.51096133, y: -0.33680052, z: 1.2800359}
+      RightVelocity: {x: -0.008825257, y: -0.20678949, z: -0.016586117}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.22154713, y: -0.821146, z: -0.057360576}
+      Right: {x: 0.024055856, y: -0.85396683, z: -0.072920059}
+      LeftVelocity: {x: -0.37433099, y: -0.68761479, z: 1.1298172}
+      RightVelocity: {x: 0.068882592, y: -0.22928305, z: -2.7102736e-07}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23128647, y: -0.8466279, z: -0.023979194}
+      Right: {x: 0.027411654, y: -0.86121693, z: -0.072920167}
+      LeftVelocity: {x: -0.20092834, y: -0.62599774, z: 0.76653373}
+      RightVelocity: {x: 0.099771262, y: -0.18508494, z: -2.1010308e-07}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23494235, y: -0.86287918, z: -0.0062583267}
+      Right: {x: 0.030707274, y: -0.86630583, z: -0.072920073}
+      LeftVelocity: {x: -0.044840852, y: -0.29691339, z: 0.28469291}
+      RightVelocity: {x: 0.034200522, y: -0.10118712, z: -0.066414652}
+      Contact: {x: 0.84486019, y: 1}
+    - Left: {x: -0.23427586, y: -0.86642212, z: -0.0049996668}
+      Right: {x: 0.029691688, y: -0.86796273, z: -0.077347811}
+      LeftVelocity: {x: 0.0088168306, y: -0.06887041, z: 0.019774656}
+      RightVelocity: {x: -0.1955031, y: 0.017947555, z: -0.43810653}
+      Contact: {x: 1, y: 0.67397145}
+    - Left: {x: -0.23435457, y: -0.86747054, z: -0.0049400163}
+      Right: {x: 0.017673734, y: -0.86510932, z: -0.10212717}
+      LeftVelocity: {x: -0.0015112303, y: -0.018578544, z: 0.00047694317}
+      RightVelocity: {x: -0.37229144, y: -0.0088233501, z: -0.770936}
+      Contact: {x: 1, y: 0.00043720956}
+    - Left: {x: -0.23437661, y: -0.86766069, z: -0.0049678706}
+      Right: {x: 0.0048722594, y: -0.86855096, z: -0.12874354}
+      LeftVelocity: {x: -0.00031840055, y: -0.0028923154, z: -0.0017231061}
+      RightVelocity: {x: -0.24377908, y: -0.078180134, z: -0.50825577}
+      Contact: {x: 1, y: 0.031869327}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: 2.441257e-05, y: -8.0019236e-05, z: -0.0026105845}
+      RightVelocity: {x: -0.10351393, y: -0.053111315, z: -0.21802047}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: 5107035181355359069, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.sprint_stop_left
+    Use: 4
+    Gait: 3
+    Side: 1
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.065
+    Seconds: 0.5
+    Poses:
+    - Left: {x: -0.1745535, y: -0.76224177, z: 0.36759497}
+      Right: {x: -0.073215638, y: -0.45699704, z: -0.66103624}
+      LeftVelocity: {x: 0.058039899, y: 0.025860071, z: -4.579952}
+      RightVelocity: {x: 0.08527505, y: 0.005197227, z: 0.19158652}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.17261883, y: -0.76137976, z: 0.2149299}
+      Right: {x: -0.070373136, y: -0.4568238, z: -0.65465002}
+      LeftVelocity: {x: 0.10652913, y: 0.039964132, z: -4.0474006}
+      RightVelocity: {x: 0.19190664, y: -0.027493089, z: 0.60055936}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16745155, y: -0.75957749, z: 0.097768262}
+      Right: {x: -0.060421862, y: -0.45882991, z: -0.62099895}
+      LeftVelocity: {x: 0.17801035, y: 0.050538294, z: -2.9822916}
+      RightVelocity: {x: 0.36973867, y: -0.13241306, z: 1.3486686}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16075148, y: -0.75801054, z: 0.016110462}
+      Right: {x: -0.045723891, y: -0.46565133, z: -0.56473878}
+      LeftVelocity: {x: 0.19092159, y: 0.0075773522, z: -1.9171861}
+      RightVelocity: {x: 0.46388688, y: -0.38989171, z: 1.9201395}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.15472345, y: -0.75907233, z: -0.030044142}
+      Right: {x: -0.02949607, y: -0.48482269, z: -0.49298965}
+      LeftVelocity: {x: 0.14101535, y: -0.20703178, z: -0.86273242}
+      RightVelocity: {x: 0.4648485, y: -1.001206, z: 2.2779822}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.15135045, y: -0.77181266, z: -0.041405032}
+      Right: {x: -0.014733991, y: -0.5323984, z: -0.4128733}
+      LeftVelocity: {x: 0.044711139, y: -0.48840992, z: -0.17041354}
+      RightVelocity: {x: 0.38904475, y: -1.8174358, z: 2.422184}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.1517427, y: -0.791633, z: -0.041405045}
+      Right: {x: -0.0035597533, y: -0.60598508, z: -0.33151072}
+      LeftVelocity: {x: -0.066309711, y: -0.61618421, z: -1.2096474e-06}
+      RightVelocity: {x: 0.26815801, y: -2.4019776, z: 2.3527472}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.1557711, y: -0.81289161, z: -0.041405113}
+      Right: {x: 0.00314321, y: -0.69253024, z: -0.25602349}
+      LeftVelocity: {x: -0.15550709, y: -0.60543962, z: -2.7348477e-06}
+      RightVelocity: {x: 0.13871914, y: -2.5191001, z: 2.0696813}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16210984, y: -0.83199564, z: -0.041405227}
+      Right: {x: 0.0056881895, y: -0.77392508, z: -0.19353196}
+      LeftVelocity: {x: -0.19353469, y: -0.51222447, z: -1.0996686e-07}
+      RightVelocity: {x: 0.030077408, y: -2.1156589, z: 1.5729873}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.16867341, y: -0.84703991, z: -0.04140512}
+      Right: {x: 0.0051483705, y: -0.83357417, z: -0.15115767}
+      LeftVelocity: {x: -0.16789522, y: -0.38182788, z: 0.0001541424}
+      RightVelocity: {x: -0.04523827, y: -1.2927559, z: 0.86296753}
+      Contact: {x: 1, y: 0.40272869}
+    - Left: {x: -0.17330286, y: -0.85745083, z: -0.041394951}
+      Right: {x: 0.0026723049, y: -0.86010881, z: -0.1360008}
+      LeftVelocity: {x: -0.16810695, y: -0.22787277, z: 0.049786965}
+      RightVelocity: {x: -0.055918471, y: -0.49064822, z: 0.2284431}
+      Contact: {x: 1, y: 1}
+    - Left: {x: -0.17988054, y: -0.86223143, z: -0.038085989}
+      Right: {x: 0.0014204724, y: -0.86628405, z: -0.13592813}
+      LeftVelocity: {x: -0.35256629, y: -0.067004152, z: 0.20489257}
+      RightVelocity: {x: -0.018784182, y: -0.13671868, z: 0.0020734504}
+      Contact: {x: 0.61572565, y: 1}
+    - Left: {x: -0.19680728, y: -0.86191777, z: -0.027735446}
+      Right: {x: 0.001420026, y: -0.86922339, z: -0.13586257}
+      LeftVelocity: {x: -0.55685375, y: -0.019509941, z: 0.33940608}
+      RightVelocity: {x: -7.9336115e-06, y: -0.058505572, z: 0.0010519235}
+      Contact: {x: 0.048592593, y: 1}
+    - Left: {x: -0.21700413, y: -0.86353209, z: -0.015458917}
+      Right: {x: 0.0014199435, y: -0.87018442, z: -0.135858}
+      LeftVelocity: {x: -0.52413512, y: -0.075763352, z: 0.31760386}
+      RightVelocity: {x: 8.0095367e-06, y: -0.016458593, z: -0.00087764529}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23174962, y: -0.86696866, z: -0.0065618557}
+      Right: {x: 0.00142056, y: -0.87032063, z: -0.13592107}
+      LeftVelocity: {x: -0.26057501, y: -0.061969087, z: 0.15606041}
+      RightVelocity: {x: 2.7774623e-05, y: -0.002053678, z: -0.0022933505}
+      Contact: {x: 0.34074376, y: 1}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: -0.078785196, y: -0.020840988, z: 0.045208969}
+      RightVelocity: {x: 3.7054994e-05, y: -2.1234155e-05, z: -0.0026945432}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: -5451072692694935678, guid: 78f5e9bddcdf4f558d19848ae1755c0f, type: 3}
+    States:
+    - Base Layer.sprint_stop_right
+    Use: 4
+    Gait: 3
+    Side: 2
+    Loop: 0
+    Blend: 0.12
+    MinimumSpeed: 0
+    FirstEntrySeconds: 0
+    ExitSeconds: 0
+    PathSource: 0
+    ReferenceSpeed: 6.52
+    BrakeSeconds: 0.16
+    LastEntrySeconds: 0.065
+    Seconds: 0.5
+    Poses:
+    - Left: {x: -0.084017765, y: -0.46658793, z: -0.65514569}
+      Right: {x: 0.042471684, y: -0.76489939, z: 0.2675686}
+      LeftVelocity: {x: -0.11290778, y: 0.10135442, z: 0.23722737}
+      RightVelocity: {x: -0.058033583, y: 0.11755452, z: -4.5799485}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.087781358, y: -0.46320945, z: -0.64723811}
+      Right: {x: 0.040537232, y: -0.7609809, z: 0.11490365}
+      LeftVelocity: {x: -0.27851912, y: 0.12822881, z: 0.74362364}
+      RightVelocity: {x: -0.10653303, y: 0.18167686, z: -4.0473984}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.10258571, y: -0.45803934, z: -0.60557078}
+      Right: {x: 0.035369482, y: -0.7527876, z: -0.0022579552}
+      LeftVelocity: {x: -0.56424523, y: 0.078278482, z: 1.6699379}
+      RightVelocity: {x: -0.17801451, y: 0.22977009, z: -2.9822938}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.12539771, y: -0.45799088, z: -0.53590892}
+      Right: {x: 0.028669598, y: -0.7456629, z: -0.083915934}
+      LeftVelocity: {x: -0.74081625, y: -0.24681777, z: 2.3775327}
+      RightVelocity: {x: -0.19092048, y: 0.10585651, z: -1.9171908}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.15197346, y: -0.47449386, z: -0.4470686}
+      Right: {x: 0.02264145, y: -0.7457305, z: -0.13007067}
+      LeftVelocity: {x: -0.79338664, y: -0.96130192, z: 2.8206061}
+      RightVelocity: {x: -0.14101529, y: -0.22028267, z: -0.86273777}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.17829015, y: -0.52207768, z: -0.34786851}
+      Right: {x: 0.019268578, y: -0.76034841, z: -0.14143179}
+      LeftVelocity: {x: -0.73837817, y: -1.8328857, z: 2.9991593}
+      RightVelocity: {x: -0.044706166, y: -0.56037571, z: -0.17041422}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.20119867, y: -0.59668624, z: -0.24712465}
+      Right: {x: 0.019661039, y: -0.78308888, z: -0.14143162}
+      LeftVelocity: {x: -0.60747907, y: -2.437877, z: 2.9131919}
+      RightVelocity: {x: 0.066309487, y: -0.70696738, z: 1.0860253e-06}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.21878875, y: -0.68460281, z: -0.15365572}
+      Right: {x: 0.02368921, y: -0.80747957, z: -0.14143171}
+      LeftVelocity: {x: -0.43721774, y: -2.560021, z: 2.5626967}
+      RightVelocity: {x: 0.15550083, y: -0.69464117, z: -2.2095526e-06}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23034652, y: -0.76735431, z: -0.0762782}
+      Right: {x: 0.030027761, y: -0.82939829, z: -0.14143177}
+      LeftVelocity: {x: -0.25693628, y: -2.1544261, z: 1.9476876}
+      RightVelocity: {x: 0.19353609, y: -0.58769524, z: 1.047963e-06}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.23591784, y: -0.82823122, z: -0.023809875}
+      Right: {x: 0.036591616, y: -0.84665925, z: -0.14143164}
+      LeftVelocity: {x: -0.079203893, y: -1.3288825, z: 1.0684984}
+      RightVelocity: {x: 0.16789439, y: -0.43809604, z: 0.00015172134}
+      Contact: {x: 0.40272869, y: 1}
+    - Left: {x: -0.23562678, y: -0.85594647, z: -0.0050449709}
+      Right: {x: 0.04122072, y: -0.85860469, z: -0.14142165}
+      LeftVelocity: {x: 0.023114946, y: -0.5219809, z: 0.28256691}
+      RightVelocity: {x: 0.033372048, y: -0.27104303, z: 0.0084774839}
+      Contact: {x: 1, y: 1}
+    - Left: {x: -0.23437684, y: -0.86302994, z: -0.0049720812}
+      Right: {x: 0.03881642, y: -0.86472879, z: -0.14086648}
+      LeftVelocity: {x: 0.018739097, y: -0.15683681, z: 0.0020760568}
+      RightVelocity: {x: -0.21030169, y: -0.10883946, z: 0.032320925}
+      Contact: {x: 1, y: 0.61572565}
+    - Left: {x: -0.2343775, y: -0.86640226, z: -0.0049065672}
+      Right: {x: 0.027200608, y: -0.86586066, z: -0.13926693}
+      LeftVelocity: {x: -6.6563484e-06, y: -0.067142397, z: 0.0010485007}
+      RightVelocity: {x: -0.38212361, y: -0.040272698, z: 0.051512419}
+      Contact: {x: 1, y: 0.048592593}
+    - Left: {x: -0.23437729, y: -0.8675061, z: -0.0049021811}
+      Right: {x: 0.013341512, y: -0.86741363, z: -0.13743232}
+      LeftVelocity: {x: 1.2152642e-05, y: -0.018910244, z: -0.00088445166}
+      RightVelocity: {x: -0.35965521, y: -0.059725977, z: 0.046614641}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.23437669, y: -0.86766294, z: -0.0049655306}
+      Right: {x: 0.0032235938, y: -0.86984239, z: -0.13615928}
+      LeftVelocity: {x: 2.2416561e-05, y: -0.0023588911, z: -0.0022906336}
+      RightVelocity: {x: -0.17879576, y: -0.043615513, z: 0.021321348}
+      Contact: {x: 1, y: 0.34074376}
+    - Left: {x: -0.23437579, y: -0.86766336, z: -0.00505489}
+      Right: {x: 0.0014217952, y: -0.87032133, z: -0.13601089}
+      LeftVelocity: {x: 2.7023254e-05, y: -1.2516975e-05, z: -0.0026807829}
+      RightVelocity: {x: -0.054053959, y: -0.01436837, z: 0.0044516998}
+      Contact: {x: 1, y: 1}
+  - Clip: {fileID: 740381001100001, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_left_l
+    Use: 3
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: -0.12, y: 0.28}
+      Yaw: -32
+    - Seconds: 0.16
+      Position: {x: -0.42, y: 0.42}
+      Yaw: -68
+    - Seconds: 0.24
+      Position: {x: -0.8, y: 0.46}
+      Yaw: -88
+    - Seconds: 0.4
+      Position: {x: -1.59, y: 0.47}
+      Yaw: -90
+    - Seconds: 0.8
+      Position: {x: -3.58, y: 0.47}
+      Yaw: -90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+    Poses:
+    - Left: {x: -0.045537153, y: -0.79865827, z: 0.26010622}
+      Right: {x: 0.099195502, y: -0.30655473, z: -0.55789886}
+      LeftVelocity: {x: 0.30946883, y: 0.6929592, z: -4.4327879}
+      RightVelocity: {x: -0.046993287, y: 0.85771859, z: 4.4154341}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: -0.035221525, y: -0.77555963, z: 0.11234662}
+      Right: {x: 0.097629059, y: -0.27796412, z: -0.41071773}
+      LeftVelocity: {x: 0.27716881, y: 0.65353967, z: -4.5118113}
+      RightVelocity: {x: -0.032818836, y: 0.58244079, z: 4.2687153}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.027059232, y: -0.75508896, z: -0.040681202}
+      Right: {x: 0.097007579, y: -0.26772535, z: -0.27331784}
+      LeftVelocity: {x: 0.24728947, y: 0.30944522, z: -4.8522043}
+      RightVelocity: {x: -0.13856273, y: -0.46395063, z: 3.6937693}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.018735561, y: -0.75492994, z: -0.21113366}
+      Right: {x: 0.088391543, y: -0.30889416, z: -0.16446644}
+      LeftVelocity: {x: 0.18071963, y: 0.23172397, z: -5.0138811}
+      RightVelocity: {x: -0.31696529, y: -1.7817307, z: 3.2971092}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.015011257, y: -0.73964069, z: -0.37493994}
+      Right: {x: 0.07587656, y: -0.38650739, z: -0.053510563}
+      LeftVelocity: {x: -0.048190565, y: 1.0125124, z: -4.4224214}
+      RightVelocity: {x: -0.21661172, y: -3.4009181, z: 3.9025143}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.021948265, y: -0.68742912, z: -0.50596175}
+      Right: {x: 0.073950762, y: -0.53562203, z: 0.095701179}
+      LeftVelocity: {x: -0.34277062, y: 1.8635498, z: -3.4930231}
+      RightVelocity: {x: -0.089451482, y: -4.6392611, z: 4.2122851}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.037862631, y: -0.61540404, z: -0.60780815}
+      Right: {x: 0.069913128, y: -0.69579147, z: 0.22730844}
+      LeftVelocity: {x: -0.62035973, y: 2.5845393, z: -2.8034609}
+      RightVelocity: {x: -0.55291692, y: -3.0853301, z: 3.2603064}
+      Contact: {x: 0.5, y: 0}
+    - Left: {x: -0.06330558, y: -0.5151265, z: -0.69285915}
+      Right: {x: 0.037089634, y: -0.7413107, z: 0.31305494}
+      LeftVelocity: {x: -0.49319682, y: 2.9015037, z: -2.0421198}
+      RightVelocity: {x: -1.0370928, y: -0.82075976, z: 1.9898278}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.070742419, y: -0.42197046, z: -0.74394947}
+      Right: {x: 0.00077361055, y: -0.75050879, z: 0.35996363}
+      LeftVelocity: {x: 0.082206759, y: 2.7930866, z: -0.0063903132}
+      RightVelocity: {x: -0.69207532, y: -0.42570993, z: 0.42535861}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.057825129, y: -0.32892072, z: -0.69328517}
+      Right: {x: -0.0090487208, y: -0.76969136, z: 0.34141218}
+      LeftVelocity: {x: 0.43750122, y: 2.5578184, z: 2.4779257}
+      RightVelocity: {x: -0.24404439, y: -0.35174724, z: -1.4364589}
+      Contact: {x: 0, y: 0.07407}
+    - Left: {x: -0.041575671, y: -0.25144923, z: -0.57875443}
+      Right: {x: -0.015496016, y: -0.7739586, z: 0.2641997}
+      LeftVelocity: {x: 0.39957628, y: 1.6109446, z: 3.9662668}
+      RightVelocity: {x: -0.30307857, y: 0.32904591, z: -3.3987477}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.031186711, y: -0.22152442, z: -0.42886738}
+      Right: {x: -0.029253959, y: -0.74775497, z: 0.114829}
+      LeftVelocity: {x: 0.14321997, y: 0.33023357, z: 4.5305825}
+      RightVelocity: {x: -0.42122464, y: 0.82823731, z: -4.8794919}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.032027673, y: -0.22943366, z: -0.27671559}
+      Right: {x: -0.043577658, y: -0.71874278, z: -0.061099754}
+      LeftVelocity: {x: -0.24419272, y: -0.86075038, z: 3.9682234}
+      RightVelocity: {x: -0.41804714, y: 0.3439543, z: -5.0094951}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.047466226, y: -0.27890778, z: -0.16431915}
+      Right: {x: -0.057123768, y: -0.72482468, z: -0.21913734}
+      LeftVelocity: {x: -0.57382554, y: -1.9961384, z: 3.2782046}
+      RightVelocity: {x: -0.33104755, y: -0.049963295, z: -4.5823067}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.070282709, y: -0.36250955, z: -0.058168613}
+      Right: {x: -0.065647495, y: -0.72207367, z: -0.36658687}
+      LeftVelocity: {x: -0.60399307, y: -3.4187105, z: 3.5080726}
+      RightVelocity: {x: -0.12233098, y: 0.5379606, z: -4.0965025}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.087732431, y: -0.50682181, z: 0.06955235}
+      Right: {x: -0.065279167, y: -0.68896064, z: -0.49223751}
+      LeftVelocity: {x: -0.45001874, y: -4.5305961, z: 3.6509159}
+      RightVelocity: {x: 0.24193594, y: 1.3469887, z: -3.4030987}
+      Contact: {x: 0, y: 0.5}
+    - Left: {x: -0.10028396, y: -0.66454929, z: 0.18522578}
+      Right: {x: -0.049518432, y: -0.63227442, z: -0.59346012}
+      LeftVelocity: {x: -0.26684772, y: -3.3159611, z: 3.2406624}
+      RightVelocity: {x: 0.88162316, y: 2.3888299, z: -2.769782}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.10552228, y: -0.72788589, z: 0.28559651}
+      Right: {x: -0.0065042898, y: -0.52970532, z: -0.67688964}
+      LeftVelocity: {x: 0.021932926, y: -1.3480094, z: 2.458466}
+      RightVelocity: {x: 1.2827298, y: 2.8648639, z: -2.083065}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.098821763, y: -0.75441658, z: 0.34912351}
+      Right: {x: 0.035996888, y: -0.44128349, z: -0.73233112}
+      LeftVelocity: {x: 0.32827964, y: -0.67332901, z: 0.43265673}
+      RightVelocity: {x: 1.1388992, y: 2.4505176, z: 0.092440864}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.083636969, y: -0.77277449, z: 0.31444029}
+      Right: {x: 0.069422323, y: -0.36633748, z: -0.67072692}
+      LeftVelocity: {x: 0.46974204, y: -0.41647598, z: -1.570635}
+      RightVelocity: {x: 0.95409182, y: 2.2680746, z: 2.5302842}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.067505627, y: -0.78218165, z: 0.24441452}
+      Right: {x: 0.099603009, y: -0.29007852, z: -0.56364551}
+      LeftVelocity: {x: 0.5503189, y: 0.090156533, z: -3.1570592}
+      RightVelocity: {x: 0.49117172, y: 1.4575347, z: 3.8829224}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: -0.046949043, y: -0.76676405, z: 0.10396968}
+      Right: {x: 0.1021671, y: -0.2691685, z: -0.41186542}
+      LeftVelocity: {x: 0.60669593, y: 0.40639043, z: -4.2764358}
+      RightVelocity: {x: -0.038931454, y: 0.33529758, z: 4.3549149}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.027059232, y: -0.75508896, z: -0.040681202}
+      Right: {x: 0.097007579, y: -0.26772535, z: -0.27331784}
+      LeftVelocity: {x: 0.59911724, y: 0.045577884, z: -4.6008964}
+      RightVelocity: {x: -0.30603764, y: -0.72781652, z: 3.7142726}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.0070078932, y: -0.76372553, z: -0.20275675}
+      Right: {x: 0.081764596, y: -0.3176896, z: -0.16424724}
+      LeftVelocity: {x: 0.51024351, y: -0.015418902, z: -4.7785094}
+      RightVelocity: {x: -0.42366283, y: -2.028873, z: 3.3386075}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.006957002, y: -0.75611688, z: -0.3592485}
+      Right: {x: 0.06876339, y: -0.40298355, z: -0.050744012}
+      LeftVelocity: {x: 0.41894685, y: 0.22825934, z: -4.6947525}
+      RightVelocity: {x: -0.39003616, y: -2.5588185, z: 3.4050969}
+      Contact: {x: 1, y: 0}
+  - Clip: {fileID: 740381001100002, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_left_r
+    Use: 3
+    Gait: 2
+    Side: 1
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: -0.12, y: 0.28}
+      Yaw: -32
+    - Seconds: 0.16
+      Position: {x: -0.42, y: 0.42}
+      Yaw: -68
+    - Seconds: 0.24
+      Position: {x: -0.8, y: 0.46}
+      Yaw: -88
+    - Seconds: 0.4
+      Position: {x: -1.59, y: 0.47}
+      Yaw: -90
+    - Seconds: 0.8
+      Position: {x: -3.58, y: 0.47}
+      Yaw: -90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+    Poses:
+    - Left: {x: -0.042567152, y: -0.29152876, z: -0.5647748}
+      Right: {x: 0.037943204, y: -0.81403824, z: 0.30237074}
+      LeftVelocity: {x: -0.25957879, y: 0.93529522, z: 4.2292094}
+      RightVelocity: {x: -0.46281524, y: 0.82367755, z: -4.5168895}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.051219778, y: -0.26035225, z: -0.42380116}
+      Right: {x: 0.022516029, y: -0.78658232, z: 0.15180775}
+      LeftVelocity: {x: -0.25642433, y: 0.40302515, z: 4.3267741}
+      RightVelocity: {x: -0.51827641, y: 0.90103179, z: -4.9488183}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.059662107, y: -0.26466042, z: -0.2763232}
+      Right: {x: 0.0033914428, y: -0.75396945, z: -0.027550485}
+      LeftVelocity: {x: -0.28310546, y: -0.72881252, z: 3.9034589}
+      RightVelocity: {x: -0.59395718, y: 0.47588143, z: -5.1351485}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.070093475, y: -0.30893975, z: -0.16357056}
+      Right: {x: -0.017081116, y: -0.75485689, z: -0.19053548}
+      LeftVelocity: {x: -0.31216057, y: -1.8217881, z: 3.3317639}
+      RightVelocity: {x: -0.56351757, y: 0.12438208, z: -4.7483546}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.080472812, y: -0.38611296, z: -0.054205604}
+      Right: {x: -0.034176395, y: -0.74567731, z: -0.34410746}
+      LeftVelocity: {x: -0.24299283, y: -3.2120106, z: 3.5941502}
+      RightVelocity: {x: -0.39793836, y: 0.74466851, z: -4.2933681}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.086292997, y: -0.52307379, z: 0.07603945}
+      Right: {x: -0.043610341, y: -0.70521232, z: -0.47676002}
+      LeftVelocity: {x: -0.21536781, y: -4.3007635, z: 3.6725142}
+      RightVelocity: {x: -0.064502971, y: 1.5768272, z: -3.6219874}
+      Contact: {x: 0, y: 0.5}
+    - Left: {x: -0.094830666, y: -0.67283052, z: 0.19062868}
+      Right: {x: -0.038476593, y: -0.6405555, z: -0.58557329}
+      LeftVelocity: {x: -0.28843923, y: -3.0721814, z: 3.1433559}
+      RightVelocity: {x: 0.55659076, y: 2.6326051, z: -3.0019443}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.10552228, y: -0.72788589, z: 0.28559651}
+      Right: {x: -0.0065042898, y: -0.52970532, z: -0.67688964}
+      LeftVelocity: {x: -0.22470687, y: -1.0995734, z: 2.2594648}
+      RightVelocity: {x: 0.9879438, y: 3.113299, z: -2.3034631}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.10981112, y: -0.74613541, z: 0.34125966}
+      Right: {x: 0.027386326, y: -0.43300223, z: -0.7391375}
+      LeftVelocity: {x: 0.0032458082, y: -0.42955108, z: 0.20048945}
+      RightVelocity: {x: 1.0051752, y: 2.6942883, z: -0.05469726}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.10530589, y: -0.75652263, z: 0.29896247}
+      Right: {x: 0.060507391, y: -0.35008609, z: -0.68053612}
+      LeftVelocity: {x: 0.16251627, y: -0.18664632, z: -1.7898675}
+      RightVelocity: {x: 1.092008, y: 2.4979064, z: 2.5088872}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.098976705, y: -0.7585785, z: 0.22193516}
+      Right: {x: 0.10018686, y: -0.26647514, z: -0.57187835}
+      LeftVelocity: {x: 0.27471227, y: 0.29685706, z: -3.3539163}
+      RightVelocity: {x: 0.85732003, y: 1.6642454, z: 3.9712803}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: -0.08699174, y: -0.73673216, z: 0.07536805}
+      Right: {x: 0.11766206, y: -0.2391364, z: -0.4157841}
+      LeftVelocity: {x: 0.37422219, y: 0.58074843, z: -4.4424873}
+      RightVelocity: {x: 0.36682757, y: 0.5096519, z: 4.4725283}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.074028559, y: -0.71986194, z: -0.074230659}
+      Right: {x: 0.12464203, y: -0.23249835, z: -0.2737098}
+      LeftVelocity: {x: 0.42320404, y: 0.17751306, z: -4.7265515}
+      RightVelocity: {x: -0.099649974, y: -0.59588581, z: 3.7585362}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.058778138, y: -0.72489795, z: -0.23973539}
+      Right: {x: 0.11101873, y: -0.27886212, z: -0.16521502}
+      LeftVelocity: {x: 0.41318838, y: 0.057370104, z: -4.8478304}
+      RightVelocity: {x: -0.57862932, y: -1.9560872, z: 3.2435389}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.046482667, y: -0.71603727, z: -0.39741935}
+      Right: {x: 0.086066741, y: -0.36290416, z: -0.057473873}
+      LeftVelocity: {x: 0.22741468, y: 0.80580823, z: -4.2255648}
+      RightVelocity: {x: -0.57761336, y: -3.607623, z: 3.8164354}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.043617159, y: -0.6711774, z: -0.5214397}
+      Right: {x: 0.07251117, y: -0.51937032, z: 0.089214001}
+      LeftVelocity: {x: -0.036458618, y: 1.6522384, z: -3.2554925}
+      RightVelocity: {x: -0.32409748, y: -4.869088, z: 4.1906872}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.048913242, y: -0.60588804, z: -0.61445218}
+      Right: {x: 0.064460243, y: -0.68751003, z: 0.22190527}
+      LeftVelocity: {x: -0.29532631, y: 2.3407636, z: -2.5712917}
+      RightVelocity: {x: -0.53132304, y: -3.3291057, z: 3.3576141}
+      Contact: {x: 0.5, y: 0}
+    - Left: {x: -0.06330558, y: -0.5151265, z: -0.69285915}
+      Right: {x: 0.037089634, y: -0.7413107, z: 0.31305494}
+      LeftVelocity: {x: -0.19827562, y: 2.6345453, z: -1.8403708}
+      RightVelocity: {x: -0.79045305, y: -1.0692014, z: 2.188838}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.062131616, y: -0.43025169, z: -0.73714357}
+      Right: {x: 0.011763372, y: -0.75879012, z: 0.36782781}
+      LeftVelocity: {x: 0.21592498, y: 2.5493123, z: 0.14074692}
+      RightVelocity: {x: -0.36704315, y: -0.66948406, z: 0.65752724}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.048910582, y: -0.34517235, z: -0.68347602}
+      Right: {x: 0.012620091, y: -0.78594297, z: 0.35689009}
+      LeftVelocity: {x: 0.29958311, y: 2.3279898, z: 2.4993298}
+      RightVelocity: {x: 0.063175689, y: -0.581576, z: -1.2172306}
+      Contact: {x: 0, y: 0.07407}
+    - Left: {x: -0.042159409, y: -0.27505237, z: -0.57052158}
+      Right: {x: 0.015975085, y: -0.79756185, z: 0.2866791}
+      LeftVelocity: {x: 0.033433777, y: 1.4042366, z: 3.8779101}
+      RightVelocity: {x: -0.02747525, y: 0.1223417, z: -3.2018944}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.046681663, y: -0.25155658, z: -0.42494868}
+      Right: {x: 0.010788407, y: -0.77778686, z: 0.14343047}
+      LeftVelocity: {x: -0.26254047, y: 0.15587926, z: 4.4129757}
+      RightVelocity: {x: -0.18875463, y: 0.65388601, z: -4.7134438}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.059662107, y: -0.26466042, z: -0.2763232}
+      Right: {x: 0.0033914428, y: -0.75396945, z: -0.027550485}
+      LeftVelocity: {x: -0.45058206, y: -0.99268287, z: 3.9239603}
+      RightVelocity: {x: -0.24213133, y: 0.21201354, z: -4.8838332}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.076720467, y: -0.31773543, z: -0.16335133}
+      Right: {x: -0.0053536817, y: -0.76365262, z: -0.18215841}
+      LeftVelocity: {x: -0.41885778, y: -2.0689327, z: 3.3732633}
+      RightVelocity: {x: -0.23399072, y: -0.12276404, z: -4.5129789}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.08758596, y: -0.40258926, z: -0.051438976}
+      Right: {x: -0.012207938, y: -0.76215372, z: -0.32841575}
+      LeftVelocity: {x: -0.32596478, y: -2.5456148, z: 3.3573706}
+      RightVelocity: {x: -0.2056277, y: 0.044967011, z: -4.38772}
+      Contact: {x: 0, y: 1}
+  - Clip: {fileID: 740381001100003, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_right_l
+    Use: 3
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: 0.12, y: 0.28}
+      Yaw: 32
+    - Seconds: 0.16
+      Position: {x: 0.42, y: 0.42}
+      Yaw: 68
+    - Seconds: 0.24
+      Position: {x: 0.8, y: 0.46}
+      Yaw: 88
+    - Seconds: 0.4
+      Position: {x: 1.59, y: 0.47}
+      Yaw: 90
+    - Seconds: 0.8
+      Position: {x: 3.58, y: 0.47}
+      Yaw: 90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+    Poses:
+    - Left: {x: -0.045537153, y: -0.79865827, z: 0.26010622}
+      Right: {x: 0.099195502, y: -0.30655473, z: -0.55789886}
+      LeftVelocity: {x: 0.52452062, y: 0.69295697, z: -4.4327883}
+      RightVelocity: {x: -0.13020805, y: 0.85771859, z: 4.4154305}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: -0.028053132, y: -0.7755597, z: 0.11234661}
+      Right: {x: 0.094855233, y: -0.27796412, z: -0.41071785}
+      LeftVelocity: {x: 0.54809906, y: 0.65354247, z: -4.5118144}
+      RightVelocity: {x: -0.19222002, y: 0.58244169, z: 4.2687167}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.008997215, y: -0.75508877, z: -0.040681405}
+      Right: {x: 0.086380834, y: -0.26772529, z: -0.27331775}
+      LeftVelocity: {x: 0.59911294, y: 0.309444, z: -4.8522023}
+      RightVelocity: {x: -0.35652189, y: -0.46394706, z: 3.6937719}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.011887731, y: -0.7549301, z: -0.21113354}
+      Right: {x: 0.071087107, y: -0.30889392, z: -0.16446638}
+      LeftVelocity: {x: 0.56883956, y: 0.23172241, z: -5.0138802}
+      RightVelocity: {x: -0.37095867, y: -1.7817307, z: 3.2971073}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.028925423, y: -0.73964061, z: -0.37494009}
+      Right: {x: 0.061650256, y: -0.38650733, z: -0.053510597}
+      LeftVelocity: {x: 0.35209069, y: 1.0125143, z: -4.4224267}
+      RightVelocity: {x: 0.10005218, y: -3.4009208, z: 3.902514}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.035360443, y: -0.68742914, z: -0.50596199}
+      Right: {x: 0.077757252, y: -0.53562197, z: 0.095701219}
+      LeftVelocity: {x: 0.052175168, y: 1.8319914, z: -3.5227076}
+      RightVelocity: {x: 0.64360122, y: -4.6392614, z: 4.2122834}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.032403767, y: -0.61750785, z: -0.60978726}
+      Right: {x: 0.104557, y: -0.69579142, z: 0.2273083}
+      LeftVelocity: {x: -0.27397705, y: 2.5845366, z: -2.8034547}
+      RightVelocity: {x: 0.41770519, y: -3.085328, z: 3.2603046}
+      Contact: {x: 0.5, y: 0}
+    - Left: {x: 0.017095307, y: -0.51512671, z: -0.69285897}
+      Right: {x: 0.10560426, y: -0.74131051, z: 0.31305486}
+      LeftVelocity: {x: -0.46832124, y: 2.9330608, z: -2.0124357}
+      RightVelocity: {x: -0.17977595, y: -0.82076132, z: 1.9898327}
+      Contact: {x: 0, y: 0}
+    - Left: {x: 0.0011823513, y: -0.42197046, z: -0.74394964}
+      Right: {x: 0.09257194, y: -0.75050884, z: 0.35996381}
+      LeftVelocity: {x: -0.5027121, y: 2.7930897, z: -0.0063938716}
+      RightVelocity: {x: -0.21009173, y: -0.42571016, z: 0.42536221}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.016418833, y: -0.32892072, z: -0.69328523}
+      Right: {x: 0.091598149, y: -0.76969118, z: 0.34141234}
+      LeftVelocity: {x: -0.67111261, y: 2.5578193, z: 2.477931}
+      RightVelocity: {x: -0.017835964, y: -0.35174277, z: -1.4364629}
+      Contact: {x: 0, y: 0.07407}
+    - Left: {x: -0.04355849, y: -0.25144917, z: -0.57875424}
+      Right: {x: 0.091382876, y: -0.77395836, z: 0.26419962}
+      LeftVelocity: {x: -0.86411627, y: 1.6109392, z: 3.9662695}
+      RightVelocity: {x: -0.15215691, y: 0.32904424, z: -3.3987498}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.074026585, y: -0.22152478, z: -0.42886726}
+      Right: {x: 0.081454355, y: -0.7477549, z: 0.11482902}
+      LeftVelocity: {x: -0.81547581, y: 0.33023089, z: 4.5305807}
+      RightVelocity: {x: -0.34440737, y: 0.82823776, z: -4.8794909}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.097923543, y: -0.22943377, z: -0.27671552}
+      Right: {x: 0.068422385, y: -0.71874251, z: -0.061099771}
+      LeftVelocity: {x: -0.53997986, y: -0.86074501, z: 3.968221}
+      RightVelocity: {x: -0.4180434, y: 0.34395173, z: -5.0094971}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.11002524, y: -0.27890778, z: -0.16431919}
+      Right: {x: 0.053584795, y: -0.72482479, z: -0.21913745}
+      LeftVelocity: {x: -0.10448628, y: -1.9961384, z: 3.2781977}
+      RightVelocity: {x: -0.40786172, y: -0.049973577, z: -4.5823073}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.1048893, y: -0.36250967, z: -0.058169013}
+      Right: {x: 0.041231603, y: -0.72207408, z: -0.36658692}
+      LeftVelocity: {x: 0.43467864, y: -3.418715, z: 3.5080768}
+      RightVelocity: {x: -0.27325713, y: 0.5379615, z: -4.0965034}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.081046666, y: -0.50682211, z: 0.06955259}
+      Right: {x: 0.035367654, y: -0.68896069, z: -0.49223768}
+      LeftVelocity: {x: 0.75233846, y: -4.5305977, z: 3.65092}
+      RightVelocity: {x: 0.023692742, y: 1.3764456, z: -3.3764099}
+      Contact: {x: 0, y: 0.5}
+    - Left: {x: -0.054733398, y: -0.66454951, z: 0.18522565}
+      Right: {x: 0.042811119, y: -0.63031104, z: -0.59168091}
+      LeftVelocity: {x: 0.66057811, y: -3.3159531, z: 3.2406589}
+      RightVelocity: {x: 0.57793366, y: 2.3888341, z: -2.7697794}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.037008125, y: -0.72788565, z: 0.28559651}
+      Right: {x: 0.073896565, y: -0.52970508, z: -0.67688963}
+      LeftVelocity: {x: 0.38596385, y: -1.3480052, z: 2.4584694}
+      RightVelocity: {x: 0.71834107, y: 2.8354119, z: -2.1097503}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.029002475, y: -0.75441653, z: 0.34912361}
+      Right: {x: 0.090700524, y: -0.44128358, z: -0.73233094}
+      LeftVelocity: {x: 0.16019604, y: -0.67333058, z: 0.4326549}
+      RightVelocity: {x: 0.28654088, y: 2.450514, z: 0.092441724}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.02632839, y: -0.77277435, z: 0.31444017}
+      Right: {x: 0.09299929, y: -0.36633748, z: -0.67072685}
+      LeftVelocity: {x: 0.081504467, y: -0.41647688, z: -1.570635}
+      RightVelocity: {x: 0.12131068, y: 2.2680786, z: 2.5302824}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.023568843, y: -0.78218165, z: 0.24441461}
+      Right: {x: 0.098787903, y: -0.29007834, z: -0.56364544}
+      LeftVelocity: {x: 0.15004128, y: 0.090154633, z: -3.1570575}
+      RightVelocity: {x: -0.040231333, y: 1.4575347, z: 3.8829193}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: -0.016325638, y: -0.76676404, z: 0.10396967}
+      Right: {x: 0.090317201, y: -0.2691685, z: -0.41186557}
+      LeftVelocity: {x: 0.21857443, y: 0.40639322, z: -4.2764402}
+      RightVelocity: {x: -0.18610604, y: 0.3352958, z: 4.3549153}
+      Contact: {x: 1, y: 0}
+    - Left: {x: -0.008997215, y: -0.75508877, z: -0.040681405}
+      Right: {x: 0.086380834, y: -0.26772529, z: -0.27331775}
+      LeftVelocity: {x: 0.24728453, y: 0.04557889, z: -4.6008959}
+      RightVelocity: {x: -0.18904804, y: -0.72781831, z: 3.7142766}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.00015999749, y: -0.76372545, z: -0.20275672}
+      Right: {x: 0.077713998, y: -0.31768972, z: -0.16424712}
+      LeftVelocity: {x: 0.23931325, y: -0.015421696, z: -4.7785064}
+      RightVelocity: {x: -0.26426165, y: -2.0288739, z: 3.3386061}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.006957002, y: -0.75611688, z: -0.3592485}
+      Right: {x: 0.06876339, y: -0.40298355, z: -0.050744012}
+      LeftVelocity: {x: 0.20391013, y: 0.2282571, z: -4.6947534}
+      RightVelocity: {x: -0.26851824, y: -2.5588149, z: 3.4050934}
+      Contact: {x: 1, y: 0}
+  - Clip: {fileID: 740381001100004, guid: f2bde4cb89d8417986f5fba8b64c3959, type: 3}
+    States:
+    - Base Layer.run_turn_right_r
+    Use: 3
+    Gait: 2
+    Side: 2
+    Loop: 0
+    Blend: 0.08
+    MinimumSpeed: 2.5
+    FirstEntrySeconds: 0
+    ExitSeconds: 0.58
+    PathSource: 1
+    ReferencePath:
+    - Seconds: 0
+      Position: {x: 0, y: 0}
+      Yaw: 0
+    - Seconds: 0.08
+      Position: {x: 0.12, y: 0.28}
+      Yaw: 32
+    - Seconds: 0.16
+      Position: {x: 0.42, y: 0.42}
+      Yaw: 68
+    - Seconds: 0.24
+      Position: {x: 0.8, y: 0.46}
+      Yaw: 88
+    - Seconds: 0.4
+      Position: {x: 1.59, y: 0.47}
+      Yaw: 90
+    - Seconds: 0.8
+      Position: {x: 3.58, y: 0.47}
+      Yaw: 90
+    ReferenceSpeed: 4.98
+    BrakeSeconds: 0
+    LastEntrySeconds: 0.12
+    Seconds: 0.8
+    Poses:
+    - Left: {x: -0.042567152, y: -0.29152876, z: -0.5647748}
+      Right: {x: 0.037943204, y: -0.81403824, z: 0.30237074}
+      LeftVelocity: {x: -0.34279554, y: 0.93529522, z: 4.2292112}
+      RightVelocity: {x: -0.2477661, y: 0.82367063, z: -4.5168949}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.05399367, y: -0.26035225, z: -0.4238011}
+      Right: {x: 0.029684334, y: -0.78658255, z: 0.15180757}
+      LeftVelocity: {x: -0.41582744, y: 0.40302515, z: 4.3267709}
+      RightVelocity: {x: -0.24734856, y: 0.90103012, z: -4.9488149}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.070288981, y: -0.26466042, z: -0.27632341}
+      Right: {x: 0.0214533, y: -0.75396957, z: -0.027550254}
+      LeftVelocity: {x: -0.50106752, y: -0.72881252, z: 3.9034569}
+      RightVelocity: {x: -0.24213198, y: 0.47588378, z: -5.135146}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.087398171, y: -0.30893975, z: -0.16357064}
+      Right: {x: 0.013542201, y: -0.75485697, z: -0.19053549}
+      LeftVelocity: {x: -0.36615395, y: -1.8217868, z: 3.3317677}
+      RightVelocity: {x: -0.17539142, y: 0.12438409, z: -4.7483585}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.094699245, y: -0.38611287, z: -0.05420556}
+      Right: {x: 0.0097605381, y: -0.74567729, z: -0.34410749}
+      LeftVelocity: {x: 0.073681518, y: -3.2120083, z: 3.5941497}
+      RightVelocity: {x: 0.0023471913, y: 0.74467052, z: -4.2933683}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.08248607, y: -0.52307364, z: 0.076039343}
+      Right: {x: 0.013698681, y: -0.70521227, z: -0.47676005}
+      LeftVelocity: {x: 0.51768561, y: -4.3007684, z: 3.6725138}
+      RightVelocity: {x: 0.32964966, y: 1.5914673, z: -3.6090569}
+      Contact: {x: 0, y: 0.5}
+    - Left: {x: -0.060186871, y: -0.67283076, z: 0.1906287}
+      Right: {x: 0.031737182, y: -0.63957947, z: -0.58471128}
+      LeftVelocity: {x: 0.68216917, y: -3.0721801, z: 3.1433576}
+      RightVelocity: {x: 0.90296826, y: 2.6326078, z: -3.0019438}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.037008125, y: -0.72788565, z: 0.28559651}
+      Right: {x: 0.073896565, y: -0.52970508, z: -0.67688963}
+      LeftVelocity: {x: 0.6326068, y: -1.0995669, z: 2.2594614}
+      RightVelocity: {x: 1.0136066, y: 3.0986586, z: -2.3163932}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.018013084, y: -0.74613522, z: 0.34125946}
+      Right: {x: 0.099310955, y: -0.43300223, z: -0.73913749}
+      LeftVelocity: {x: 0.48523296, y: -0.42955577, z: 0.20048855}
+      RightVelocity: {x: 0.42026323, y: 2.6942883, z: -0.054699051}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.0046592616, y: -0.7565227, z: 0.29896242}
+      Right: {x: 0.10191411, y: -0.35008585, z: -0.68053624}
+      LeftVelocity: {x: 0.3887323, y: -0.18664867, z: -1.7898655}
+      RightVelocity: {x: -0.016602734, y: 2.4979082, z: 2.5088863}
+      Contact: {x: 0, y: 0}
+    - Left: {x: 0.0079024024, y: -0.75857846, z: 0.22193509}
+      Right: {x: 0.098204106, y: -0.26647502, z: -0.5718784}
+      LeftVelocity: {x: 0.42564265, y: 0.29685549, z: -3.353918}
+      RightVelocity: {x: -0.40637973, y: 1.664241, z: 3.9712835}
+      Contact: {x: 0.07407, y: 0}
+    - Left: {x: 0.023716915, y: -0.73673233, z: 0.075367886}
+      Right: {x: 0.074822132, y: -0.23913646, z: -0.41578401}
+      LeftVelocity: {x: 0.45104007, y: 0.58075067, z: -4.4424872}
+      RightVelocity: {x: -0.59186755, y: 0.50964653, z: 4.4725278}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.037971741, y: -0.71986175, z: -0.074230718}
+      Right: {x: 0.058746269, y: -0.23249859, z: -0.27370988}
+      LeftVelocity: {x: 0.42319732, y: 0.17751575, z: -4.7265502}
+      RightVelocity: {x: -0.39543398, y: -0.5958885, z: 3.7585355}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.05193007, y: -0.72489795, z: -0.23973546}
+      Right: {x: 0.048459866, y: -0.27886236, z: -0.16521497}
+      LeftVelocity: {x: 0.33637067, y: 0.057369322, z: -4.8478361}
+      RightVelocity: {x: -0.10929174, y: -1.9560814, z: 3.2435384}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.060396452, y: -0.71603713, z: -0.39741979}
+      Right: {x: 0.051460153, y: -0.36290401, z: -0.057473986}
+      LeftVelocity: {x: 0.07649029, y: 0.80580913, z: -4.2255627}
+      RightVelocity: {x: 0.46105492, y: -3.607619, z: 3.8164399}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.057029423, y: -0.67117734, z: -0.52143964}
+      Right: {x: 0.079196861, y: -0.51937029, z: 0.089214351}
+      LeftVelocity: {x: -0.25426885, y: 1.6021582, z: -3.3038166}
+      RightVelocity: {x: 0.87825303, y: -4.8690938, z: 4.1906861}
+      Contact: {x: 1, y: 0}
+    - Left: {x: 0.043445195, y: -0.60922658, z: -0.61767423}
+      Right: {x: 0.11001036, y: -0.68751027, z: 0.22190509}
+      LeftVelocity: {x: -0.59901174, y: 2.3407596, z: -2.5712899}
+      RightVelocity: {x: 0.39611106, y: -3.3291033, z: 3.3576076}
+      Contact: {x: 0.5, y: 0}
+    - Left: {x: 0.017095307, y: -0.51512671, z: -0.69285897}
+      Right: {x: 0.10560426, y: -0.74131051, z: 0.31305486}
+      LeftVelocity: {x: -0.76310231, y: 2.6846248, z: -1.7920347}
+      RightVelocity: {x: -0.42641843, y: -1.0691987, z: 2.1888387}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.0074282922, y: -0.4302516, z: -0.73714321}
+      Right: {x: 0.081582461, y: -0.75879018, z: 0.36782767}
+      LeftVelocity: {x: -0.63643288, y: 2.5493136, z: 0.1407487}
+      RightVelocity: {x: -0.53512956, y: -0.66948496, z: 0.65752991}
+      Contact: {x: 0, y: 0}
+    - Left: {x: -0.025333552, y: -0.34517246, z: -0.68347572}
+      Right: {x: 0.069928961, y: -0.78594284, z: 0.35689018}
+      LeftVelocity: {x: -0.53319384, y: 2.3279884, z: 2.4993244}
+      RightVelocity: {x: -0.32506264, y: -0.58157455, z: -1.2172284}
+      Contact: {x: 0, y: 0.07407}
+    - Left: {x: -0.042974548, y: -0.27505237, z: -0.57052158}
+      Right: {x: 0.059911618, y: -0.79756182, z: 0.2866791}
+      LeftVelocity: {x: -0.49797003, y: 1.4042357, z: 3.8779043}
+      RightVelocity: {x: -0.4277579, y: 0.1223379, z: -3.2018915}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.058531554, y: -0.25155675, z: -0.42494877}
+      Right: {x: 0.041411767, y: -0.77778698, z: 0.14343075}
+      LeftVelocity: {x: -0.40971649, y: 0.15587926, z: 4.4129726}
+      RightVelocity: {x: -0.57687478, y: 0.65388378, z: -4.7134404}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.070288981, y: -0.26466042, z: -0.27632341}
+      Right: {x: 0.0214533, y: -0.75396957, z: -0.027550254}
+      LeftVelocity: {x: -0.33359257, y: -0.9926784, z: 3.9239631}
+      RightVelocity: {x: -0.59395748, y: 0.21201923, z: -4.8838424}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.080771059, y: -0.31773531, z: -0.16335123}
+      Right: {x: 0.0018146019, y: -0.76365236, z: -0.18215874}
+      LeftVelocity: {x: -0.25945467, y: -2.0689327, z: 3.3732665}
+      RightVelocity: {x: -0.50491857, y: -0.12276236, z: -4.5129824}
+      Contact: {x: 0, y: 1}
+    - Left: {x: -0.08758596, y: -0.40258926, z: -0.051438976}
+      Right: {x: -0.012207938, y: -0.76215372, z: -0.32841575}
+      LeftVelocity: {x: -0.20444702, y: -2.5456184, z: 3.3573675}
+      RightVelocity: {x: -0.42067621, y: 0.044959188, z: -4.3877102}
+      Contact: {x: 0, y: 1}
