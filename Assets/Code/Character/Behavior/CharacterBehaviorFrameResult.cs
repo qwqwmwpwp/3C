@@ -12,18 +12,6 @@ namespace ThreeC.CharacterBehavior
         AdditionalBehavior
     }
 
-    public enum CharacterBehaviorRejection
-    {
-        None,
-        AlreadyActive,
-        GateDenied,
-        Conflict,
-        InterruptPhaseDenied,
-        Cooldown,
-        InsufficientStamina,
-        InvalidSettings
-    }
-
     /// <summary>单步的执行结果和步末状态。最后一步执行后结束的行为同时出现在执行与结束集合。</summary>
     public readonly struct CharacterBehaviorFrameResult
     {
@@ -42,6 +30,9 @@ namespace ThreeC.CharacterBehavior
         public CharacterAttackState Attack => step.Attack;
         public bool AttackMoveStarted => step.AttackMoveStarted;
         internal CharacterActionMotion ActionMotion => step.Motion;
+        internal Vector2 ActionDisplacement => step.ActionDisplacement;
+        internal bool ActionMotionStarted => step.ActionMotionStarted;
+        internal float OrdinaryMovementSeconds => step.OrdinaryMovementSeconds;
         internal float GrantAgeAtStepStart(CharacterBehaviorId id) =>
             step.GrantTimes != null && step.GrantTimes.TryGetValue(id, out double start) ? (float)(step.StartSeconds - start) : 0f;
         /// <summary>本步所有执行行为给出的最紧普通移动目标速限制。无限值表示未限速。</summary>
@@ -62,7 +53,26 @@ namespace ThreeC.CharacterBehavior
         public float StaminaRemaining { get; }
         public float DashCooldownRemaining { get; }
 
-        public CharacterBehaviorRejection GetRejection(CharacterBehaviorId id) => step.Rejections.Get(id);
+        // 将获准的时间片投影为该物理区间实际请求的运动，保留对应行为帧和实例。
+        internal CharacterBehaviorFrameResult WithMotion(Vector2 total, Vector2 action, CharacterActionMotion motion,
+            CharacterBehaviorId provider, float ordinarySeconds, bool moveApproved, bool snap)
+        {
+            var result = step;
+            result.Motion = motion;
+            result.ActionDisplacement = action;
+            result.ActionMotionStarted = snap;
+            result.DisplacementProvider = provider;
+            result.OrdinaryMovementSeconds = ordinarySeconds;
+            result.OrdinaryMovementApproved = moveApproved;
+            return new CharacterBehaviorFrameResult(FrameNumber, total, result);
+        }
+
+        // 用各参与者填好的固定步记录生成运行时帧结果。
+        internal CharacterBehaviorFrameResult(long frameNumber, Vector2 displacement, CharacterBehaviorStep step)
+            : this(frameNumber, displacement, step.OrdinaryMovementApproved, step.PreviousOrdinaryMovementApproved, step.DashDirection,
+                step.StaminaRemaining, step.DashCooldownRemaining, step)
+        {
+        }
 
         internal CharacterBehaviorFrameResult(long frameNumber, Vector2 displacement, bool moveApproved,
             bool previousMoveApproved, Vector2 dashDirection, float staminaRemaining, float dashCooldownRemaining,
@@ -109,13 +119,19 @@ namespace ThreeC.CharacterBehavior
     public struct CharacterActionMotion
     {
         internal bool OpeningStep; // 本步前摇位移已积分，马达直接执行并保留物理碰撞。
+        /// <summary>立即施加本步动作速度，动作结束时只清理动作贡献的余速。</summary>
+        public bool UsesBurstVelocity;
+        /// <summary>动作开始时立即转向 Facing，优先于普通转向。</summary>
+        public bool SnapsFacingOnStart;
         public float? StartPhase;
         public float EndPhase, Duration;
         public float MaxTurn, Braking;
+        internal float AlignmentYawAtStart, AlignmentYawDelta; // 世界竖轴角度，单位为度，独立于作者的原始转向。
         public Vector2 Facing;
         public bool ControlsFacing, RecoversMovement;
     }
 
+    /// <summary>收集单步生命周期边沿、执行结果和表现层许可时刻。</summary>
     internal struct CharacterBehaviorStep
     {
         public CharacterBehaviorId DisplacementProvider;
@@ -126,15 +142,47 @@ namespace ThreeC.CharacterBehavior
         public CharacterBehaviorId Interrupted;
         public CharacterBehaviorId Withdrawn;
         public CharacterActionMotion Motion;
+        public Vector2 ActionDisplacement;
+        public bool ActionMotionStarted;
+        public float OrdinaryMovementSeconds;
         public CharacterAttackState Attack;
         public bool AttackMoveStarted;
+        public bool OrdinaryMovementApproved, PreviousOrdinaryMovementApproved;
+        public Vector2 DashDirection;
+        public float StaminaRemaining, DashCooldownRemaining;
         public float OrdinarySpeedLimit;
-        public CharacterBehaviorRejections Rejections;
         public double StartSeconds;
         public Dictionary<CharacterBehaviorId, double> GrantTimes;
         public bool SkipGrantHistory;
         private bool copiedGrants;
 
+        // 判断该行为的生命周期在当前阶段是否处于活动状态。
+        internal bool IsActive(CharacterBehaviorId id) => (Active & id) != CharacterBehaviorId.None;
+
+        // 激活已获准参与者并记录生命周期边沿。
+        internal void Start(CharacterBehaviorRule rule, CharacterBehaviorStart request, bool recordGrant = true)
+        {
+            rule.Behavior.Activate(request);
+            Active |= rule.Id;
+            Started |= rule.Id;
+            if (recordGrant) RecordGrant(rule.Id);
+        }
+
+        // 释放参与者并同步许可，即使参与者的结束回调报错也撤销许可。
+        internal void End(CharacterBehaviorRule rule)
+        {
+            try
+            {
+                rule.Behavior.Deactivate();
+            }
+            finally
+            {
+                Active &= ~rule.Id;
+                Ended |= rule.Id;
+            }
+        }
+
+        // 记录新获得执行许可的行为及其固定步起点。
         public void RecordGrant(CharacterBehaviorId id)
         {
             if (SkipGrantHistory) return; // 预测只消费移动许可，不生成给表现层的历史字典。
@@ -148,41 +196,4 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>按原因记录行为位集，使先前提交的结果能跨后续固定步保留。</summary>
-    internal struct CharacterBehaviorRejections
-    {
-        private CharacterBehaviorId alreadyActive;
-        private CharacterBehaviorId gateDenied;
-        private CharacterBehaviorId conflict;
-        private CharacterBehaviorId interruptPhaseDenied;
-        private CharacterBehaviorId cooldown;
-        private CharacterBehaviorId insufficientStamina;
-        private CharacterBehaviorId invalidSettings;
-
-        public void Set(CharacterBehaviorId id, CharacterBehaviorRejection reason)
-        {
-            switch (reason)
-            {
-                case CharacterBehaviorRejection.AlreadyActive: alreadyActive |= id; break;
-                case CharacterBehaviorRejection.GateDenied: gateDenied |= id; break;
-                case CharacterBehaviorRejection.Conflict: conflict |= id; break;
-                case CharacterBehaviorRejection.InterruptPhaseDenied: interruptPhaseDenied |= id; break;
-                case CharacterBehaviorRejection.Cooldown: cooldown |= id; break;
-                case CharacterBehaviorRejection.InsufficientStamina: insufficientStamina |= id; break;
-                case CharacterBehaviorRejection.InvalidSettings: invalidSettings |= id; break;
-            }
-        }
-
-        public CharacterBehaviorRejection Get(CharacterBehaviorId id)
-        {
-            if ((alreadyActive & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.AlreadyActive;
-            if ((gateDenied & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.GateDenied;
-            if ((conflict & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.Conflict;
-            if ((interruptPhaseDenied & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.InterruptPhaseDenied;
-            if ((cooldown & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.Cooldown;
-            if ((insufficientStamina & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.InsufficientStamina;
-            if ((invalidSettings & id) != CharacterBehaviorId.None) return CharacterBehaviorRejection.InvalidSettings;
-            return CharacterBehaviorRejection.None;
-        }
-    }
 }

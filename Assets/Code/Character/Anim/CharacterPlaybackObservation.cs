@@ -15,25 +15,21 @@ namespace ThreeC.CharacterBehavior
             loop = looping;
         }
 
-        public CharacterClipProgress(AnimatorStateInfo state) : this(state.fullPathHash, state.normalizedTime, state.loop) { }
     }
 
-    internal enum CharacterPlaybackConfirmation { Untracked, Awaiting, Confirmed, Lost }
-
+    // 保存一个片段混合源的当前姿态、淡入目标和对应长度。
     internal readonly struct CharacterLayerObservation
     {
         public readonly CharacterClipProgress Current, Next;
         public readonly float SourceLength, DestinationLength;
-        private readonly float? rawLength, currentClipLength;
         public readonly bool InTransition;
-        public readonly CharacterPlaybackConfirmation Confirmation;
         public readonly float BlendProgress;
         public CharacterClipProgress Destination => InTransition ? Next : Current;
         public bool Ready => Current.fullPathHash != 0;
 
+        // 记录混合器当前播放和正在进入的片段。
         public CharacterLayerObservation(CharacterClipProgress current, CharacterClipProgress next, bool fading, float blend,
-            float sourceLength, float destinationLength, CharacterPlaybackConfirmation confirmation = default,
-            float? rawLength = null, float? currentClipLength = null)
+            float sourceLength, float destinationLength)
         {
             Current = current;
             Next = next;
@@ -41,29 +37,6 @@ namespace ThreeC.CharacterBehavior
             BlendProgress = blend;
             SourceLength = sourceLength;
             DestinationLength = destinationLength;
-            Confirmation = confirmation;
-            this.rawLength = rawLength;
-            this.currentClipLength = currentClipLength;
-        }
-
-        internal CharacterLayerObservation ForPhase(bool readLengths, bool readNext)
-        {
-            if (!rawLength.HasValue || readNext) return this;
-            return new CharacterLayerObservation(Current, Next, InTransition, BlendProgress,
-                readLengths ? SourceLength : rawLength.Value, readLengths ? currentClipLength.GetValueOrDefault() : 0f, Confirmation);
-        }
-
-        public CharacterLayerObservation(Animator animator, int layer)
-        {
-            this = default;
-            if (layer < 0 || layer >= animator.layerCount) return;
-            var source = animator.GetCurrentAnimatorStateInfo(layer);
-            Current = new CharacterClipProgress(source);
-            SourceLength = source.length;
-            InTransition = animator.IsInTransition(layer);
-            if (!InTransition) return;
-            Next = new CharacterClipProgress(animator.GetNextAnimatorStateInfo(layer));
-            BlendProgress = animator.GetAnimatorTransitionInfo(layer).normalizedTime;
         }
     }
 
@@ -74,13 +47,11 @@ namespace ThreeC.CharacterBehavior
         public readonly bool? LeftSupport;
         public readonly bool EarlyStance;
 
-        internal CharacterPlaybackObservation ForPhase(CharacterLocomotionPhase phase, in CharacterAnimationLayerPlan previous)
+        // 仅在收步相关阶段把同一帧的承重脚观测交给地面选姿。
+        internal CharacterPlaybackObservation ForPhase(CharacterLocomotionPhase phase)
         {
             bool release = phase == CharacterLocomotionPhase.BrakeLeadIn || phase == CharacterLocomotionPhase.Stopping;
-            bool stop = release || previous.Binding.IsStop;
-            bool enteringIdle = phase == CharacterLocomotionPhase.Idle && previous.Demand.Key != CharacterAnimationIntentConverter.IdleKey;
-            return new CharacterPlaybackObservation(Full.ForPhase(stop || enteringIdle, stop), Lower, Upper, Overlay,
-                release ? LeftSupport : null, release && EarlyStance);
+            return new CharacterPlaybackObservation(Full, Lower, Upper, Overlay, release ? LeftSupport : null, release && EarlyStance);
         }
 
         public CharacterPlaybackObservation(CharacterLayerObservation full, CharacterLayerObservation lower,
@@ -95,26 +66,28 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
+    // 从已提交的片段和脚姿计算基础步态的承重脚及各覆盖源的播放进度。
     internal sealed class CharacterPlaybackObserver
     {
         private readonly Animator animator;
         private readonly CharacterAnimationResourceCatalog resources;
-        private readonly CharacterAnimationPlayer playback;
+        private readonly CharacterClipPlayback clips;
 
-        public CharacterPlaybackObserver(Animator animator, CharacterAnimationResourceCatalog resources, CharacterAnimationPlayer playback)
+        // 绑定用于采样分层状态和脚姿的资源及片段图。
+        public CharacterPlaybackObserver(Animator animator, CharacterAnimationResourceCatalog resources, CharacterClipPlayback clips)
         {
             this.animator = animator;
             this.resources = resources;
-            this.playback = playback;
+            this.clips = clips;
         }
 
+        // 在新计划下发之前采样所有播放源和可用的脚姿。
         public CharacterPlaybackObservation Capture(in CharacterAnimationLayerPlan previousBase,
             in CharacterFootObservation feet)
         {
-            var backend = playback.Active;
-            var full = backend.Observe(CharacterAnimationBodyRegion.FullBody, true, true);
-            var lower = backend.Observe(CharacterAnimationBodyRegion.LowerBody);
-            var upper = backend.Observe(CharacterAnimationBodyRegion.UpperBody);
+            var full = clips.Observe(CharacterAnimationSource.Baseline);
+            var lower = clips.Observe(CharacterAnimationSource.LowerBody);
+            var upper = clips.Observe(CharacterAnimationSource.UpperBody);
             bool? left = null;
             bool early = false;
             if (full.Ready)
@@ -128,8 +101,8 @@ namespace ThreeC.CharacterBehavior
                     state = full.Next;
                     mapped = true;
                 }
-                bool ownsFeet = backend.LayerWeight(CharacterAnimationBodyRegion.LowerBody) > 0f ||
-                    backend.LayerWeight(CharacterAnimationBodyRegion.FullBodyOverlay) > 0f;
+                bool ownsFeet = clips.LayerWeight(CharacterAnimationSource.LowerBody) > 0f ||
+                    clips.LayerWeight(CharacterAnimationSource.FullBodyOverlay) > 0f;
                 if (mapped && !ownsFeet)
                 {
                     left = gait.IsLeftSupport(state.normalizedTime);
@@ -147,7 +120,7 @@ namespace ThreeC.CharacterBehavior
                     if (a && b) left = Vector3.Dot(a.position - b.position, animator.transform.up) <= 0f;
                 }
             }
-            var overlay = backend.Observe(CharacterAnimationBodyRegion.FullBodyOverlay);
+            var overlay = clips.Observe(CharacterAnimationSource.FullBodyOverlay);
             return new CharacterPlaybackObservation(full: full, lower: lower, upper: upper, overlay: overlay,
                 leftSupport: left, earlyStance: early);
         }

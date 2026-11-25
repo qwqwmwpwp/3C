@@ -18,14 +18,17 @@ namespace ThreeC.Player
         private ulong latestDashPressId;
 
         public static ulong LatestDashPressId => instance != null ? instance.latestDashPressId : 0;
-        internal static event System.Action<AttackButton> AttackPressed;
+        internal static event System.Action<AttackButton, double> AttackPressed;
+        internal static event System.Action<ulong, double> DashPressed;
 
+        // 清理输入实例和边沿订阅，支持关闭域重载时重新进入游戏。
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         private static void ResetStatics()
         {
             instance = null;
             nextDashPressId = 0;
             AttackPressed = null;
+            DashPressed = null;
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
@@ -107,11 +110,17 @@ namespace ThreeC.Player
             if (combatInput) Destroy(combatInput);
         }
 
-        private void RecordDashPress(InputAction.CallbackContext context) => latestDashPressId = ++nextDashPressId;
+        // 先更新可轮询的冲刺编号，再通知依赖输入边沿的订阅者。
+        private void RecordDashPress(InputAction.CallbackContext context)
+        {
+            latestDashPressId = ++nextDashPressId;
+            DashPressed?.Invoke(latestDashPressId, context.time);
+        }
+        // 发布按键种类及与 realtimeSinceStartup 同源的设备时刻。
         private void RecordAttackPress(InputAction.CallbackContext context)
         {
             AttackPressed?.Invoke(context.action == skill ? AttackButton.Skill :
-                context.action == lightAttack ? AttackButton.Light : AttackButton.Heavy);
+                context.action == lightAttack ? AttackButton.Light : AttackButton.Heavy, context.time);
         }
 
         /// <summary>读取当前动作值。短突进编号可重复读取，每个使用方自行记录已处理的编号。</summary>

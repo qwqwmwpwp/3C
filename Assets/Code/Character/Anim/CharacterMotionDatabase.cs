@@ -3,20 +3,32 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 控制地面匹配是否参与播放，保留原有序列化编号。
     public enum CharacterMatchMode
     {
-        [InspectorName("原规则")] Rules,
-        [InspectorName("旁路观察")] Observe,
-        [InspectorName("应用匹配")] Apply,
-        [InspectorName("旧版跑停匹配（对照）")] LegacyBaseline
+        [InspectorName("原规则")] Rules = 0,
+        [InspectorName("应用匹配")] Apply = 2
     }
 
+    // 保存模型基准中的双脚和可选骨盆样本，旧库中的骨盆标记为零。
     [Serializable]
     internal struct CharacterFootPose
     {
         public Vector3 Left, Right;
         public Vector3 LeftVelocity, RightVelocity;
         public Vector2 Contact;
+        public Vector3 Pelvis; // 相对 Animator 根，世界米按根朝向反旋。
+        public byte HasPelvis;
+
+        // 以相同坐标与时间比例插值双脚和可用的骨盆特征。
+        internal static CharacterFootPose Interpolate(in CharacterFootPose a, in CharacterFootPose b, float t) =>
+            new CharacterFootPose {
+                Left = Vector3.Lerp(a.Left, b.Left, t), Right = Vector3.Lerp(a.Right, b.Right, t),
+                LeftVelocity = Vector3.Lerp(a.LeftVelocity, b.LeftVelocity, t),
+                RightVelocity = Vector3.Lerp(a.RightVelocity, b.RightVelocity, t),
+                Contact = Vector2.Lerp(a.Contact, b.Contact, t), Pelvis = Vector3.Lerp(a.Pelvis, b.Pelvis, t),
+                HasPelvis = (byte)(a.HasPelvis & b.HasPelvis)
+            };
 
         public void SetVelocity(in CharacterFootPose before, in CharacterFootPose after, float seconds)
         {
@@ -25,15 +37,8 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    internal enum CharacterPlaybackBakeMode
-    {
-        [InspectorName("自动（沿用控制器参数判断）")] Auto,
-        [InspectorName("直接片段播放")] DirectClips,
-        [InspectorName("Animator 控制器")] Controller,
-        [InspectorName("上下身双层片段")] BodyParts
-    }
-
-    internal enum GroundMotionUse { Legacy, Cycle, Start, Turn, Stop, Transition }
+    // 描述烘焙轨道的地面动作类型，序列化编号与基础动画组一致。
+    internal enum GroundMotionUse { Any = 0, Cycle = 1, Start = 2, Turn = 3, Stop = 4, Transition = 5 }
     internal enum GroundTrackGait { Any, Walk, Run, Sprint }
     internal enum GroundTrackSide { Either, Left, Right }
     internal enum GroundPathSource { Straight, Authored, RootMotion }
@@ -46,6 +51,7 @@ namespace ThreeC.CharacterBehavior
         public float Yaw; // 连续展开的偏航角（度）。
     }
 
+    // 保存用于匹配脚姿和轨迹的烘焙动作采样。
     [Serializable]
     internal sealed class CharacterMotionTrack
     {
@@ -77,13 +83,12 @@ namespace ThreeC.CharacterBehavior
         [Min(0f), InspectorName("混合动作时长（秒）"), Tooltip("混合轨道使用此时长。直接播放的轨道在烘焙时读取基础片段长度。")]
         public float Seconds;
         [HideInInspector] public CharacterFootPose[] Poses;
-        public bool IsStop => Use == GroundMotionUse.Stop || Use == GroundMotionUse.Legacy && BrakeSeconds > 0f;
-        public bool IsLoop => Use == GroundMotionUse.Legacy ? !IsStop : Loop;
+        [HideInInspector] public string FeatureFingerprint;
+        [HideInInspector] public uint FeatureMask;
+        [HideInInspector] public Vector3[] FeatureValues; // 样帧优先、通道次序与布局相同。
+        public bool IsStop => Use == GroundMotionUse.Stop;
+        public bool IsLoop => Loop;
         public float ExitTime => ExitSeconds > 0f ? ExitSeconds : Seconds;
-        public bool Accepts(string gait) => Gait == GroundTrackGait.Any ||
-            Gait == GroundTrackGait.Walk && gait == CharacterAnimationIntentConverter.WalkKey ||
-            Gait == GroundTrackGait.Run && gait == CharacterAnimationIntentConverter.MoveKey ||
-            Gait == GroundTrackGait.Sprint && gait == CharacterAnimationIntentConverter.SprintKey;
         public bool IsReady => Clip && ValidSamples && (Mixed || Mathf.Abs(Seconds - Clip.length) < 0.003f);
         private bool ValidSamples => Poses != null && Poses.Length >= 2 && Seconds > 0f;
 
@@ -96,9 +101,21 @@ namespace ThreeC.CharacterBehavior
         }
 
         public bool ReadyForSearch => IsReady && SearchSamplesValid;
-        internal bool SearchSamplesValid => Use != GroundMotionUse.Legacy && ValidSamples && FirstEntrySeconds >= 0f &&
+        internal bool SearchSamplesValid => Use >= GroundMotionUse.Cycle && Use <= GroundMotionUse.Transition && ValidSamples && FirstEntrySeconds >= 0f &&
             LastEntrySeconds >= FirstEntrySeconds && LastEntrySeconds <= Seconds + 0.001f && ReferenceSpeed > 0f &&
             (PathSource == GroundPathSource.Straight || (PathSource == GroundPathSource.Authored ? ReferencePath : RootPath)?.Length >= 2);
+
+        // 按素材秒数插值姿态，只有循环轨道允许穿过首尾边界。
+        internal bool TrySamplePose(float time, out CharacterFootPose pose)
+        {
+            pose = default;
+            if (!IsLoop && (time < 0f || time > Seconds)) return false;
+            float phase = IsLoop ? Mathf.Repeat(time / Seconds, 1f) : time / Seconds;
+            float cursor = phase * (Poses.Length - 1);
+            int i = Mathf.Clamp(Mathf.FloorToInt(cursor), 0, Poses.Length - 1);
+            pose = CharacterFootPose.Interpolate(Poses[i], Poses[Mathf.Min(i + 1, Poses.Length - 1)], cursor - i);
+            return true;
+        }
 
         public int Index(float phase)
         {
@@ -118,23 +135,34 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
+    // 保存基础动画组及其烘焙后的分层片段和地面匹配采样。
     [CreateAssetMenu(menuName = "3C/地面动作数据库")]
     public sealed class CharacterMotionDatabase : ScriptableObject
     {
-        [SerializeField, InspectorName("烘焙播放方式"), Tooltip("重新烘焙时生效。直接播放使用片段、固定状态速度和代码过渡。")]
-        internal CharacterPlaybackBakeMode PlaybackMode;
+        internal const int CurrentFormat = 1;
         [SerializeField, InspectorName("基础动画数据组")] internal CharacterMotionGroups Groups;
-        [SerializeField, HideInInspector] internal CharacterClipLibrary Playback;
-        internal bool UsesBodyOutputs => Playback?.Ready == true ? Playback.BodyOutputs : PlaybackMode == CharacterPlaybackBakeMode.BodyParts;
-        [SerializeField, HideInInspector] internal int Format; // 0 沿用旧库，显式烘焙升级。
-        [SerializeField, Min(0), InspectorName("地面动作所在层")] internal int GroundLayer;
         [SerializeField] internal Avatar Avatar;
-        [SerializeField] internal RuntimeAnimatorController Controller;
-        [SerializeField] internal CharacterMotionTrack[] Tracks;
+        [SerializeField, HideInInspector] internal CharacterClipLibrary Playback;
         [SerializeField, HideInInspector] internal CharacterMotionTrack[] BakedTracks;
         [SerializeField, HideInInspector] internal Avatar BakedAvatar;
-        [SerializeField, HideInInspector] internal RuntimeAnimatorController BakedController;
+        [SerializeField, HideInInspector] internal int Format;
 
+        // 检查库是否由当前基础动画组和 Avatar 烘焙，并返回缺失或失效的资源。
+        internal string ValidatePlayback()
+        {
+            if (!Groups) return "动画播放库缺少基础动画数据组。";
+            if (Format != CurrentFormat || Playback == null || BakedTracks == null)
+                return "动画播放库尚未使用当前格式烘焙，请重新烘焙基础动画数据组。";
+            if (!Avatar || Avatar != BakedAvatar)
+                return "动画播放库缺少有效的烘焙 Avatar，或 Avatar 已修改，请重新烘焙。";
+            if (!Playback.HasBodyMasks())
+                return "动画播放库需要互补的下身和上身 AvatarMask，请检查基础动画数据组并重新烘焙。";
+            if (!Playback.Ready)
+                return "动画播放库缺少已烘焙的片段状态或素材曲线，请重新烘焙基础动画数据组。";
+            return null;
+        }
+
+        // 读取与当前片段对应的收步采样和制动时间。
         internal CharacterMotionTrack FindStopTrack(string state, AnimationClip playingClip)
         {
             if (BakedTracks == null) return null;
@@ -148,14 +176,14 @@ namespace ThreeC.CharacterBehavior
             return null;
         }
 
+        // 查找与烘焙片段一致的循环轨道以读取参考步频。
         internal CharacterMotionTrack FindBakedCycle(string stateName)
         {
-            if (string.IsNullOrEmpty(stateName) || BakedTracks == null) return null;
+            if (string.IsNullOrEmpty(stateName) || Format != CurrentFormat || Playback?.States == null || BakedTracks == null) return null;
             foreach (var track in BakedTracks)
             {
                 if (track == null || !track.Clip || !track.IsLoop || track.States == null ||
                     !(track.ReferenceSpeed > 0f) || float.IsInfinity(track.ReferenceSpeed) || Array.IndexOf(track.States, stateName) < 0) continue;
-                if (Playback?.States == null) return BakedController ? track : null;
                 foreach (var state in Playback.States)
                     if (state != null && state.Path == stateName && state.MatchesTrack(track, state.Clip)) return track;
             }

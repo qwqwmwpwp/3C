@@ -38,14 +38,21 @@ namespace ThreeC.CharacterBehavior
             count++;
         }
 
-        internal Vector3 Limit(Vector3 target)
+        // 将合成目标约束到可行区域，并对动作速度分量施加同一边界投影。
+        internal Vector3 Limit(Vector3 target, ref Vector3 action)
         {
             if (count == 0) return target;
-            if (count == 1) return Vector3.Dot(target, first) < 0f ? AlongSurface(target, first) : target;
+            if (count == 1)
+            {
+                if (Vector3.Dot(target, first) >= 0f) return target;
+                action = AlongSurface(action, first);
+                return AlongSurface(target, first);
+            }
             if (Allows(target)) return target;
             // 二维可行区域是过原点的锥。最近可行速度位于某条边界上，或只剩竖直分量。
             var best = new Vector3(0f, target.y, 0f);
             float error = (target - best).sqrMagnitude;
+            int boundary = -1;
             for (int i = 0; i < count; i++)
             {
                 var normal = At(i);
@@ -55,8 +62,10 @@ namespace ThreeC.CharacterBehavior
                 {
                     best = candidate;
                     error = distance;
+                    boundary = i;
                 }
             }
+            action = boundary >= 0 ? AlongSurface(action, At(boundary)) : Vector3.zero;
             return best;
         }
 
@@ -107,7 +116,7 @@ namespace ThreeC.CharacterBehavior
     internal struct CharacterMotorStep
     {
         private const float RunCadenceDirectionDot = 0.7f;
-        private Vector3 previousDashVelocity;
+        private Vector3 previousBurstVelocity;
         private CharacterMoveGait? groundMoveGait;
         private Vector3 pendingRunStepStart;
         private Vector3 pendingRunStepDirection;
@@ -117,6 +126,37 @@ namespace ThreeC.CharacterBehavior
         private Vector3 pendingBrakeVelocity;
         private float yawRate; // 世界竖直轴角速度（度/秒），随物理状态一起复制给预测器。
 
+        private Vector3 submittedMean, terminalVelocity;
+        private bool hasMixedStep;
+
+        // 物理求解器收到整步平均速度，下一步从段末速度接回，沿障碍已削去的速度不再补回。
+        internal Vector3 ResumeVelocity(Vector3 solved)
+        {
+            if (!hasMixedStep) return solved;
+            hasMixedStep = false;
+            Vector3 correction = terminalVelocity - submittedMean;
+            Vector3 lost = submittedMean - solved;
+            if (lost.sqrMagnitude > 0.000001f)
+            {
+                Vector3 axis = lost.normalized;
+                float removedAtEnd = Vector3.Dot(terminalVelocity, axis);
+                float measured = Vector3.Dot(solved, axis);
+                float wanted = Vector3.Dot(solved + correction, axis);
+                float limited = Mathf.Clamp(wanted, Mathf.Min(removedAtEnd, measured), Mathf.Max(removedAtEnd, measured));
+                correction += axis * (limited - wanted);
+            }
+            return solved + correction;
+        }
+
+        // 暂存多段速度的提交均值和末值；单段步无需作差。
+        internal void RecordSubmittedVelocity(Vector3 mean, Vector3 terminal, bool mixed)
+        {
+            submittedMean = mean;
+            terminalVelocity = terminal;
+            hasMixedStep = mixed;
+        }
+
+        // 中断连续步幅观测，保留已消费的动作速度。
         internal void ResetStride()
         {
             yawRate = 0f;
@@ -124,41 +164,60 @@ namespace ThreeC.CharacterBehavior
             ResetRunBrakeLeadIn();
         }
 
-        internal static Vector2 GroundVelocity(Vector3 velocity, Vector3 ground) =>
-            ground.y > 0f && Vector3.Dot(velocity, ground) < 0.5f ? new Vector2(velocity.x, velocity.z) : default;
+        // 法线朝上且沿法线的分离速度低于 0.5 米/秒时，本步仍受地面支撑。
+        internal static bool IsGroundSupported(Vector3 velocity, Vector3 ground) =>
+            ground.y > 0f && Vector3.Dot(velocity, ground) < 0.5f;
 
-        internal static Vector3 GroundTarget(Vector3 target, Vector3 plane, bool openingStep)
+        // 仅在仍受支撑时向行为提供世界 XZ 平面速度。
+        internal static Vector2 GroundVelocity(Vector3 velocity, Vector3 ground) =>
+            IsGroundSupported(velocity, ground) ? new Vector2(velocity.x, velocity.z) : default;
+
+        // 将给定目标投影到支撑面，维持原目标的速度大小。
+        internal static Vector3 GroundTarget(Vector3 target, Vector3 plane, bool openingStep) =>
+            GroundTarget(target, plane, openingStep, out _);
+
+        // 同时返回归一化前的投影，使各速度分量使用同一比例。
+        private static Vector3 GroundTarget(Vector3 target, Vector3 plane, bool openingStep, out Vector3 projected)
         {
-            float speed = target.magnitude;
+            projected = ProjectTarget(target, plane, openingStep);
+            return projected.normalized * target.magnitude;
+        }
+
+        // 普通步正交投影，攻击前摇保留锁定的世界 XZ 航向。
+        private static Vector3 ProjectTarget(Vector3 target, Vector3 plane, bool openingStep)
+        {
             if (openingStep && plane.y > 0f)
             {
-                // 重建切向高度，保留锁定的 XZ 航向和沿坡步长。
                 target.y = -(target.x * plane.x + target.z * plane.z) / plane.y;
-                return target.normalized * speed;
+                return target;
             }
-            return Vector3.ProjectOnPlane(target, plane).normalized * speed;
+            return Vector3.ProjectOnPlane(target, plane);
         }
 
         internal static Vector3 Target(CharacterBehaviorFrameResult frame, float dt) =>
             new Vector3(frame.Displacement.x, 0f, frame.Displacement.y) / dt;
 
+        // 共享实走和推演的地面驱动，分别处理合成目标和需要跨步清理的动作余速。
         internal CharacterGroundDrive Advance(CharacterBehaviorFrameResult frame, CharacterInputSnapshot input, float dt,
-            Vector3 position, ref Vector3 velocity, Vector3 target, Vector3 ground, CollisionFlags contacts, bool supported,
+            Vector3 position, ref Vector3 velocity, in CharacterSlopeContacts steep, Vector3 ground, CollisionFlags contacts, bool supported,
             bool stepped, in CharacterDriveParameters drive, ref Quaternion rotation)
         {
             var settings = drive.Settings;
-            bool dash = frame.DisplacementSource == CharacterDisplacementSource.Dash;
+            var motion = frame.ActionMotion;
+            bool burst = motion.UsesBurstVelocity;
             Vector3 requested = Target(frame, dt);
-            // 仅扣除冲刺前向残速，保留侧向冲量，避免撞墙后反向拉回。
-            if ((!dash || frame.DashStarted) && previousDashVelocity.sqrMagnitude > 0f)
+            // 只沿动作的有效速度清理余速，保留普通运动和外部侧向冲量。
+            if ((!burst || frame.ActionMotionStarted) && previousBurstVelocity.sqrMagnitude > 0f)
             {
-                Vector3 axis = previousDashVelocity.normalized;
+                Vector3 axis = previousBurstVelocity.normalized;
                 float excess = Vector3.Dot(velocity - requested, axis);
-                velocity -= axis * Mathf.Clamp(excess, 0f, previousDashVelocity.magnitude);
+                velocity -= axis * Mathf.Clamp(excess, 0f, previousBurstVelocity.magnitude);
             }
 
+            var action = burst ? new Vector3(frame.ActionDisplacement.x, 0f, frame.ActionDisplacement.y) / dt : Vector3.zero;
+            Vector3 constrained = stepped ? requested : steep.Limit(requested, ref action);
             Vector3 plane = supported && !stepped ? ground : Vector3.up;
-            target = GroundTarget(target, plane, frame.ActionMotion.OpeningStep);
+            Vector3 target = GroundTarget(constrained, plane, motion.OpeningStep, out var projected);
             Vector3 current = Vector3.ProjectOnPlane(velocity, plane);
             float change = supported ? drive.GroundAcceleration : settings.airAcceleration;
             if (supported && frame.ActionMotion.Braking > 0f) change = frame.ActionMotion.Braking;
@@ -185,12 +244,13 @@ namespace ThreeC.CharacterBehavior
             CharacterGroundBrake brake = braking
                 ? new CharacterGroundBrake(change, leadInDeceleration, runBrakeLeadInRemaining) : default;
             bool ordinary = supported && frame.MoveApproved && frame.DisplacementProvider == CharacterBehaviorId.Move &&
-                !frame.ActionMotion.ControlsFacing && !frame.DashStarted;
+                !motion.ControlsFacing;
             var steering = ordinary ? new CharacterGroundSteering(input, drive) : default;
-            AdvanceFacing(ref rotation, frame, input, steering, drive.TurnSpeed, dt);
+            float angle = AdvanceFacing(rotation * Vector3.forward, frame, input, steering, drive.TurnSpeed, dt);
+            if (angle != 0f) rotation = Quaternion.AngleAxis(angle, Vector3.up) * rotation;
             Vector3 next;
             if (brake.IsActive) next = brake.Apply(current, dt);
-            else if (dash || supported && frame.ActionMotion.OpeningStep) next = target;
+            else if (burst || supported && motion.OpeningStep) next = target;
             else if (ordinary) next = steering.Velocity(current, target, dt);
             else next = Vector3.MoveTowards(current, target, change * dt);
             runBrakeLeadInRemaining = brake.AfterStep(dt).LeadInSeconds;
@@ -204,9 +264,21 @@ namespace ThreeC.CharacterBehavior
                 velocity += next - current;
             if (supported && !stepped && drive.UseGravity) // 只抵消沿坡重力，保留贴地的法向重力。
                 velocity -= Vector3.ProjectOnPlane(drive.Gravity, plane) * dt;
-            previousDashVelocity = dash ? target : Vector3.zero;
+            previousBurstVelocity = burst ? AppliedBurstVelocity(action, constrained, projected, target, plane, motion.OpeningStep) : Vector3.zero;
             return supported && !stepped && (frame.MoveApproved || frame.ActionMotion.RecoversMovement || braking)
                 ? new CharacterGroundDrive(plane, target, change, current, brake, steering, yawRate) : default;
+        }
+
+        // 使用合成目标的投影比例计算动作分量，扣除量以实际施加的同向速度为上限。
+        private static Vector3 AppliedBurstVelocity(Vector3 action, Vector3 constrained, Vector3 projected, Vector3 target,
+            Vector3 plane, bool openingStep)
+        {
+            if (action.Equals(constrained)) return target;
+            if (target == Vector3.zero) return Vector3.zero;
+            Vector3 planar = ProjectTarget(action, plane, openingStep);
+            Vector3 axis = planar.normalized;
+            float speed = planar.magnitude * constrained.magnitude / projected.magnitude;
+            return axis * Mathf.Clamp(Vector3.Dot(target, axis), 0f, speed);
         }
 
         private void UpdateRunBrakeLeadIn(Vector3 position, CollisionFlags contacts, in CharacterDriveParameters drive,
@@ -299,23 +371,36 @@ namespace ThreeC.CharacterBehavior
             pendingBrakeVelocity = Vector3.zero;
         }
 
-        private void AdvanceFacing(ref Quaternion rotation, CharacterBehaviorFrameResult frame, CharacterInputSnapshot input,
+        // 先应用动作的起步朝向，否则按普通移动获准的时间计算转向。
+        internal float AdvanceFacing(Vector3 forward, CharacterBehaviorFrameResult frame, CharacterInputSnapshot input,
             in CharacterGroundSteering steering, float turnSpeed, float dt)
         {
-            Vector3 forward = rotation * Vector3.forward;
-            float angle;
-            if (steering.Active)
-                angle = steering.Turn(steering.HeadingError(forward), ref yawRate, dt);
-            else
+            var motion = frame.ActionMotion;
+            if (frame.ActionMotionStarted && motion.SnapsFacingOnStart)
             {
                 yawRate = 0f;
-                if (frame.DashStarted) angle = CharacterGroundSteering.AngleTo(forward, frame.DashDirection);
-                else if (frame.ActionMotion.ControlsFacing)
-                    angle = LimitedTurn(forward, frame.ActionMotion.Facing, frame.ActionMotion.MaxTurn);
-                else if (frame.MoveApproved) angle = LimitedTurn(forward, input.Direction, turnSpeed * dt);
-                else return;
+                return CharacterGroundSteering.AngleTo(forward, motion.Facing);
             }
-            if (angle != 0f) rotation = Quaternion.AngleAxis(angle, Vector3.up) * rotation;
+
+            float movementSeconds = motion.UsesBurstVelocity ? frame.OrdinaryMovementSeconds : dt;
+            if (steering.Active)
+                return steering.Turn(steering.HeadingError(forward), ref yawRate, movementSeconds);
+
+            yawRate = 0f;
+            if (motion.ControlsFacing)
+                return ActionTurn(forward, motion, turnSpeed * dt);
+            return frame.MoveApproved ? LimitedTurn(forward, input.Direction, turnSpeed * movementSeconds) : 0f;
+        }
+
+        // 在作者的参考坐标中执行原有限转向，再按本片预算附加偏航；不削减原动作本来获准的转角。
+        internal static float ActionTurn(Vector3 forward, in CharacterActionMotion motion, float physicalLimit)
+        {
+            if (motion.AlignmentYawAtStart == 0f && motion.AlignmentYawDelta == 0f)
+                return LimitedTurn(forward, motion.Facing, motion.MaxTurn);
+            Vector3 authoredForward = Quaternion.AngleAxis(-motion.AlignmentYawAtStart, Vector3.up) * forward;
+            float authored = LimitedTurn(authoredForward, motion.Facing, motion.MaxTurn);
+            float limit = Mathf.Max(Mathf.Abs(authored), physicalLimit);
+            return Mathf.Clamp(authored + motion.AlignmentYawDelta, -limit, limit);
         }
 
         private static float LimitedTurn(Vector3 forward, Vector2 target, float limit) =>

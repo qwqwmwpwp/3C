@@ -8,6 +8,7 @@ namespace ThreeC.CharacterBehavior
     /// <summary>下身、上身依次只写自己的遮罩。默认姿势和共享动作各只有一条采样路径。</summary>
     internal sealed class CharacterBodyPlaybackGraph
     {
+        // 维护部位覆盖或共享全身动作的当前权重和片段混合器。
         private sealed class Blend
         {
             private readonly PlayableGraph graph;
@@ -15,23 +16,26 @@ namespace ThreeC.CharacterBehavior
             private readonly Vector3 inertiaMask;
             private readonly CharacterLayerBlendWeight coverage;
             private CharacterClipMixer parked;
-            private readonly bool maskedStage, additive;
+            private readonly bool maskedStage;
+            private bool fadingOut;
+            private float previousWeight;
+            internal float ExitImpulse { get; private set; }
+            private CharacterTransitionProfile exitProfile;
             public readonly Playable Node;
             public CharacterClipMixer Source { get; private set; }
             public float Weight { get; private set; }
 
-            public Blend(PlayableGraph graph, Playable input, CharacterClipLayer bodyLayer, bool smoothWeight = false)
+            // 创建带 AvatarMask 的部位输出，或连接共享全身动作的交叉混合输出。
+            public Blend(PlayableGraph graph, Playable input, AvatarMask mask, bool smoothWeight = false)
             {
                 this.graph = graph;
                 if (smoothWeight) coverage = new CharacterLayerBlendWeight();
-                maskedStage = bodyLayer != null;
+                this.mask = mask;
+                maskedStage = mask != null;
                 if (maskedStage)
                 {
-                    mask = bodyLayer.Mask;
-                    additive = bodyLayer.Additive;
                     var mixer = AnimationLayerMixerPlayable.Create(graph, 2, false);
-                    if (mask) mixer.SetLayerMaskFromAvatarMask(1, mask);
-                    mixer.SetLayerAdditive(1, additive);
+                    mixer.SetLayerMaskFromAvatarMask(1, mask);
                     Node = mixer;
                 }
                 else Node = AnimationMixerPlayable.Create(graph, 1);
@@ -43,9 +47,11 @@ namespace ThreeC.CharacterBehavior
 
             private bool Writes(AvatarMaskBodyPart part) => !mask || mask.GetHumanoidBodyPartActive(part);
 
+            // 记录推进前的层覆盖，为当前求值计算覆盖变化与卸层边沿。
             public void AdvanceWeight(in CharacterAnimationLayerPlan plan, float dt, bool holdOutgoing = false,
                 bool fullyCovered = false, float secondsUntilCovered = 0f)
             {
+                previousWeight = Weight;
                 if (!plan.HasState && fullyCovered)
                 {
                     Weight = 0f;
@@ -61,9 +67,18 @@ namespace ThreeC.CharacterBehavior
                 Weight = coverage != null ? coverage.Advance(Weight, plan, dt) : plan.WeightAfter(Weight, dt);
             }
 
+            // 在卸下播放源前采集可见短退出，播放开始回执仍只由实际进入产生。
             public bool Apply(CharacterClipPlayback clips, in CharacterAnimationLayerPlan plan,
                 in CharacterAnimationPlaybackPlan frame, float dt)
             {
+                ExitImpulse = 0f;
+                if (plan.HasState) fadingOut = false;
+                else if (Source != null && previousWeight > Weight && !fadingOut)
+                {
+                    exitProfile = Source.ExitProfile;
+                    ExitImpulse = (previousWeight - Weight) * (exitProfile?.Strength(plan.LayerBlendSeconds) ?? 0f);
+                    fadingOut = true; // 平滑淡出只处理第一段实际变化，尾帧卸源不重复交接。
+                }
                 if (!clips.ReuseMixers && parked != null)
                 {
                     parked.Release(false);
@@ -92,33 +107,50 @@ namespace ThreeC.CharacterBehavior
                 return clips.Advance(Source, plan, frame, dt, created);
             }
 
+            // 按与姿态一致的身体遮罩和权重混合片段许可。
             public CharacterCurveSample MixPermission(CharacterCurveSample previous, AvatarMaskBodyPart part,
                 string curve, float dt, string action, long? instance)
             {
                 if (Source == null || Weight <= 0f || !Writes(part)) return previous;
                 var sample = Source.Permission(curve, dt, action, instance);
-                return additive ? new CharacterCurveSample(previous.Value + sample.Value * Weight,
-                    action == null ? previous.Coverage : previous.Coverage + sample.Coverage * Weight) :
-                    new CharacterCurveSample(Mathf.Lerp(previous.Value, sample.Value, Weight), Mathf.Lerp(previous.Coverage, sample.Coverage, Weight));
+                return new CharacterCurveSample(Mathf.Lerp(previous.Value, sample.Value, Weight),
+                    Mathf.Lerp(previous.Coverage, sample.Coverage, Weight));
             }
 
+            // 保留本层自己的进出掩码，其他层只按其真实覆盖减权，不在此阶段合并不同骨骼的调校。
+            internal TransitionPart CollectTransition(ref TransitionSources sources, AvatarMaskBodyPart part, bool entered)
+            {
+                if (!Writes(part)) return default;
+                if (Source != null) sources.Cover(Weight);
+                if (entered && Source != null)
+                {
+                    var current = Source.EntryImpulse(part);
+                    current.Weight *= Weight;
+                    return current;
+                }
+                return ExitImpulse > 0f ? exitProfile.Part(part, ExitImpulse) : default;
+            }
+
+            // 只在当前层实际覆盖的骨骼分区中混合惯性抑制。
             public Vector3 MixInertiaSuppression(Vector3 previous)
             {
                 if (Source == null || Weight <= 0f) return previous;
                 Vector3 suppression = Source.InertiaSuppression();
-                return previous + Vector3.Scale(inertiaMask, additive ? suppression : suppression - previous) * Weight;
+                return previous + Vector3.Scale(inertiaMask, suppression - previous) * Weight;
             }
         }
 
         private readonly CharacterClipMixer baseline;
         private readonly Blend lower, upper, handoff;
         public Playable Root => handoff.Node;
+        internal CharacterTransitionSignal Transition { get; private set; }
 
+        // 按基础姿势、下身、上身和共享动作的顺序连接混合器。
         public CharacterBodyPlaybackGraph(PlayableGraph graph, CharacterClipLayer lowerLayer, CharacterClipLayer upperLayer)
         {
             baseline = new CharacterClipMixer(graph);
-            lower = new Blend(graph, baseline.Mixer, lowerLayer);
-            upper = new Blend(graph, lower.Node, upperLayer, smoothWeight: true);
+            lower = new Blend(graph, baseline.Mixer, lowerLayer.Mask);
+            upper = new Blend(graph, lower.Node, upperLayer.Mask, smoothWeight: true);
             handoff = new Blend(graph, upper.Node, null, smoothWeight: true); // 无共享动作时仅透传已合成的两部位姿势。
         }
 
@@ -127,6 +159,7 @@ namespace ThreeC.CharacterBehavior
             if (!graph.Connect(input, 0, output, port)) throw new InvalidOperationException("无法连接角色身体姿势源。");
         }
 
+        // 推进所有声部并分别发布实际进入回执与可见姿态切换。
         public CharacterAnimationPlaybackEmission Apply(CharacterClipPlayback clips, in CharacterAnimationPlaybackPlan frame, float dt)
         {
             var takeover = frame.Overlay;
@@ -146,22 +179,28 @@ namespace ThreeC.CharacterBehavior
             bool legsPlayed = lower.Apply(clips, frame.LowerBody, frame, dt);
             bool armsPlayed = upper.Apply(clips, frame.UpperBody, frame, dt);
             bool sharedPlayed = handoff.Apply(clips, takeover, frame, dt);
-            return new CharacterAnimationPlaybackEmission(groundPlayed, legsPlayed, armsPlayed, sharedPlayed);
+            var emission = new CharacterAnimationPlaybackEmission(groundPlayed, legsPlayed, armsPlayed, sharedPlayed);
+            Transition = groundPlayed || legsPlayed || armsPlayed || sharedPlayed ||
+                lower.ExitImpulse > 0f || upper.ExitImpulse > 0f || handoff.ExitImpulse > 0f
+                ? ReadTransition(emission) : default;
+            return emission;
         }
 
-        public CharacterClipMixer Source(CharacterAnimationBodyRegion source) => source switch
+        // 查找已提交计划对应的混合源。
+        public CharacterClipMixer Source(CharacterAnimationSource source) => source switch
         {
-            CharacterAnimationBodyRegion.FullBody => baseline,
-            CharacterAnimationBodyRegion.LowerBody => lower.Source,
-            CharacterAnimationBodyRegion.UpperBody => upper.Source,
+            CharacterAnimationSource.Baseline => baseline,
+            CharacterAnimationSource.LowerBody => lower.Source,
+            CharacterAnimationSource.UpperBody => upper.Source,
             _ => handoff.Source
         };
 
-        public float Weight(CharacterAnimationBodyRegion source) => source switch
+        // 读取当前已应用到图上的混合源权重。
+        public float Weight(CharacterAnimationSource source) => source switch
         {
-            CharacterAnimationBodyRegion.FullBody => 1f,
-            CharacterAnimationBodyRegion.LowerBody => lower.Weight,
-            CharacterAnimationBodyRegion.UpperBody => upper.Weight,
+            CharacterAnimationSource.Baseline => 1f,
+            CharacterAnimationSource.LowerBody => lower.Weight,
+            CharacterAnimationSource.UpperBody => upper.Weight,
             _ => handoff.Weight
         };
 
@@ -171,6 +210,27 @@ namespace ThreeC.CharacterBehavior
             value = lower.MixPermission(value, part, curve, dt, action, instance);
             value = upper.MixPermission(value, part, curve, dt, action, instance);
             return handoff.MixPermission(value, part, curve, dt, action, instance);
+        }
+
+        // 固定本次求值的进出边沿，不借用动作开始回执表示释放。
+        private CharacterTransitionSignal ReadTransition(in CharacterAnimationPlaybackEmission emission) =>
+            new CharacterTransitionSignal {
+                Body = TransitionInfluence(AvatarMaskBodyPart.Body, emission), Head = TransitionInfluence(AvatarMaskBodyPart.Head, emission),
+                LeftArm = TransitionInfluence(AvatarMaskBodyPart.LeftArm, emission), RightArm = TransitionInfluence(AvatarMaskBodyPart.RightArm, emission),
+                LeftLeg = TransitionInfluence(AvatarMaskBodyPart.LeftLeg, emission), RightLeg = TransitionInfluence(AvatarMaskBodyPart.RightLeg, emission)
+            };
+
+        // 按与动画图相同的部位遮罩将实际播放边沿转成一次性惯性输入。
+        private TransitionSources TransitionInfluence(AvatarMaskBodyPart part, in CharacterAnimationPlaybackEmission emission)
+        {
+            var sources = new TransitionSources { Baseline = emission.FullBody ? baseline.EntryImpulse(part) : default };
+            var legs = lower.CollectTransition(ref sources, part, emission.LowerBody);
+            sources.Lower = legs;
+            var arms = upper.CollectTransition(ref sources, part, emission.UpperBody);
+            sources.Upper = arms;
+            var shared = handoff.CollectTransition(ref sources, part, emission.Overlay);
+            sources.Overlay = shared;
+            return sources;
         }
 
         public Vector3 InertiaAllowance()

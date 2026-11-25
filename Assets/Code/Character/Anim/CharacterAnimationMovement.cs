@@ -15,9 +15,11 @@ namespace ThreeC.CharacterBehavior
         public CharacterGroundTrajectory Trajectory;
     }
 
+    // 保存最近成功提交的外部固定步及其独立表现轨迹，供动画采样和配置重建恢复。
     internal sealed class ExternalAnimationMotion
     {
         internal CharacterControllerFrameResult Latest { get; private set; }
+        internal CharacterGroundTrajectory LatestTrajectory { get; private set; }
         internal int Version { get; private set; }
         internal int StateVersion { get; private set; }
         internal bool Paused { get; private set; }
@@ -25,6 +27,7 @@ namespace ThreeC.CharacterBehavior
         private double elapsed;
         private Dictionary<CharacterBehaviorId, double> grants;
 
+        // 验证外部实测和移动许可，成功后同步更新最近固定步和该步的表现轨迹。
         internal bool Commit(in CharacterAnimationMovement motion)
         {
             if (Paused || motion.DeltaTime <= 0.000001f || !Finite(motion.DeltaTime) ||
@@ -43,7 +46,8 @@ namespace ThreeC.CharacterBehavior
             var behavior = new CharacterBehaviorFrameResult(++sequence, expected, motion.MoveApproved, previous, default, 0f, 0f, step);
             var input = new CharacterInputSnapshot(motion.MoveDirection, false, false, CharacterBehaviorId.None, motion.Gait);
             Latest = new CharacterControllerFrameResult(behavior, input, motion.DeltaTime, motion.ActualDisplacement,
-                motion.Contacts, motion.Facing, Version, motion.Trajectory);
+                motion.Contacts, motion.Facing, Version);
+            LatestTrajectory = motion.Trajectory;
             elapsed += motion.DeltaTime;
             return true;
         }
@@ -51,15 +55,18 @@ namespace ThreeC.CharacterBehavior
         private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
         private static bool Finite(Vector3 value) => Finite(value.x) && Finite(value.y) && Finite(value.z);
 
+        // 暂停或恢复时切换模拟代次，清除上一代次的固定步、轨迹和移动许可。
         internal void SetPaused(bool paused)
         {
             if (Paused == paused) return;
             Paused = paused;
             Version++;
             Latest = default;
+            LatestTrajectory = default;
             grants = null;
         }
 
+        // 重置外部输入的时间与序号，并丢弃上一状态的固定步和轨迹。
         internal void Reset()
         {
             StateVersion++;
@@ -68,6 +75,7 @@ namespace ThreeC.CharacterBehavior
             sequence = 0;
             grants = null;
             Latest = default;
+            LatestTrajectory = default;
         }
     }
 }

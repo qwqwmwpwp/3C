@@ -28,7 +28,7 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>同一固定步的表现时间窗。动作进度由行为或映射推进，渲染只在相邻物理步之间采样。</summary>
+    /// <summary>本次表现的起点和采样相位，行为绑定使用最新裁决相位，独立动作可跟随片段时钟。</summary>
     internal readonly struct CharacterActionTiming
     {
         public readonly float? StartPhase, SamplePhase;

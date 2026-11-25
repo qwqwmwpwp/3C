@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using ThreeC.Player;
 using UnityEngine;
 
@@ -11,7 +13,7 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("持续冲刺")] Sprint
     }
 
-    /// <summary>只读执行黑板，在固定步末尾复制生成，下一步所有行为共享；x/y 分别对应世界 X/Z 轴。</summary>
+    /// <summary>只读执行黑板，按裁决时刻生成，每次按下只交付一次；x/y 分别对应世界 X/Z 轴。</summary>
     public readonly struct CharacterInputSnapshot
     {
         public Vector2 Direction { get; }
@@ -51,7 +53,23 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>保存方向、移动档和持续请求，在固定步末尾转交短突进及有序攻击按键。</summary>
+    // 保存同一设备时钟上的输入边沿；同一时刻沿用回调到达顺序。
+    internal readonly struct CharacterInputPress
+    {
+        internal readonly double DeviceTime;
+        internal readonly AttackButton Attack;
+        internal bool IsDash => Attack == AttackButton.None;
+
+        // 用空攻击键表示短突进。
+        internal CharacterInputPress(double deviceTime, AttackButton attack)
+        {
+            DeviceTime = deviceTime;
+            Attack = attack;
+        }
+    }
+
+    /// <summary>分别保留持续意图和按设备时刻排列的待处理边沿。</summary>
+    [Serializable]
     public sealed class CharacterInputBlackboard
     {
         private Vector2 _direction;
@@ -59,6 +77,37 @@ namespace ThreeC.CharacterBehavior
         private bool _dashPressed;
         private bool _guardHeld;
         private AttackButtonPresses _attackPresses;
+        private readonly List<CharacterInputPress> presses = new List<CharacterInputPress>();
+        private bool _wasReceivingPlayerInput;
+        private ulong _lastDashPressId;
+        private bool _suppressGuardUntilRelease;
+
+        internal IReadOnlyList<CharacterInputPress> Presses => presses;
+        internal bool WasReceivingPlayerInput => _wasReceivingPlayerInput;
+        internal bool GuardRequested => _guardHeld;
+
+        internal bool Collect(PlayerInputSample input, (Vector3 forward, Vector3 right)? basis, CharacterMoveGait defaultGait, bool allowGuard)
+        {
+            var direction = input.Move;
+            if (basis.HasValue)
+            {
+                var (forward, right) = basis.Value;
+                direction = new Vector2(right.x, right.z) * direction.x + new Vector2(forward.x, forward.z) * direction.y;
+            }
+            bool dashPressed = input.DashPressId != 0 && input.DashPressId != _lastDashPressId;
+            _lastDashPressId = input.DashPressId;
+            CharacterMoveGait gait = defaultGait;
+            if (input.WalkHeld)
+                gait = CharacterMoveGait.Walk;
+            else if (input.SprintHeld)
+                gait = CharacterMoveGait.Sprint;
+
+            if (!input.GuardHeld)
+                _suppressGuardUntilRelease = false;
+            Write(direction, false, gait, allowGuard && input.GuardHeld && !_suppressGuardUntilRelease);
+            if (dashPressed) AddPress(new CharacterInputPress(Time.realtimeSinceStartupAsDouble, AttackButton.None));
+            return dashPressed;
+        }
 
         public void PressAttack(AttackButton button) => _attackPresses = _attackPresses.With(button);
 
@@ -84,13 +133,41 @@ namespace ThreeC.CharacterBehavior
         internal CharacterInputSnapshot Peek() =>
             new CharacterInputSnapshot(_direction, _dashPressed, _guardHeld, CharacterBehaviorId.None, _gait, _attackPresses);
 
-        /// <summary>保留方向和持续请求，只清除已转交的按下事件。每个固定步末尾调用一次。</summary>
+        /// <summary>保留方向和持续请求，只清除已转交的按下事件。供显式写入快照的调用者消费。</summary>
         public CharacterInputSnapshot Consume()
         {
             var snapshot = Peek();
             _attackPresses = default;
             _dashPressed = false;
             return snapshot;
+        }
+
+        // 冲刺事件与轮询共享编号，保留同帧多次按下。
+        internal bool PressDash(ulong id, double deviceTime)
+        {
+            if (id == 0 || id == _lastDashPressId) return false;
+            _lastDashPressId = id;
+            AddPress(new CharacterInputPress(deviceTime, AttackButton.None));
+            return true;
+        }
+
+        // 设备批次可能晚到，按时间稳定插入；相同时刻保留设备上报顺序。
+        internal void AddPress(CharacterInputPress press)
+        {
+            int i = presses.Count;
+            while (i > 0 && presses[i - 1].DeviceTime > press.DeviceTime) i--;
+            presses.Insert(i, press);
+        }
+
+        // 本渲染帧已完成裁决，移除所有已交付边沿。
+        internal void ClearPresses() => presses.Clear();
+
+        internal void ClearForPlayerInput(bool receivePlayerInput, ulong latestDashPressId)
+        {
+            Clear();
+            _wasReceivingPlayerInput = receivePlayerInput;
+            _lastDashPressId = latestDashPressId; // 恢复或接手玩家控制时跳过此前记录的按下。
+            _suppressGuardUntilRelease = true; // 恢复后先松键，再接受持物请求。
         }
 
         /// <summary>清空全部输入，用于停用、失焦或暂停等生命周期边界。</summary>
@@ -101,6 +178,7 @@ namespace ThreeC.CharacterBehavior
             _dashPressed = false;
             _guardHeld = false;
             _attackPresses = default;
+            presses.Clear();
         }
     }
 

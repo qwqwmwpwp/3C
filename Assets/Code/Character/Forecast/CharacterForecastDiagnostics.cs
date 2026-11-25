@@ -41,6 +41,7 @@ namespace ThreeC.CharacterBehavior
             transitions = missed = transitionError = 0;
         }
 
+        // 对齐真实物理时刻建立检查点，使帧末起算的预测仍与相同物理步进行比较。
         internal void Published(CharacterMovementForecast data, float dt, long ticks, long allocated, long worker = 0, long elapsed = 0, int batches = 0)
         {
             elapsedMs = ticks * 1000d / System.Diagnostics.Stopwatch.Frequency;
@@ -51,7 +52,7 @@ namespace ThreeC.CharacterBehavior
             for (int i = 0; i < horizons.Length; i++)
             {
                 int steps = Mathf.RoundToInt(horizons[i] / dt);
-                if (steps < 1 || checks[i].Pending || !data.TrySample(data.StartTime, steps * dt, out var sample)) continue;
+                if (steps < 1 || checks[i].Pending || !data.TrySample(data.SourcePhysicsTime + steps * (double)dt, 0f, out var sample)) continue;
                 checks[i].Sample = sample;
                 checks[i].Step = data.SourceStep + steps;
                 checks[i].Pending = true;
@@ -61,7 +62,7 @@ namespace ThreeC.CharacterBehavior
             {
                 if (SameBehavior(origin, sample)) continue;
                 transition = sample;
-                transitionStep = data.SourceStep + i;
+                transitionStep = data.SourceStep + (long)Math.Ceiling((data.StartTime - data.SourcePhysicsTime) / dt + i - 0.00001d);
                 deadline = transitionStep + Mathf.CeilToInt(0.25f / dt);
                 transitionPending = true;
                 break;

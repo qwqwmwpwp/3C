@@ -36,19 +36,21 @@ namespace ThreeC.AnimationCamera.Editor
             GetWindow<UmaCharacterTestWindow>("Uma 角色测试");
         }
 
+        // 初始化窗口，并在角色未选时尝试填入默认资源。
         private void OnEnable()
         {
             minSize = new Vector2(430f, 390f);
-            serializedWindow = new SerializedObject(this);
             if (cameraTimeline == null)
                 cameraTimeline = AssetDatabase.LoadAssetAtPath<CameraTimelineAsset>(DefaultTimeline);
-            FindImportedCharacter();
+            FillMissingSelection();
+            serializedWindow = new SerializedObject(this);
             validationDirty = true;
         }
 
+        // 资源变化时为等待导入的窗口重新寻找角色，并刷新验证结果。
         private void OnProjectChange()
         {
-            if (characterPrefab == null) FindImportedCharacter();
+            FillMissingSelection();
             validationDirty = true;
             Repaint();
         }
@@ -113,21 +115,31 @@ namespace ThreeC.AnimationCamera.Editor
             EditorGUILayout.EndScrollView();
         }
 
-        private void FindImportedCharacter()
+        // 仅在角色尚未选择时查找默认角色，并填补空的动作列表。
+        private void FillMissingSelection()
         {
-            if (!AssetDatabase.IsValidFolder(CharacterArtFolder)) return;
+            if (characterPrefab != null)
+                return;
+
+            characterPrefab = FindImportedCharacter();
+            if (characterPrefab != null && (clips == null || clips.Length == 0))
+                clips = CollectClips(characterPrefab);
+        }
+
+        // 在导入目录中查找唯一可自动选择的角色资源。
+        private static GameObject FindImportedCharacter()
+        {
+            if (!AssetDatabase.IsValidFolder(CharacterArtFolder)) return null;
             string[] candidates = AssetDatabase.FindAssets("Character t:Prefab", new[] { CharacterArtFolder });
             GameObject found = null;
             for (int i = 0; i < candidates.Length; i++)
             {
                 string path = AssetDatabase.GUIDToAssetPath(candidates[i]);
                 if (!string.Equals(Path.GetFileName(path), "Character.prefab", StringComparison.OrdinalIgnoreCase)) continue;
-                if (found != null) return; // 存在多个角色时，由用户明确选择目标。
+                if (found != null) return null; // 存在多个角色时，由用户明确选择目标。
                 found = AssetDatabase.LoadAssetAtPath<GameObject>(path);
             }
-            if (found == null) return;
-            characterPrefab = found;
-            clips = CollectClips(found);
+            return found;
         }
 
         private static AnimationClip[] CollectClips(GameObject prefab)

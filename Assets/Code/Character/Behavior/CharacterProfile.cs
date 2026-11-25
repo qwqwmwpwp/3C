@@ -1,9 +1,9 @@
 using System;
 using UnityEngine;
-using UnityEngine.Serialization;
 
 namespace ThreeC.CharacterBehavior
 {
+    /// <summary>汇总角色共享的行为、物理、动画与预测资产。</summary>
     [CreateAssetMenu(menuName = "3C/角色配置", fileName = "CharacterProfile")]
     public sealed class CharacterProfile : ScriptableObject
     {
@@ -13,36 +13,24 @@ namespace ThreeC.CharacterBehavior
         [SerializeField, InspectorName("04 动画表现")] private CharacterAnimationConfig animationConfig;
         [SerializeField, InspectorName("05 移动预测")] private CharacterForecastConfig forecastConfig;
 
-        // 旧角色使用内嵌参数；每个部分独立切换到对应的资产。
-        [FormerlySerializedAs("Movement"), SerializeField, HideInInspector] private CharacterLocomotionSettings legacyMovement = new CharacterLocomotionSettings();
-        [FormerlySerializedAs("Motor"), SerializeField, HideInInspector] private CharacterMotorSettings legacyMotor = new CharacterMotorSettings();
-        [FormerlySerializedAs("Forecast"), SerializeField, HideInInspector] private CharacterForecastSettings legacyForecast = new CharacterForecastSettings();
-        [FormerlySerializedAs("dash"), SerializeField, HideInInspector] private CharacterDashSettings legacyDash = new CharacterDashSettings();
-        [FormerlySerializedAs("LightAttack"), SerializeField, HideInInspector] private LegacyAttackSettings legacyAttack;
-        [FormerlySerializedAs("Gaits"), SerializeField, HideInInspector] private CharacterGaitSettings legacyGaits = new CharacterGaitSettings();
-        [FormerlySerializedAs("Presentation"), SerializeField, HideInInspector] private CharacterPresentationSettings legacyPresentation = new CharacterPresentationSettings();
-        [FormerlySerializedAs("MotionDatabase"), SerializeField, HideInInspector] private CharacterMotionDatabase legacyMotionDatabase;
-        [FormerlySerializedAs("PlaybackLibrary"), SerializeField, HideInInspector] private CharacterMotionDatabase legacyPlaybackLibrary;
+        [NonSerialized] private CharacterForecastSettings runtimeForecast = new CharacterForecastSettings(); // 未绑定预测资产时供公开属性读写。
 
-        internal CharacterLocomotionSettings Movement => movementConfig ? movementConfig.Movement : legacyMovement;
-        internal CharacterMotorSettings Motor => movementConfig ? movementConfig.Motor : legacyMotor;
-        internal AnimationModule AnimationModules => animationConfig ? animationConfig.Modules : null;
-        internal CharacterGaitSettings Gaits => animationConfig ? animationConfig.Gaits : legacyGaits;
-        internal CharacterPresentationSettings Presentation => animationConfig ? animationConfig.Presentation : legacyPresentation;
-        internal CharacterMotionDatabase MotionDatabase => animationConfig ? animationConfig.MotionDatabase : legacyMotionDatabase;
-        private CharacterMotionDatabase PlaybackLibrary => animationConfig ? animationConfig.PlaybackLibrary : legacyPlaybackLibrary;
-        internal CharacterMotionDatabase EffectivePlayback => PlaybackLibrary ? PlaybackLibrary : MotionDatabase;
-        internal CharacterLightAttackSettings LightAttack => behaviorConfig ? behaviorConfig.Attack : legacyAttack?.ReadMoves();
-        internal CharacterComboRoutes ComboRoutes => comboTable ? comboTable.Routes : behaviorConfig ? null : legacyAttack?.Routes;
+        internal CharacterLocomotionSettings Movement => movementConfig ? movementConfig.Movement : null;
+        internal CharacterMotorSettings Motor => movementConfig ? movementConfig.Motor : null;
+        internal CharacterAnimationConfig AnimationConfig => animationConfig;
+        internal CharacterMotionDatabase EffectivePlayback => animationConfig ? animationConfig.PlaybackLibrary : null;
+        internal CharacterLightAttackSettings LightAttack => behaviorConfig ? behaviorConfig.Attack : null;
+        internal CharacterComboRoutes ComboRoutes => comboTable ? comboTable.Routes : null;
         internal CharacterGuardSettings Guard => behaviorConfig ? behaviorConfig.Guard : null;
         internal CharacterMoveGait DefaultGait => behaviorConfig ? behaviorConfig.DefaultGait : CharacterMoveGait.Run;
+        /// <summary>读取或设置移动预测数值，未绑定预测资产时仅在当前实例保留。</summary>
         public CharacterForecastSettings Forecast
         {
-            get => forecastConfig ? forecastConfig.Forecast : legacyForecast;
+            get => forecastConfig ? forecastConfig.Forecast : runtimeForecast;
             set
             {
                 if (forecastConfig) forecastConfig.Forecast = value;
-                else legacyForecast = value;
+                else runtimeForecast = value;
             }
         }
 
@@ -50,69 +38,38 @@ namespace ThreeC.CharacterBehavior
         internal void ReadMovement(CharacterMovementSettings result)
         {
             var movement = Movement;
-            var dash = behaviorConfig ? behaviorConfig.Dash : legacyDash;
-            result.WalkSpeed = movement.WalkSpeed;
-            result.MoveSpeed = movement.MoveSpeed;
-            result.SprintSpeed = movement.SprintSpeed;
-            result.MoveTurnSpeed = movement.MoveTurnSpeed;
-            result.DashSpeed = dash.DashSpeed;
-            result.DashDuration = dash.DashDuration;
-            result.DashCooldown = dash.DashCooldown;
-            result.DashStaminaCost = dash.DashStaminaCost;
-            result.InitialStamina = dash.InitialStamina;
+            var dash = behaviorConfig ? behaviorConfig.Dash : null;
+            result.WalkSpeed = movement?.WalkSpeed ?? CharacterMovementSettings.DefaultWalkSpeed;
+            result.MoveSpeed = movement?.MoveSpeed ?? CharacterMovementSettings.DefaultMoveSpeed;
+            result.SprintSpeed = movement?.SprintSpeed ?? CharacterMovementSettings.DefaultSprintSpeed;
+            result.MoveTurnSpeed = movement?.MoveTurnSpeed ?? CharacterMovementSettings.DefaultMoveTurnSpeed;
+            result.DashSpeed = dash?.DashSpeed ?? CharacterMovementSettings.DefaultDashSpeed;
+            result.DashDuration = dash?.DashDuration ?? CharacterMovementSettings.DefaultDashDuration;
+            result.DashCooldown = dash?.DashCooldown ?? CharacterMovementSettings.DefaultDashCooldown;
+            result.DashStaminaCost = dash?.DashStaminaCost ?? CharacterMovementSettings.DefaultDashStaminaCost;
+            result.InitialStamina = dash?.InitialStamina ?? CharacterMovementSettings.DefaultInitialStamina;
         }
 
+        // 绑定此角色配置的动画资产，供编辑器检查资源与行为映射。
         internal CharacterAnimationConfiguration BindAnimation(CharacterModelBindings model, CharacterProfileOverrides overrides,
             AnimationModuleAssembly modules = null)
         {
-            if (animationConfig) return animationConfig.Bind(model, overrides, LightAttack, modules);
-            return CharacterAnimationConfig.Bind(legacyPresentation, legacyGaits, legacyMotionDatabase, EffectivePlayback,
-                LightAttack, model, overrides, modules);
+            if (!animationConfig) throw new ArgumentException($"角色配置 {name} 缺少动画表现配置。");
+            return animationConfig.Bind(model, overrides, LightAttack, modules);
         }
 
+        // 从基础步态的跑步循环读取半周期步距，没有有效轨道时使用物理默认值。
         internal float RunFootfallDistance()
         {
             var library = EffectivePlayback;
             if (!library) return CharacterMotorSettings.DefaultFootfallDistance;
-            string runState = Presentation?.moveStateName;
-            if (AnimationModules)
-            {
-                try { runState = AnimationModuleAssembly.Resolve(AnimationModules).Gait?.RunState; }
-                catch (ArgumentException) { return CharacterMotorSettings.DefaultFootfallDistance; } // 动画宿主报告配置错误。
-            }
+            string runState;
+            try { runState = animationConfig.ResolveModules().Gait?.RunState; }
+            catch (ArgumentException) { return CharacterMotorSettings.DefaultFootfallDistance; } // 动画宿主报告配置错误。
             var track = library.FindBakedCycle(runState);
             return track != null && track.IsReady ? track.ReferenceSpeed * track.Seconds * 0.5f
                 : CharacterMotorSettings.DefaultFootfallDistance;
         }
-    }
-
-    [Serializable]
-    internal sealed class LegacyAttackSettings : CharacterAttackMoveSettings
-    {
-        public CharacterBehaviorPhase DashInterruptPhases = CharacterBehaviorPhase.Startup | CharacterBehaviorPhase.Recovery;
-        public LegacyAttackCombo Combo = new LegacyAttackCombo();
-
-        internal CharacterComboRoutes Routes => Combo ?? new CharacterComboRoutes();
-
-        internal CharacterLightAttackSettings ReadMoves()
-        {
-            var extra = Combo ?? new LegacyAttackCombo();
-            return new CharacterLightAttackSettings
-            {
-                DashInterruptPhases = DashInterruptPhases,
-                Moves = new CharacterAttackComboSettings { LightOne = this, LightTwo = extra.LightTwo, Heavy = extra.Heavy },
-                AllowWithoutClip = extra.AllowWithoutClip, LightSeconds = extra.LightSeconds, HeavySeconds = extra.HeavySeconds
-            };
-        }
-    }
-
-    [Serializable]
-    internal sealed class LegacyAttackCombo : CharacterComboRoutes
-    {
-        public CharacterAttackMoveSettings LightTwo = new CharacterAttackMoveSettings();
-        public CharacterAttackMoveSettings Heavy = new CharacterAttackMoveSettings();
-        public bool AllowWithoutClip;
-        public float LightSeconds = 0.6f, HeavySeconds = 0.8f;
     }
 
     [Serializable]

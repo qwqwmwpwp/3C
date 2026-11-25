@@ -6,6 +6,7 @@ namespace ThreeC.CharacterBehavior
     [CreateAssetMenu(menuName = "3C/基础动画数据组")]
     public sealed class CharacterMotionGroups : ScriptableObject
     {
+        [SerializeField, InspectorName("特征布局")] internal GroundFeatureSchema Schema;
         [SerializeField, InspectorName("身体分层")] internal CharacterClipLayer[] Layers;
         [SerializeField, InspectorName("直接播放的基础动作")] internal CharacterClipState[] Bindings;
         [SerializeField, InspectorName("地面动作组")] internal GroundAnimationGroup[] Groups;

@@ -16,4 +16,16 @@ MonoBehaviour:
   matchSwitchMargin: 0.12
   matchReverseHold: 0.08
   matchTurnAngle: 55
+  candidates: {fileID: 11400000, guid: f71b5f5e179f45e2a9501b74a39e028a, type: 2}
   database: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+  costs:
+    HistorySeconds: 0.1
+    HistoryWeight: 0.3
+    PelvisWeight: 1.5
+    NearWindow: 0.15
+    FarWindow: 0.3
+  paceLimits:
+    Walk: {x: 0.8, y: 1.2}
+    Run: {x: 0.8, y: 1.2}
+    Sprint: {x: 0.8, y: 1.2}
+    ExcessPenalty: 1

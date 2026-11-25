@@ -1,0 +1,139 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ace9deba074043518054724d9b573aff, type: 3}
+  m_Name: 盾牌候选条件
+  m_EditorClassIdentifier:
+  NoMatch: 0
+  Rules:
+  - Name: 循环
+    Priority: 10
+    Use: 1
+    Gait: 0
+    Support: 0
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 0
+    Phases: 127
+    Speed: {x: 0, y: 100}
+    SignedAngle: {x: -180, y: 180}
+    Groups:
+    - 跑步循环
+    - 步行循环
+    - 冲刺循环
+    - 步行左转32度
+    - 步行右转32度
+    - 跑步左转32度
+    - 跑步右转32度
+    - 冲刺左转32度
+    - 冲刺右转32度
+    Features: 15
+    Empty: 0
+  - Name: 起步
+    Priority: 10
+    Use: 2
+    Gait: 0
+    Support: 0
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 0
+    Phases: 127
+    Speed: {x: 0, y: 100}
+    SignedAngle: {x: -180, y: 180}
+    Groups:
+    - 跑步循环
+    - 步行循环
+    - 冲刺循环
+    - 步行起步
+    - 步行左转32度
+    - 步行右转32度
+    - 跑步起步
+    - 跑步左转32度
+    - 跑步右转32度
+    - 冲刺起步
+    - 冲刺左转32度
+    - 冲刺右转32度
+    - 步行转跑步
+    - 跑步转步行
+    - 跑步转冲刺
+    - 冲刺转跑步
+    Features: 15
+    Empty: 0
+  - Name: 转向
+    Priority: 10
+    Use: 3
+    Gait: 0
+    Support: 0
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 0
+    Phases: 127
+    Speed: {x: 0, y: 100}
+    SignedAngle: {x: -180, y: 180}
+    Groups:
+    - 跑步左转90度
+    - 跑步右转90度
+    - 步行左转90度
+    - 步行右转90度
+    - 步行左转180度
+    - 步行右转180度
+    - 跑步左转180度
+    - 跑步右转180度
+    - 冲刺左转90度
+    - 冲刺右转90度
+    - 冲刺左转180度
+    - 冲刺右转180度
+    Features: 15
+    Empty: 0
+  - Name: 收步
+    Priority: 10
+    Use: 4
+    Gait: 0
+    Support: 0
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 0
+    Phases: 127
+    Speed: {x: 0, y: 100}
+    SignedAngle: {x: -180, y: 180}
+    Groups:
+    - 跑步收步
+    - 步行收步
+    - 冲刺收步
+    Features: 15
+    Empty: 0
+  - Name: 换步
+    Priority: 10
+    Use: 5
+    Gait: 0
+    Support: 0
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 0
+    Phases: 127
+    Speed: {x: 0, y: 100}
+    SignedAngle: {x: -180, y: 180}
+    Groups:
+    - 跑步循环
+    - 步行循环
+    - 冲刺循环
+    - 步行左转32度
+    - 步行右转32度
+    - 跑步左转32度
+    - 跑步右转32度
+    - 冲刺左转32度
+    - 冲刺右转32度
+    - 步行转跑步
+    - 跑步转步行
+    - 跑步转冲刺
+    - 冲刺转跑步
+    Features: 15
+    Empty: 0

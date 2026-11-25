@@ -14,27 +14,38 @@ namespace ThreeC.CharacterBehavior
         /// <summary>返回世界 X/Z 平面位移，单位为 Unity 单位，保留输入方向的幅度。</summary>
         public override Vector2 Update(CharacterBehaviorContext context) => Update(context, context.DeltaTime);
 
-        internal Vector2 Update(CharacterBehaviorContext context, float seconds)
+        // 按可用时间计算普通移动，并应用活动行为给出的目标速度限制。
+        internal Vector2 Update(CharacterBehaviorContext context, float seconds, float speedLimit = float.PositiveInfinity)
         {
             if (!IsActive)
                 return Vector2.zero;
 
-            return context.Input.Direction * (GetRequestedSpeed(context) * seconds);
+            return TargetVelocity(context.Input, context.Settings, speedLimit) * seconds;
         }
 
-        internal static float GetRequestedSpeed(CharacterBehaviorContext context)
+        // 根据持续方向、步态与许可限速计算本段普通移动的世界平面速度。
+        internal static Vector2 TargetVelocity(in CharacterInputSnapshot input, CharacterMovementSettings settings, float speedLimit)
         {
-            if (context.Input.Direction == Vector2.zero)
-                return 0f;
+            if (input.Direction == Vector2.zero) return Vector2.zero;
+            var velocity = input.Direction * SpeedForGait(settings, input.Gait);
+            return float.IsPositiveInfinity(speedLimit) ? velocity : Vector2.ClampMagnitude(velocity, speedLimit);
+        }
 
-            switch (context.Input.Gait)
+        // 本步没有方向输入时保持静止，否则使用当前档位的有效目标速度。
+        internal static float GetRequestedSpeed(CharacterBehaviorContext context) =>
+            context.Input.Direction == Vector2.zero ? 0f : SpeedForGait(context.Settings, context.Input.Gait);
+
+        // 按步态读取非负速度，非法浮点值回退到该档默认值，供实走和预测共同使用。
+        internal static float SpeedForGait(CharacterMovementSettings settings, CharacterMoveGait gait)
+        {
+            switch (gait)
             {
                 case CharacterMoveGait.Walk:
-                    return InputMath.NonNegative(context.Settings.WalkSpeed, CharacterMovementSettings.DefaultWalkSpeed);
+                    return InputMath.NonNegative(settings.WalkSpeed, CharacterMovementSettings.DefaultWalkSpeed);
                 case CharacterMoveGait.Sprint:
-                    return InputMath.NonNegative(context.Settings.SprintSpeed, CharacterMovementSettings.DefaultSprintSpeed);
+                    return InputMath.NonNegative(settings.SprintSpeed, CharacterMovementSettings.DefaultSprintSpeed);
                 default:
-                    return InputMath.NonNegative(context.Settings.MoveSpeed, CharacterMovementSettings.DefaultMoveSpeed);
+                    return InputMath.NonNegative(settings.MoveSpeed, CharacterMovementSettings.DefaultMoveSpeed);
             }
         }
     }

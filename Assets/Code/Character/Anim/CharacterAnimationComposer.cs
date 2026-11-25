@@ -1,52 +1,33 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    internal readonly struct CharacterBodyConflict
-    {
-        public readonly string Rejected, Holder, Reason;
-
-        public CharacterBodyConflict(string rejected, string holder, string reason)
-        {
-            Rejected = rejected;
-            Holder = holder;
-            Reason = reason;
-        }
-    }
-
     /// <summary>一次预览中的两个部位持有者。全身实例在两项检查全部通过后同时占用两处。</summary>
     internal struct CharacterBodyClaims
     {
         private CharacterAnimationDemand upper, lower;
-        private CharacterBodyConflict conflict;
 
+        // 在优先级和搭档规则均允许时，一次提交需求申请的所有部位。
         public bool TryClaim(in CharacterAnimationDemand demand, in CharacterAnimationDemand baseline)
         {
-            bool needsUpper = demand.Region != CharacterAnimationBodyRegion.LowerBody;
-            bool needsLower = demand.Region != CharacterAnimationBodyRegion.UpperBody;
-            if (needsUpper && upper.IsValid) return Reject(demand, upper, "上身已被占用");
-            if (needsLower && lower.IsValid) return Reject(demand, lower, "下身已被占用");
+            bool needsUpper = demand.Source != CharacterAnimationSource.LowerBody;
+            bool needsLower = demand.Source != CharacterAnimationSource.UpperBody;
+            if (needsUpper && upper.IsValid || needsLower && lower.IsValid) return false;
             if (baseline.IsValid && (demand.Priority < baseline.Priority ||
                 baseline.Key == CharacterAnimationIntentConverter.DashKey && !demand.Precedes(baseline)))
-                return Reject(demand, baseline, "基础动作优先");
+                return false;
             var partner = needsUpper ? lower : upper;
             if (partner.IsValid && (!partner.Rule.Partners.Allows(demand.Key) || !demand.Rule.Partners.Allows(partner.Key)))
-                return Reject(demand, partner, "上下身动作不兼容");
+                return false;
             if (needsUpper) upper = demand;
             if (needsLower) lower = demand;
             return true;
         }
 
-        private bool Reject(in CharacterAnimationDemand demand, in CharacterAnimationDemand holder, string reason)
-        {
-            if (conflict.Rejected == null) conflict = new CharacterBodyConflict(demand.Key, holder.Key, reason);
-            return false;
-        }
-
+        // 汇总本次仲裁的基础动作和两个部位持有者。
         public CharacterAnimationComposition Compose(in CharacterAnimationDemand baseline) =>
-            new CharacterAnimationComposition(baseline, upper, lower, conflict);
+            new CharacterAnimationComposition(baseline, upper, lower);
     }
 
     /// <summary>仲裁结果只保留上下身持有者。空闲区域从持续更新的默认姿势取样。</summary>
@@ -54,25 +35,20 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterAnimationDemand baseline;
         public readonly CharacterAnimationDemand UpperOwner, LowerOwner;
-        public CharacterAnimationDemand FullBody => UpperOwner.IsValid && UpperOwner.Region == CharacterAnimationBodyRegion.FullBody ? UpperOwner : baseline;
-        public CharacterAnimationDemand Overlay => UpperOwner.Region == CharacterAnimationBodyRegion.FullBodyOverlay ? UpperOwner : default;
-        public CharacterAnimationDemand UpperBody => UpperOwner.Region == CharacterAnimationBodyRegion.UpperBody ? UpperOwner : default;
-        public CharacterAnimationDemand LowerBody => LowerOwner.Region == CharacterAnimationBodyRegion.LowerBody ? LowerOwner : default;
-        public CharacterBodyConflict Conflict { get; }
-        /// <summary>胸、左臂、右臂各自允许的惯性。只合并最终获选需求，局部层按请求权重参与。</summary>
-        public Vector3 InertiaAllowance => Vector3.one - Vector3.Max(FullBody.WeightedInertiaSuppression * (1f - Overlay.Weight) +
-            Overlay.WeightedInertiaSuppression * Overlay.Coverage,
-            Vector3.Max(UpperBody.WeightedInertiaSuppression * UpperBody.Coverage, LowerBody.WeightedInertiaSuppression * LowerBody.Coverage));
-
+        public CharacterAnimationDemand FullBody => baseline;
+        public CharacterAnimationDemand Overlay => UpperOwner.Source == CharacterAnimationSource.FullBodyOverlay ? UpperOwner : default;
+        public CharacterAnimationDemand UpperBody => UpperOwner.Source == CharacterAnimationSource.UpperBody ? UpperOwner : default;
+        public CharacterAnimationDemand LowerBody => LowerOwner.Source == CharacterAnimationSource.LowerBody ? LowerOwner : default;
+        // 保存基础动作和已获准占用两个部位的动作。
         public CharacterAnimationComposition(CharacterAnimationDemand baseline, CharacterAnimationDemand upperOwner,
-            CharacterAnimationDemand lowerOwner, CharacterBodyConflict conflict)
+            CharacterAnimationDemand lowerOwner)
         {
             this.baseline = baseline;
             UpperOwner = upperOwner;
             LowerOwner = lowerOwner;
-            Conflict = conflict;
         }
 
+        // 保留仲裁归属，使用播放计划确定的生效权重。
         public CharacterAnimationComposition WithPlaybackWeights(in CharacterAnimationPlaybackPlan plan)
         {
             var upper = UpperOwner;
@@ -83,7 +59,7 @@ namespace ThreeC.CharacterBehavior
                 if (UpperBody.IsValid) upper = plan.UpperBody.Demand;
                 if (LowerBody.IsValid) lower = plan.LowerBody.Demand;
             }
-            return new CharacterAnimationComposition(baseline, upper, lower, Conflict);
+            return new CharacterAnimationComposition(baseline, upper, lower);
         }
     }
 
@@ -253,17 +229,18 @@ namespace ThreeC.CharacterBehavior
                 ? CreateDemand(request, rule, 0) : default;
         }
 
+        // 将请求转换为用于仲裁的需求，基础姿势始终以完整权重播放。
         private static CharacterAnimationDemand CreateDemand(CharacterAnimationRequest request,
             CharacterAnimationRule rule, long order, CharacterActionPlayback playback = null)
         {
-            float weight = rule.Region == CharacterAnimationBodyRegion.FullBody ? 1f : ClampUnit(request.Weight);
+            float weight = rule.Source == CharacterAnimationSource.Baseline ? 1f : ClampUnit(request.Weight);
             float? start = request.StartNormalizedTime.HasValue ? ClampUnit(request.StartNormalizedTime.Value) : (float?)null;
             return new CharacterAnimationDemand(rule, request, weight, start, order, playback);
         }
 
         private static float ClampUnit(float value) => Math.Min(1f, InputMath.NonNegative(value, 0f));
 
-        // 更换控制器时重建选中历史，保留持续需求和实例编号。
+        // 播放资源重绑时重建选中历史，保留持续请求和实例编号。
         public void ResetSelection()
         {
             for (int i = rankedKeys.Count - 1; i >= 0; i--)

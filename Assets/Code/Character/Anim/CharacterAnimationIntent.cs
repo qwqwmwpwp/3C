@@ -3,14 +3,16 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>需求覆盖的身体范围；局部动画由 Animator 层上的 AvatarMask 限定骨骼。</summary>
+    /// <summary>模块中可以申请的身体范围，局部动作使用动画库中的对应 AvatarMask。</summary>
     public enum CharacterAnimationBodyRegion
     {
-        [InspectorName("上下身（同一动作）")] FullBody,
-        [InspectorName("上半身")] UpperBody,
-        [InspectorName("下半身")] LowerBody,
-        [InspectorName("全身接管（旧配置）")] FullBodyOverlay
+        [InspectorName("上下身（同一动作）")] FullBody = 0,
+        [InspectorName("上半身")] UpperBody = 1,
+        [InspectorName("下半身")] LowerBody = 2
     }
+
+    // 区分基础姿势与动作覆盖，给上下身和共用的全身动作定位各自的混合源。
+    internal enum CharacterAnimationSource { Baseline, UpperBody, LowerBody, FullBodyOverlay }
 
     public enum CharacterPartnerMode
     {
@@ -36,7 +38,7 @@ namespace ThreeC.CharacterBehavior
     /// <summary>需求实际获选后被其他动作压制时的处理；尚未获选的需求继续等待。</summary>
     public enum CharacterAnimationInterruptionPolicy
     {
-        [InspectorName("恢复时重播（兼容默认）")] Replay,
+        [InspectorName("恢复时重播")] Replay,
         [InspectorName("被打断后取消")] Cancel
     }
 
@@ -45,7 +47,7 @@ namespace ThreeC.CharacterBehavior
     {
         public string SemanticKey { get; }
         public long InstanceId { get; }
-        /// <summary>局部覆盖权重，范围 0 至 1；全身基底始终以完整权重播放。</summary>
+        /// <summary>动作覆盖权重，范围 0 至 1。</summary>
         public float Weight { get; }
         /// <summary>可选归一化起点；null 使用资源映射配置，仅在新实例或重新选中时应用。</summary>
         public float? StartNormalizedTime { get; }
@@ -69,7 +71,7 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>此动作获选时，对各分区惯性的抑制比例。旧映射默认全部允许。</summary>
+    /// <summary>动作获选时对各骨骼分区的惯性抑制比例。</summary>
     [Serializable]
     public struct CharacterActionInertiaSuppression
     {
@@ -95,9 +97,9 @@ namespace ThreeC.CharacterBehavior
         internal CharacterActionHandoffSettings Handoff = new CharacterActionHandoffSettings();
         [Tooltip("数值越大越优先。同优先级先处理全身申请，同范围再按新实例提交顺序决定。")]
         public int Priority = 50;
-        [Tooltip("资源完整状态路径，必须存在于所选部位的 Animator 层中。")]
+        [Tooltip("基础动画数据组中烘焙的完整状态路径。")]
         public string StateName;
-        [InspectorName("移动姿势"), Tooltip("持续动作在实际移动时使用的同层状态。留空时沿用默认姿势。")]
+        [InspectorName("移动姿势"), Tooltip("持续动作在实际移动时使用的片段状态。留空时沿用默认姿势。")]
         public string MovingStateName;
         [Range(0f, 1f), Tooltip("新实例或被压制后恢复时的归一化播放起点；运行时请求可覆盖此值。")]
         public float StartNormalizedTime;
@@ -112,46 +114,27 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("分区惯性抑制"), Tooltip("动作获选时按其权重抑制相应部位的惯性。0 完全保留，1 完全抑制。")]
         public CharacterActionInertiaSuppression InertiaSuppression;
 
-        internal static CharacterAnimationActionSettings[] CreateDefaults()
-        {
-            return new[]
-            {
-                new CharacterAnimationActionSettings { Key = "upper.idle", Region = CharacterAnimationBodyRegion.UpperBody,
-                    StateName = "Upper Body.idle" },
-                new CharacterAnimationActionSettings { Key = "upper.move", Region = CharacterAnimationBodyRegion.UpperBody,
-                    StateName = "Upper Body.move" },
-                new CharacterAnimationActionSettings { Key = "upper.dash", Region = CharacterAnimationBodyRegion.UpperBody,
-                    StateName = "Upper Body.dash" },
-                new CharacterAnimationActionSettings { Key = "lower.idle", Region = CharacterAnimationBodyRegion.LowerBody,
-                    StateName = "Lower Body.idle" },
-                new CharacterAnimationActionSettings { Key = "lower.move", Region = CharacterAnimationBodyRegion.LowerBody,
-                    StateName = "Lower Body.move" },
-                new CharacterAnimationActionSettings { Key = "lower.dash", Region = CharacterAnimationBodyRegion.LowerBody,
-                    StateName = "Lower Body.dash" },
-                new CharacterAnimationActionSettings { Key = "full.dash", Region = CharacterAnimationBodyRegion.FullBody,
-                    Priority = 100, StateName = "Base Layer.dash" }
-            };
-        }
     }
 
     /// <summary>仲裁规则只描述语义、身体范围、优先级与中断方式，不包含资源信息。</summary>
     internal sealed class CharacterAnimationRule
     {
         public string Key { get; }
-        public CharacterAnimationBodyRegion Region { get; }
+        public CharacterAnimationSource Source { get; }
         public int Priority { get; }
         public CharacterAnimationInterruptionPolicy InterruptionPolicy { get; }
         public Vector3 InertiaSuppression { get; }
         public CharacterActionPartners Partners { get; }
         public CharacterActionHandoffSettings Handoff { get; }
-        public bool WholeBody => Region == CharacterAnimationBodyRegion.FullBody || Region == CharacterAnimationBodyRegion.FullBodyOverlay;
+        public bool WholeBody => Source == CharacterAnimationSource.Baseline || Source == CharacterAnimationSource.FullBodyOverlay;
 
-        public CharacterAnimationRule(string key, CharacterAnimationBodyRegion region, int priority,
+        // 由语义键和已归一的播放源生成可用于仲裁的规则。
+        public CharacterAnimationRule(string key, CharacterAnimationSource source, int priority,
             CharacterAnimationInterruptionPolicy interruptionPolicy = CharacterAnimationInterruptionPolicy.Replay,
             Vector3 inertiaSuppression = default, CharacterActionPartners partners = default, CharacterActionHandoffSettings handoff = null)
         {
             Key = key;
-            Region = region;
+            Source = source;
             Priority = priority;
             InterruptionPolicy = interruptionPolicy;
             InertiaSuppression = inertiaSuppression;
@@ -167,20 +150,19 @@ namespace ThreeC.CharacterBehavior
         public CharacterAnimationRule Rule { get; }
         public string Key => Rule?.Key;
         public long InstanceId { get; }
-        public CharacterAnimationBodyRegion Region => Rule?.Region ?? CharacterAnimationBodyRegion.FullBody;
+        public CharacterAnimationSource Source => Rule?.Source ?? CharacterAnimationSource.Baseline;
         public int Priority => Rule.Priority;
         private readonly float weight;
         internal float MaximumWeight => weight;
         public CharacterActionTiming Timing { get; private set; }
         public float EntryCoverage { get; private set; }
-        internal bool HasHandoff => Region != CharacterAnimationBodyRegion.FullBody && Timing.Handoff.Valid;
+        internal bool HasHandoff => Source != CharacterAnimationSource.Baseline && Timing.Handoff.Valid;
         internal float Coverage => HasHandoff
             ? Timing.Handoff.WeightAt(Timing.SamplePhase.GetValueOrDefault(), EntryCoverage) : 1f;
         public float Weight => weight * Coverage;
         public float? StartNormalizedTime { get; }
         public CharacterAnimationInterruptionPolicy InterruptionPolicy => Rule.InterruptionPolicy;
         public long SubmissionOrder { get; }
-        public Vector3 WeightedInertiaSuppression { get; }
         public CharacterActionPlayback Playback { get; }
         public CharacterLocomotionVariant LocomotionVariant { get; }
         public bool IsValid => Rule != null;
@@ -208,6 +190,7 @@ namespace ThreeC.CharacterBehavior
             return result;
         }
 
+        // 按规则保存一次动作实例的请求权重、起点和提交顺序。
         public CharacterAnimationDemand(CharacterAnimationRule rule, CharacterAnimationRequest request,
             float weight, float? startNormalizedTime, long submissionOrder, CharacterActionPlayback playback = null)
         {
@@ -216,7 +199,6 @@ namespace ThreeC.CharacterBehavior
             this.weight = weight;
             Timing = default;
             EntryCoverage = 0f;
-            WeightedInertiaSuppression = rule.InertiaSuppression * weight;
             StartNormalizedTime = startNormalizedTime;
             SubmissionOrder = submissionOrder;
             Playback = playback;

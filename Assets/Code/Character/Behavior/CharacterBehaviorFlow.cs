@@ -4,109 +4,105 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>世界 XZ 平面移动与冲刺配置，体力初值在初始化或显式重置时读取。</summary>
-    [Serializable]
-    public sealed class CharacterMovementSettings : CharacterLocomotionSettings
-    {
-        internal CharacterMovementSettings Snapshot() => (CharacterMovementSettings)MemberwiseClone();
-        internal const float DefaultDashSpeed = 16f;
-        internal const float DefaultDashDuration = 0.2f;
-        internal const float DefaultDashCooldown = 0.5f;
-        internal const float DefaultInitialStamina = 100f;
-        internal const float DefaultDashStaminaCost = 25f;
-
-        [Min(0f), Tooltip("冲刺速度，单位为 Unity 单位/秒。大于 0 时允许发起冲刺，获准时锁定本次速度。")]
-        public float DashSpeed = DefaultDashSpeed;
-        [Min(0f), Tooltip("单次冲刺持续时间，单位为秒。大于 0 时允许发起冲刺，最后一步按剩余时间计算位移。")]
-        public float DashDuration = DefaultDashDuration;
-        [Min(0f), Tooltip("冲刺冷却时间，单位为秒，最小为 0，从批准冲刺时开始计时。")]
-        public float DashCooldown = DefaultDashCooldown;
-        [Min(0f), Tooltip("初始化或显式重置时使用的体力值，最小为 0。当前流程仅消费体力，暂停期间保留剩余值。")]
-        public float InitialStamina = DefaultInitialStamina;
-        [Min(0f), Tooltip("每次批准冲刺时扣除的体力，最小为 0。剩余体力达到此值才允许冲刺。")]
-        public float DashStaminaCost = DefaultDashStaminaCost;
-    }
-
-    /// <summary>每个固定步先释放结束的行为，再按优先级批准请求并执行。
-    /// 待机发起的基础移动优先级最低，已获位移许可的移动按有向打断规则处理。</summary>
+    /// <summary>在同一角色时间轴协调行为准入、执行、结束和结果发布。</summary>
     public sealed class CharacterBehaviorFlow
     {
-        private readonly CharacterMovementSettings _fallbackSettings = new CharacterMovementSettings();
-        private readonly CharacterDashBehavior _dash = new CharacterDashBehavior();
-        private readonly CharacterMoveBehavior _movement = new CharacterMoveBehavior();
-        private readonly CharacterBehaviorRules _rules;
-        private CharacterBehaviorId _active;
-        private bool _initialized;
+        private readonly CharacterMovementSettings fallbackSettings = new CharacterMovementSettings();
+        private readonly CharacterBehaviorRules rules;
+        private readonly CharacterBehaviorRuntimeState runtime;
+        private readonly CharacterBehaviorLocomotion locomotion;
+        private CharacterBehaviorId active;
         private double simulationSeconds;
         private Dictionary<CharacterBehaviorId, double> grantTimes;
-        private bool _previousMoveApproved;
-        private CharacterAttackBehavior attackBehavior;
         private bool forecasting;
+        private bool unavailableForCopy;
+        internal CharacterActionAlignmentRuntime Alignment;
 
-        // 两个流程由同一角色规则工厂创建，拥有独立行为实例；预测不发布许可时刻。
-        internal void CopyStateTo(CharacterBehaviorFlow copy)
+        // 当前端点裁决后查询全部活动参与者，截取下一段可推进的角色时间。
+        internal double NextBoundary(double time, double limit, bool inputAtLimit = false)
         {
-            copy._active = _active;
-            copy._previousMoveApproved = _previousMoveApproved;
-            copy._initialized = _initialized;
-            copy.simulationSeconds = simulationSeconds;
-            copy.forecasting = true;
-            copy.grantTimes = null;
-            copy.FrameNumber = FrameNumber;
-            copy.StaminaRemaining = StaminaRemaining;
-            copy.DashCooldownRemaining = DashCooldownRemaining;
-            _movement.CopyStateTo(copy._movement);
-            for (int i = 0; i < _rules.Actions.Length; i++)
-                _rules.Actions[i].Behavior.CopyStateTo(copy._rules.Actions[i].Behavior);
+            double next = limit;
+            foreach (var rule in rules.Participants)
+            {
+                if ((active & rule.Id) == 0) continue;
+                double delay = rule.Behavior.NextBoundaryDelay;
+                double boundary = time + delay;
+                if (!(delay > 0d) || !(boundary > time))
+                    throw new InvalidOperationException($"行为 {rule.Id} 在端点裁决后没有可推进的边界，余时为 {delay} 秒。");
+
+                // 在动作自身的时间容差内，把离散输入留给该端点的首次裁决。
+                if (inputAtLimit && boundary < limit && limit - boundary <= rule.Behavior.InputEndpointTolerance)
+                    continue;
+                next = Math.Min(next, boundary);
+            }
+
+            float seconds = (float)(next - time);
+            if (!(seconds > 0f) || float.IsInfinity(seconds))
+                throw new InvalidOperationException($"角色时间段无法从 {time} 推进到 {next}。");
+            return next;
         }
 
-        /// <summary>仅在预测副本中，对上游确认已经打断的动作释放位移控制；保留体力和冷却。</summary>
-        internal void ReleasePredictionActions()
+        // 在裁决后捕获活动位移动作的精确采样器和持续输入，供之后的物理区间读取。
+        internal CharacterMotionCommand CaptureMotion(double time, CharacterBehaviorFrameResult result,
+            CharacterInputSnapshot input, Vector2 facing, Vector2 velocity, CharacterMovementSettings settings)
+            => BuildMotion(time, result, input, facing, velocity, settings, false, default);
+
+        // 在行为发布边界提交该实例的目标方案，再冻结可重复读取的命令。
+        internal CharacterMotionCommand PublishMotion(double time, CharacterBehaviorFrameResult result,
+            CharacterInputSnapshot input, Vector2 facing, Vector2 velocity, CharacterMovementSettings settings,
+            in CharacterAlignmentOrigin origin) => BuildMotion(time, result, input, facing, velocity, settings, true, origin);
+
+        // 合成许可、普通移动和动作区间采样，仅显式发布时允许写入目标方案。
+        private CharacterMotionCommand BuildMotion(double time, CharacterBehaviorFrameResult result, CharacterInputSnapshot input,
+            Vector2 facing, Vector2 velocity, CharacterMovementSettings settings, bool publish, in CharacterAlignmentOrigin origin)
         {
-            if (!forecasting) throw new InvalidOperationException("需要独立的预测副本");
-            foreach (var rule in _rules.Actions)
-                if (rule.Behavior.IsActive) rule.Behavior.Deactivate();
-            _movement.Deactivate();
-            _active = CharacterBehaviorId.None;
-            _previousMoveApproved = false;
-            ClearAttackBuffer();
+            settings ??= fallbackSettings;
+            foreach (var rule in rules.Actions)
+            {
+                if (!rule.ProvidesDisplacement || (active & rule.Id) == 0) continue;
+                var interval = rule.Behavior as ICharacterIntervalMotion;
+                if (interval == null)
+                {
+                    if (publish && Alignment.Plan != null) Alignment.Publish(null, origin, time, default);
+                    return new CharacterMotionCommand(time, result, input, settings, rule.Id, null);
+                }
+
+                float turnSpeed = InputMath.NonNegative(settings.MoveTurnSpeed, CharacterMovementSettings.DefaultMoveTurnSpeed);
+                var capture = new CharacterMotionCapture(time, facing, velocity, input, turnSpeed);
+                var motion = interval.FreezeMotion(capture);
+                if (motion == null)
+                    throw new InvalidOperationException($"行为 {rule.Id} 已声明精确区间运动，须提供冻结采样器。");
+                if (publish && (Alignment.HasTarget || Alignment.Instance != 0))
+                {
+                    Vector2 ordinary = result.MoveApproved ? CharacterMoveBehavior.TargetVelocity(input, settings, result.OrdinarySpeedLimit) : default;
+                    Alignment.Publish(motion, origin, time, ordinary);
+                }
+                if (Alignment.Plan != null && motion.AlignmentWindow.Instance == Alignment.Plan.Instance)
+                    motion = new CharacterFrozenAlignedMotion(motion, Alignment.Plan, time);
+                return new CharacterMotionCommand(time, result, input, settings, rule.Id, motion);
+            }
+            if (publish && Alignment.Plan != null) Alignment.Publish(null, origin, time, default);
+            return new CharacterMotionCommand(time, result, input, settings, CharacterBehaviorId.None, null);
         }
 
-        internal void ClearAttackBuffer() => attackBehavior?.ClearBuffer();
+        // 检查实际执行的位移动作是否需要用本段总量兼容写入运动命令。
+        internal bool HasCustomMotion(in CharacterBehaviorFrameResult result)
+        {
+            foreach (var rule in rules.Actions)
+                if (rule.ProvidesDisplacement && (result.ExecutedBehaviors & rule.Id) != 0 &&
+                    !(rule.Behavior is ICharacterIntervalMotion)) return true;
+            return false;
+        }
 
         public long FrameNumber { get; private set; }
-        public float StaminaRemaining { get; private set; }
-        public float DashCooldownRemaining { get; private set; }
+        public float StaminaRemaining => runtime.StaminaRemaining;
+        public float DashCooldownRemaining => runtime.DashCooldownRemaining;
 
-        internal static CharacterBehaviorFlow ForCharacter(CharacterBehaviorRegistration registration, bool snapshot = false)
-        {
-            var rules = new List<CharacterBehaviorRule>();
-            var interrupts = new List<CharacterBehaviorInterrupt>();
-            if (registration.Guard)
-            {
-                rules.Add(new CharacterBehaviorRule(CharacterBehaviorId.Guard, new CharacterGuardBehavior(),
-                    conflicts: CharacterBehaviorId.Dash));
-                if (registration.DashInterruptsGuard)
-                    interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Dash, CharacterBehaviorId.Guard));
-            }
-            CharacterAttackBehavior combo = null;
-            if (registration.Attack != null)
-            {
-                combo = new CharacterAttackBehavior(snapshot ? registration.Attack.Snapshot() : registration.Attack,
-                    snapshot ? registration.Routes.Snapshot() : registration.Routes);
-                rules.Add(new CharacterBehaviorRule(CharacterBehaviorId.Attack, combo,
-                    priority: 80, conflicts: registration.Guard ? CharacterBehaviorId.Guard : CharacterBehaviorId.None,
-                    providesDisplacement: true));
-                if (registration.Guard && registration.AttackInterruptsGuard)
-                    interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Attack, CharacterBehaviorId.Guard));
-                interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Attack, CharacterBehaviorId.Move));
-                var phases = registration.DashInterruptPhases;
-                if (phases != 0)
-                    interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Dash, CharacterBehaviorId.Attack, phases));
-            }
-            return new CharacterBehaviorFlow(rules.ToArray(), interrupts.ToArray()) { attackBehavior = combo };
-        }
+        // 兼容已有调用者，角色方案由装配层创建。
+        internal static CharacterBehaviorFlow ForCharacter(CharacterBehaviorRegistration registration, bool snapshot = false) =>
+            CharacterBehaviorAssembly.ForCharacter(registration, snapshot);
 
+        /// <summary>创建使用默认角色规则的行为流程。</summary>
         public CharacterBehaviorFlow() : this(null)
         {
         }
@@ -114,308 +110,211 @@ namespace ThreeC.CharacterBehavior
         /// <summary>追加行为规则。内置普通移动与冲刺保留，额外规则需要提供独立的行为实例。</summary>
         public CharacterBehaviorFlow(CharacterBehaviorRule[] additionalRules, CharacterBehaviorInterrupt[] interrupts = null)
         {
-            _rules = new CharacterBehaviorRules(_movement, _dash, additionalRules, interrupts);
+            var assembly = new CharacterBehaviorAssembly(additionalRules, interrupts);
+            rules = assembly.Rules;
+            runtime = assembly.RuntimeState;
+            locomotion = assembly.Locomotion;
         }
 
-        /// <summary>结束全部行为并按配置恢复初始资源，逻辑步编号归零；供角色创建或重生时调用。</summary>
+        // 预检整组行为后复制流程与动作状态，并让目标绑定自己的预测定义。
+        internal void CopyStateTo(CharacterBehaviorFlow copy)
+        {
+            if (copy == null || ReferenceEquals(this, copy))
+                throw new InvalidOperationException("需要独立的预测副本。");
+            if (unavailableForCopy || copy.unavailableForCopy)
+                throw new InvalidOperationException("复制尚未完成的预测副本不可复用。");
+
+            rules.ValidateCopyTarget(copy.rules);
+            copy.unavailableForCopy = true; // 私有复制或重绑失败时，此实例留在作废状态。
+            copy.active = active;
+            copy.simulationSeconds = simulationSeconds;
+            copy.Alignment = Alignment;
+            copy.grantTimes = null; // 预测不发布许可时刻。
+            copy.FrameNumber = FrameNumber;
+            runtime.CopyStateTo(copy.runtime);
+            locomotion.CopyStateTo(copy.locomotion);
+            rules.CopyParticipantStatesTo(copy.rules);
+            copy.rules.BindPredictionDefinitions();
+            copy.forecasting = true;
+            copy.unavailableForCopy = false;
+        }
+
+        // 预测副本收到已打断通知后释放已有活动行为和遗留输入。
+        internal void ReleasePredictionActions()
+        {
+            if (!forecasting) throw new InvalidOperationException("需要独立的预测副本");
+            locomotion.Reset();
+            var step = new CharacterBehaviorStep { Active = active };
+            try
+            {
+                foreach (var rule in rules.Participants)
+                    if (step.IsActive(rule.Id)) step.End(rule);
+            }
+            finally
+            {
+                active = step.Active;
+            }
+            EndInputContinuity();
+        }
+
+        // 把输入连续性结束通知发给每个已注册的行为。
+        internal void EndInputContinuity()
+        {
+            foreach (var rule in rules.Participants)
+                rule.Behavior.EndInputContinuity();
+        }
+
+        /// <summary>结束全部行为并按配置恢复运行状态，供角色创建或重生时调用。</summary>
         public void Reset(CharacterMovementSettings settings = null)
         {
-            settings ??= _fallbackSettings;
-            foreach (CharacterBehaviorRule rule in _rules.Actions)
-                rule.Behavior.Reset();
-            _movement.Reset();
-            _active = CharacterBehaviorId.None;
-            _previousMoveApproved = false;
+            Alignment = default;
+            locomotion.Reset();
+            foreach (var rule in rules.Participants)
+            {
+                try
+                {
+                    rule.Behavior.Reset();
+                }
+                finally
+                {
+                    if (!rule.Behavior.IsActive) active &= ~rule.Id;
+                }
+            }
+            runtime.Reset(settings ?? fallbackSettings);
+            active = default;
             FrameNumber = 0;
             simulationSeconds = 0d;
             grantTimes = null;
-            StaminaRemaining = InputMath.NonNegative(settings.InitialStamina,
-                CharacterMovementSettings.DefaultInitialStamina);
-            DashCooldownRemaining = 0f;
-            _initialized = true;
         }
 
-        /// <summary>用驱动器上一步末提交的输入推进裁决，更新体力、冷却和帧号。冲刺输入方向无效时使用世界 XZ 朝向。
-        /// 步长以秒计，仅有限正值会推进状态。配置为空时使用默认值。</summary>
-        /// <returns>步末状态和由调用方应用的位移。</returns>
+        /// <summary>用提交的输入推进一个固定步，返回本步位移和执行结果。</summary>
         public CharacterBehaviorFrameResult Tick(CharacterInputSnapshot input, Vector2 facing,
             float deltaTime, CharacterMovementSettings settings) => Tick(input, facing, deltaTime, settings, default);
 
+        /// <summary>携带当前实际地速推进行为，只有有限正步长会改变流程状态。</summary>
         public CharacterBehaviorFrameResult Tick(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
             CharacterMovementSettings settings, Vector2 groundVelocity)
         {
-            settings ??= _fallbackSettings;
+            return Run(input, facing, deltaTime, settings, groundVelocity, false);
+        }
+
+        // 逐帧入口按事件及动作边界精确分段；零长片段也可在该时刻裁决一次按下。
+        internal CharacterBehaviorFrameResult AdvanceTimeline(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
+            CharacterMovementSettings settings, Vector2 groundVelocity) =>
+            Run(input, facing, deltaTime, settings, groundVelocity, true);
+
+        // 同一套规则服务逐帧裁决和显式步进调用，后者保留零步长只读语义。
+        private CharacterBehaviorFrameResult Run(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
+            CharacterMovementSettings settings, Vector2 groundVelocity, bool separateBoundaries)
+        {
+            settings ??= fallbackSettings;
             float dt = InputMath.NonNegative(deltaTime, 0f);
-            float stamina = _initialized
-                ? StaminaRemaining
-                : InputMath.NonNegative(settings.InitialStamina, CharacterMovementSettings.DefaultInitialStamina);
-            float cooldown = InputMath.Elapsed(DashCooldownRemaining, dt);
-            var step = new CharacterBehaviorStep { Active = _active, OrdinarySpeedLimit = float.PositiveInfinity,
-                StartSeconds = simulationSeconds, GrantTimes = grantTimes, SkipGrantHistory = forecasting };
+            var step = new CharacterBehaviorStep { Active = active, StartSeconds = simulationSeconds,
+                GrantTimes = grantTimes, SkipGrantHistory = forecasting };
 
-            if (dt == 0f)
+            if (dt == 0f && !separateBoundaries)
+                return ReadCurrentFrame(input, facing, settings, groundVelocity, ref step);
+
+            runtime.BeginStep(settings);
+            var context = runtime.CreateContext(input, facing, dt, settings, simulationSeconds, groundVelocity, separateBoundaries);
+            Vector2 displacement;
+            try
             {
-                step.Attack = attackBehavior?.State ?? default;
-                return new CharacterBehaviorFrameResult(FrameNumber, Vector2.zero, false, false,
-                    _dash.Direction, stamina, cooldown, step);
+                displacement = AdvanceStep(ref context, ref step);
             }
-
-            var context = new CharacterBehaviorContext(input, facing, dt, settings, stamina, cooldown, simulationSeconds, groundVelocity);
-            ReleaseBehaviorRequests(context, ref step);
-            ResolveActionRequests(ref context, ref step);
-            var action = AdvanceActions(context, ref step, out float movementSeconds);
-            bool moveApproved = ResolveMovement(context, movementSeconds, ref step);
-            Vector2 displacement = action.Displacement;
-            if (moveApproved)
-                displacement += ApplyOrdinaryMovement(context, movementSeconds, action.ControlsDisplacement, ref step);
-            attackBehavior?.RecordStep(moveApproved, ref step);
-            step.Executed = _active;
-            FinishCompletedActions(ref step);
-            step.Active = _active;
-            if (moveApproved && !_previousMoveApproved) step.RecordGrant(CharacterBehaviorId.Move);
-            grantTimes = step.GrantTimes;
+            finally
+            {
+                // 已提交的许可、资源和行为生命周期在后续回调出错时仍须保持一致。
+                active = step.Active;
+                grantTimes = step.GrantTimes;
+            }
+            if (dt > 0f)
+                foreach (var rule in rules.Participants)
+                    rule.Behavior.AfterStep(dt);
+            runtime.ReadOutcome(context, ref step);
             simulationSeconds += dt;
-
-            _initialized = true;
-            FrameNumber++;
-            StaminaRemaining = context.StaminaRemaining;
-            DashCooldownRemaining = context.DashCooldownRemaining;
-            var result = new CharacterBehaviorFrameResult(FrameNumber, displacement, moveApproved,
-                _previousMoveApproved, _dash.Direction, StaminaRemaining, DashCooldownRemaining, step);
-            _previousMoveApproved = moveApproved;
-            return result;
+            return new CharacterBehaviorFrameResult(++FrameNumber, displacement, step);
         }
 
-        private bool IsActive(CharacterBehaviorId id) => (_active & id) != CharacterBehaviorId.None;
-
-        private void ReleaseBehaviorRequests(CharacterBehaviorContext context, ref CharacterBehaviorStep step)
+        // 依序推进准入、活动行为、位移合成及结束回调。
+        private Vector2 AdvanceStep(ref CharacterBehaviorContext context, ref CharacterBehaviorStep step)
         {
-            foreach (CharacterBehaviorRule rule in _rules.Actions)
-            {
-                if (IsActive(rule.Id) && !rule.Behavior.ShouldContinue(context))
-                {
-                    step.Withdrawn |= rule.Id;
-                    EndBehavior(rule, ref step);
-                }
-            }
+            var movement = locomotion.BeginStep(context.DeltaTime, ref step);
+            ReleaseWithdrawn(context, ref step);
+            ResolveRequests(ref context, ref step);
+            foreach (var rule in rules.Actions)
+                if (step.IsActive(rule.Id))
+                    locomotion.Combine(rule, rule.Behavior.AdvanceStep(context), ref movement, ref step);
+            Vector2 displacement = locomotion.Resolve(context, rules, movement, ref step);
+
+            // 发布本步真正执行的结果，然后才释放已完成的参与者。
+            step.Executed = step.Active;
+            foreach (var rule in rules.Actions)
+                if (step.IsActive(rule.Id))
+                    rule.Behavior.RecordOutcome(step.OrdinaryMovementApproved, ref step);
+            FinishCompleted(context.SeparateBoundaries && context.DeltaTime > 0f, ref step);
+            return displacement;
         }
 
-        private void ResolveActionRequests(ref CharacterBehaviorContext context, ref CharacterBehaviorStep step)
+        // 读取当前帧状态，供无效步长时保持观测而不推进流程。
+        private CharacterBehaviorFrameResult ReadCurrentFrame(CharacterInputSnapshot input, Vector2 facing,
+            CharacterMovementSettings settings, Vector2 groundVelocity, ref CharacterBehaviorStep step)
         {
-            foreach (CharacterBehaviorRule rule in _rules.Actions)
+            var context = runtime.CreateContext(input, facing, 0f, settings, simulationSeconds, groundVelocity);
+            locomotion.ReadOutcome(ref step);
+            foreach (var rule in rules.Participants)
+                rule.Behavior.ReadOutcome(ref step);
+            runtime.ReadOutcome(context, ref step);
+            return new CharacterBehaviorFrameResult(FrameNumber, Vector2.zero, step);
+        }
+
+        // 在处理新请求前释放已撤销的活动许可。
+        private void ReleaseWithdrawn(CharacterBehaviorContext context, ref CharacterBehaviorStep step)
+        {
+            foreach (var rule in rules.Actions)
             {
-                var request = rule.Behavior.PrepareRequest(context);
-                if (!rule.Behavior.RequestsStart(request))
+                if (!step.IsActive(rule.Id) || rule.Behavior.ShouldContinue(context))
                     continue;
 
-                CharacterBehaviorRejection rejection = CheckStart(rule, request, step.Started,
-                    out float cost, out CharacterBehaviorId interrupted);
-                if (rejection != CharacterBehaviorRejection.None)
-                {
-                    step.Rejections.Set(rule.Id, rejection);
-                    continue;
-                }
-
-                // 全部准入检查通过后，统一打断旧行为、启动新行为并扣费。
-                if (interrupted != CharacterBehaviorId.None)
-                {
-                    if ((interrupted & CharacterBehaviorId.Move) != CharacterBehaviorId.None)
-                        EndBehavior(_rules.Movement, ref step);
-                    foreach (CharacterBehaviorRule holder in _rules.Actions)
-                    {
-                        if ((interrupted & holder.Id) != CharacterBehaviorId.None)
-                            EndBehavior(holder, ref step);
-                    }
-                    step.Interrupted |= interrupted;
-                }
-
-                StartBehavior(rule, request, ref step);
-                float cooldown = rule.Id == CharacterBehaviorId.Dash ? _dash.Cooldown : context.DashCooldownRemaining;
-                context = new CharacterBehaviorContext(context.Input, context.Facing, context.DeltaTime, context.Settings,
-                    context.StaminaRemaining - cost, cooldown, context.SimulationTime, context.GroundVelocity);
+                step.Withdrawn |= rule.Id;
+                step.End(rule);
             }
         }
 
-        private CharacterBehaviorRejection CheckStart(CharacterBehaviorRule rule, CharacterBehaviorContext context,
-            CharacterBehaviorId started, out float cost, out CharacterBehaviorId interrupted)
+        // 按已装配的优先顺序判断请求，所有检查通过后再提交行为变更。
+        private void ResolveRequests(ref CharacterBehaviorContext context, ref CharacterBehaviorStep step)
         {
-            cost = 0f;
-            interrupted = CharacterBehaviorId.None;
-            if (IsActive(rule.Id))
-                return CharacterBehaviorRejection.AlreadyActive;
-
-            CharacterBehaviorRejection rejection = rule.Behavior.GetStartRejection(context);
-            if (rejection != CharacterBehaviorRejection.None)
-                return rejection;
-
-            cost = rule.Behavior.GetStaminaCost(context);
-            if (cost < 0f || float.IsNaN(cost) || float.IsInfinity(cost))
-                return CharacterBehaviorRejection.InvalidSettings;
-            if (context.StaminaRemaining < cost)
-                return CharacterBehaviorRejection.InsufficientStamina;
-            if (!PassesGates(rule.Id))
-                return CharacterBehaviorRejection.GateDenied;
-
-            CharacterBehaviorRule movement = _rules.Movement;
-            if (IsActive(movement.Id) && _previousMoveApproved && _movement.Evaluate(context)
-                && rule.InterruptsMovementOnStart(movement))
+            foreach (var rule in rules.Actions)
             {
-                rejection = _rules.CheckInterrupt(rule.Id, movement);
-                if (rejection != CharacterBehaviorRejection.None)
-                    return rejection;
-                interrupted |= movement.Id;
-            }
-
-            foreach (CharacterBehaviorRule holder in _rules.Actions)
-            {
-                if (!IsActive(holder.Id) || !rule.ConflictsWith(holder))
+                if (step.IsActive(rule.Id) || !rule.Behavior.TryPrepareStart(context, out var request))
+                    continue;
+                if (!rules.TryApprove(rule, locomotion.HasExistingPermit(context, step), step, out var interruptions))
                     continue;
 
-                if ((started & holder.Id) != CharacterBehaviorId.None) // 本步刚获准的行为不会被后续请求打断。
-                    return CharacterBehaviorRejection.Conflict;
-
-                rejection = _rules.CheckInterrupt(rule.Id, holder);
-                if (rejection != CharacterBehaviorRejection.None)
-                    return rejection;
-                interrupted |= holder.Id;
+                ApplyInterruptions(interruptions, ref step);
+                step.Start(rule, request);
+                context = runtime.CommitStart(request, context);
             }
-            return CharacterBehaviorRejection.None;
         }
 
-        private bool PassesGates(CharacterBehaviorId request)
+        // 释放本次申请已经获准打断的参与者。
+        private void ApplyInterruptions(CharacterBehaviorId interruptions, ref CharacterBehaviorStep step)
         {
-            foreach (CharacterBehaviorRule holder in _rules.Actions)
-            {
-                if (IsActive(holder.Id) && !holder.Gate.Admits(request))
-                    return false;
-            }
-            return true;
+            if (interruptions == default) return;
+            foreach (var rule in rules.Participants)
+                if ((interruptions & rule.Id) != default)
+                    step.End(rule);
+            step.Interrupted |= interruptions;
         }
 
-        private bool ResolveMovement(CharacterBehaviorContext context, float movementSeconds, ref CharacterBehaviorStep step)
+        // 执行结果记录完成后，释放本步自然结束的参与者。
+        private void FinishCompleted(bool atPositiveEndpoint, ref CharacterBehaviorStep step)
         {
-            CharacterBehaviorRule movement = _rules.Movement;
-            bool requested = _movement.Evaluate(context);
-            if (movementSeconds <= 0f)
-            {
-                if (IsActive(movement.Id))
-                    EndBehavior(movement, ref step);
-                if (requested)
-                    step.Rejections.Set(movement.Id, CharacterBehaviorRejection.Conflict);
-                return false;
-            }
-
-            if (!IsActive(movement.Id))
-                StartBehavior(movement, context, ref step);
-            if (!requested)
-                return false;
-            if (_previousMoveApproved || PassesGates(movement.Id))
-                return true;
-
-            step.Rejections.Set(movement.Id, CharacterBehaviorRejection.GateDenied);
-            return false;
-        }
-
-        private CharacterBehaviorMotion AdvanceActions(CharacterBehaviorContext context, ref CharacterBehaviorStep step,
-            out float movementSeconds)
-        {
-            movementSeconds = context.DeltaTime;
-            CharacterBehaviorMotion providerMotion = default;
-            foreach (CharacterBehaviorRule rule in _rules.Actions)
-            {
-                if (!IsActive(rule.Id))
-                    continue;
-
-                var motion = rule.Behavior.AdvanceStep(context);
-                step.OrdinarySpeedLimit = Math.Min(step.OrdinarySpeedLimit, rule.OrdinarySpeedLimit);
-                if (rule.HasExplicitConflictWith(_rules.Movement))
-                    movementSeconds = 0f;
-                if (!rule.ProvidesDisplacement)
-                    continue;
-
-                providerMotion = motion; // 准入规则保证至多一个活动动作提供位移。
-                movementSeconds = Math.Min(movementSeconds, motion.OrdinaryMovementSeconds);
-                step.Motion = motion.Motion;
-                if (motion.ControlsDisplacement || motion.Displacement != Vector2.zero)
-                    step.DisplacementProvider = rule.Id;
-            }
-            return providerMotion;
-        }
-
-        private Vector2 ApplyOrdinaryMovement(CharacterBehaviorContext context, float seconds, bool actionControlsDisplacement,
-            ref CharacterBehaviorStep step)
-        {
-            if (!actionControlsDisplacement)
-                step.DisplacementProvider = CharacterBehaviorId.Move;
-            Vector2 movement = _movement.Update(context, seconds);
-            return float.IsPositiveInfinity(step.OrdinarySpeedLimit) ? movement :
-                Vector2.ClampMagnitude(movement, step.OrdinarySpeedLimit * seconds);
-        }
-
-        private void FinishCompletedActions(ref CharacterBehaviorStep step)
-        {
-            foreach (CharacterBehaviorRule rule in _rules.Actions)
-                if (IsActive(rule.Id) && rule.Behavior.IsComplete)
-                    EndBehavior(rule, ref step);
-        }
-
-        private void StartBehavior(CharacterBehaviorRule rule, CharacterBehaviorContext context, ref CharacterBehaviorStep step)
-        {
-            rule.Behavior.Activate(context);
-            _active |= rule.Id;
-            step.Started |= rule.Id;
-            if (rule.Id != CharacterBehaviorId.Move) step.RecordGrant(rule.Id);
-        }
-
-        private void EndBehavior(CharacterBehaviorRule rule, ref CharacterBehaviorStep step)
-        {
-            rule.Behavior.Deactivate();
-            _active &= ~rule.Id;
-            step.Ended |= rule.Id;
-        }
-    }
-
-    internal static class InputMath
-    {
-        public static float NonNegative(float value, float fallback)
-        {
-            return float.IsNaN(value) || float.IsInfinity(value) ? fallback : Math.Max(0f, value);
-        }
-
-        public static float Elapsed(float remaining, float deltaTime)
-        {
-            float next = Math.Max(0f, remaining - deltaTime);
-            return next <= deltaTime * 0.00001f ? 0f : next; // 按步长清除舍入残差，零步长保留余量。
-        }
-
-        public static Vector2 ClampDirection(Vector2 direction)
-        {
-            if (float.IsNaN(direction.x) || float.IsInfinity(direction.x) ||
-                float.IsNaN(direction.y) || float.IsInfinity(direction.y))
-                return Vector2.zero;
-
-            double lengthSquared = (double)direction.x * direction.x + (double)direction.y * direction.y; // 避免平方和溢出。
-            if (lengthSquared <= 1d)
-                return direction;
-
-            double length = Math.Sqrt(lengthSquared);
-            return new Vector2((float)(direction.x / length), (float)(direction.y / length));
-        }
-
-        public static bool TryNormalizeDirection(Vector2 direction, out Vector2 normalized)
-        {
-            double lengthSquared = (double)direction.x * direction.x + (double)direction.y * direction.y;
-            double minimumLengthSquared = (double)Vector2.kEpsilon * Vector2.kEpsilon; // 与方向有效性检查共用下限。
-            if (double.IsNaN(lengthSquared) || double.IsInfinity(lengthSquared) ||
-                lengthSquared <= minimumLengthSquared)
-            {
-                normalized = Vector2.zero;
-                return false;
-            }
-
-            double length = Math.Sqrt(lengthSquared);
-            normalized = new Vector2((float)(direction.x / length), (float)(direction.y / length));
-            return true;
+            foreach (var rule in rules.Actions)
+                // 需处理端点输入的动作在下一次零长裁决后才释放。
+                if (step.IsActive(rule.Id) && rule.Behavior.IsComplete &&
+                    !(atPositiveEndpoint && rule.Behavior.DefersCompletionAtEndpoint))
+                    step.End(rule);
         }
     }
 }

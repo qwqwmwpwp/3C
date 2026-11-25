@@ -1,20 +1,22 @@
+using System;
 using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    /// <summary>定义待机和地面基础步态的素材、迟滞阈值与播放速度。</summary>
     [CreateAssetMenu(menuName = "3C/动画模块/基础步态", fileName = "基础步态")]
     public sealed class GaitModule : AnimationModule
     {
-        [InspectorName("待机状态"), SerializeField, Tooltip("待机状态完整路径，包含层和子状态机名称。")]
-        private string idleStateName = "Base Layer.idle";
+        [InspectorName("待机状态"), SerializeField, Tooltip("待机状态在播放库中的完整路径。留空时继承动画表现配置。")]
+        private string idleStateName;
         [InspectorName("常跑状态"), SerializeField, Tooltip("移动状态完整路径，持续移动不重复从头播放。")]
-        private string moveStateName = "Base Layer.move";
-        [InspectorName("步行状态"), SerializeField, Tooltip("低速行走状态；留空时沿用旧版移动状态，兼容已有控制器。")]
+        private string moveStateName = "Lower Body.move";
+        [InspectorName("步行状态"), SerializeField, Tooltip("低速行走状态。留空时使用常跑状态。")]
         private string walkStateName;
         [InspectorName("持续冲刺状态"), SerializeField, Tooltip("持续冲刺循环的完整状态路径；缺少该状态时使用跑步。")]
-        private string sprintStateName = "Base Layer.sprint";
+        private string sprintStateName = "Lower Body.sprint";
         [InspectorName("短突进状态"), SerializeField, Tooltip("短突进状态完整路径，每次新突进重新播放。")]
-        private string dashStateName = "Base Layer.dash";
+        private string dashStateName = "Lower Body.dash";
         [InspectorName("移动优先级"), SerializeField, Tooltip("普通待机和移动的全身优先级；同优先级的局部需求不能覆盖全身。")]
         private int locomotionPriority;
         [InspectorName("短突进优先级"), SerializeField, Tooltip("冲刺的全身优先级，可用于暂时压住较低优先级的局部动作。")]
@@ -46,9 +48,10 @@ namespace ThreeC.CharacterBehavior
 
         internal override void Include(AnimationModuleAssembly assembly) => assembly.Add(this);
 
+        // 将基础步态写入角色配置，待机路径未填写时保留配置的默认待机。
         internal void Apply(CharacterAnimationConfiguration config, CharacterProfileOverrides overrides)
         {
-            config.IdleState = idleStateName;
+            if (!string.IsNullOrWhiteSpace(idleStateName)) config.IdleState = idleStateName;
             config.MoveState = moveStateName;
             config.WalkState = walkStateName;
             config.SprintState = sprintStateName;
@@ -69,6 +72,21 @@ namespace ThreeC.CharacterBehavior
             config.SprintEnterSpeed = Sprint.Up;
             config.SprintExitSpeed = Sprint.Down;
             config.LocomotionGaitPhases = locomotionGaitPhases;
+        }
+    }
+
+    // 记录步态升档和降档各自使用的速度阈值。
+    [Serializable]
+    internal struct GaitSpeedThresholds
+    {
+        [InspectorName("升档（米/秒）"), Min(0f)] public float Up;
+        [InspectorName("降档（米/秒）"), Min(0f)] public float Down;
+
+        // 保存步态切换的上下沿，避免临界速度反复切换。
+        public GaitSpeedThresholds(float up, float down)
+        {
+            Up = up;
+            Down = down;
         }
     }
 }

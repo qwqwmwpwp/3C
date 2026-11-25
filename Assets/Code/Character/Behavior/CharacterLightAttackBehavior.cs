@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    /// <summary>保存单招的作者参数，并可将片段状态和值捕获到预测副本。</summary>
     [Serializable]
     internal class CharacterAttackMoveSettings
     {
@@ -15,11 +16,13 @@ namespace ThreeC.CharacterBehavior
         [Min(0.01f), InspectorName("起手制动（米/秒²）")] public float Braking = 28f;
         [Min(0f), InspectorName("出招前移距离（米）")] public float StrikeTravel;
         [Min(0f), InspectorName("招式冷却（秒）")] public float CooldownSeconds;
+        [InspectorName("目标对齐")] public CharacterActionAlignmentSettings Alignment;
         private bool captured, hasClip;
         private float clipDuration;
         internal bool HasMotionClip => captured ? hasClip : (bool)Clip;
         internal float ClipDuration => captured ? clipDuration : Clip.isLooping ? 0f : Clip.length;
 
+        // 在主线程读取片段时长，预测副本只保留片段状态和参数值。
         internal CharacterAttackMoveSettings Snapshot()
         {
             var copy = (CharacterAttackMoveSettings)MemberwiseClone();
@@ -33,6 +36,7 @@ namespace ThreeC.CharacterBehavior
         internal bool HasValidPhases => StrikeStart > 0f && RecoveryStart > StrikeStart && RecoveryStart < 1f;
     }
 
+    /// <summary>保存攻击的起手参数和各招式的配置。</summary>
     [Serializable]
     internal sealed class CharacterLightAttackSettings
     {
@@ -42,6 +46,8 @@ namespace ThreeC.CharacterBehavior
         [Header("执行参数")]
         [Min(0f), InspectorName("移动起手小步（米）")] public float OpeningStepDistance;
         [SerializeField, InspectorName("招式参数")] internal CharacterAttackComboSettings Moves = new CharacterAttackComboSettings();
+
+        // 按有效片段的原速时长或允许的无片段时长解析招式。
         internal float DurationFor(CharacterAttackMove move, CharacterAttackMoveSettings definition)
         {
             if (definition == null || !definition.HasValidPhases) return 0f;
@@ -50,6 +56,7 @@ namespace ThreeC.CharacterBehavior
                 ? InputMath.NonNegative(move == CharacterAttackMove.Heavy ? HeavySeconds : LightSeconds, 0f) : 0f;
         }
 
+        // 捕获本次预测要读取的招式参数，独立复制追加招式数组。
         internal CharacterLightAttackSettings Snapshot()
         {
             var copy = (CharacterLightAttackSettings)MemberwiseClone();
@@ -67,6 +74,7 @@ namespace ThreeC.CharacterBehavior
         [Min(0.01f), InspectorName("重击时长（秒）")] public float HeavySeconds = 0.8f;
     }
 
+    /// <summary>按招式编号保存追加招式的参数。</summary>
     [Serializable]
     internal struct CharacterAttackMoveEntry
     {
@@ -74,6 +82,7 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("参数")] public CharacterAttackMoveSettings Parameters;
     }
 
+    /// <summary>维护现有内置和追加招式的配置查找。</summary>
     [Serializable]
     internal sealed class CharacterAttackComboSettings
     {
@@ -85,6 +94,7 @@ namespace ThreeC.CharacterBehavior
         internal bool HasClip => LightOne?.HasMotionClip == true || LightTwo?.HasMotionClip == true ||
             Heavy?.HasMotionClip == true || Additional != null && Array.Exists(Additional, entry => entry.Parameters?.HasMotionClip == true);
 
+        // 按招式编号查找单招参数。
         internal CharacterAttackMoveSettings Move(CharacterAttackMove move) => move switch
         {
             CharacterAttackMove.LightOne => LightOne,
@@ -94,66 +104,13 @@ namespace ThreeC.CharacterBehavior
             _ => AdditionalMove(move)
         };
 
+        // 沿用追加列表顺序解析首个匹配的招式参数。
         private CharacterAttackMoveSettings AdditionalMove(CharacterAttackMove move)
         {
             if (Additional != null)
                 foreach (var entry in Additional)
                     if (entry.Id == move) return entry.Parameters;
             return null;
-        }
-    }
-
-    /// <summary>按当前招式的起手、出招和收招区间，计算本步位移与转向。</summary>
-    internal struct CharacterAttackMotion
-    {
-        private CharacterAttackMoveSettings settings;
-        internal void BindSettings(CharacterAttackMoveSettings value) => settings = value;
-        private readonly float duration, strike, recovery;
-        private Vector2 requestedFacing, strikeDirection;
-        private readonly float? openingDistance; // 仅起手有值；零米也应由攻击接管前摇。
-        private readonly Vector2 openingDirection;
-
-        public CharacterAttackMotion(CharacterAttackMoveSettings settings, CharacterBehaviorContext context,
-            float duration, float strike, float recovery, float? openingDistance = null, bool movingOpening = false)
-        {
-            this.settings = settings;
-            this.duration = duration;
-            this.openingDistance = openingDistance;
-            openingDirection = movingOpening ? context.GroundVelocity.normalized : Vector2.zero;
-            this.strike = strike;
-            this.recovery = recovery;
-            requestedFacing = context.Input.Direction == Vector2.zero ? context.Facing : context.Input.Direction.normalized;
-            strikeDirection = context.Facing.normalized;
-        }
-
-        public Vector2 Sample(CharacterBehaviorContext context, float before, float elapsed,
-            out CharacterActionMotion stepMotion, out float movementSeconds)
-        {
-            float startupTime = Mathf.Max(0f, Mathf.Min(elapsed, strike) - before);
-            float strikeTime = Mathf.Max(0f, Mathf.Min(elapsed, recovery) - Mathf.Max(before, strike));
-            float recoveryTime = Mathf.Max(0f, elapsed - Mathf.Max(before, recovery));
-            float endRecovery = Mathf.InverseLerp(recovery, duration, elapsed);
-            float meanRecovery = (Mathf.InverseLerp(recovery, duration, before) + endRecovery) * 0.5f;
-            float meanStartup = (Mathf.Clamp01(before / strike) + Mathf.Clamp01(elapsed / strike)) * 0.5f;
-            bool openingStep = openingDistance.HasValue && startupTime > 0f;
-            movementSeconds = (openingStep ? 0f : startupTime * (1f - meanStartup)) + recoveryTime * meanRecovery;
-            if (startupTime > 0f && context.Input.Direction != Vector2.zero)
-                requestedFacing = context.Input.Direction.normalized;
-            if (strikeTime > 0f && before <= strike) strikeDirection = context.Facing.normalized;
-            Vector2 targetFacing = recoveryTime > 0f ? context.Input.Direction : requestedFacing;
-            stepMotion = new CharacterActionMotion
-            {
-                OpeningStep = openingStep,
-                StartPhase = before / duration, EndPhase = elapsed / duration, Duration = duration,
-                Facing = targetFacing, ControlsFacing = true,
-                MaxTurn = startupTime * InputMath.NonNegative(settings.StartupTurnSpeed, 180f) +
-                    recoveryTime * meanRecovery * Mathf.Max(0f, context.Settings.MoveTurnSpeed),
-                Braking = startupTime > 0f ? Mathf.Max(0.01f, InputMath.NonNegative(settings.Braking, 28f)) : 0f,
-                RecoversMovement = recoveryTime > 0f
-            };
-            float stride = openingStep ? openingDistance.GetValueOrDefault() * 2f * startupTime / strike * (1f - meanStartup) : 0f;
-            float travel = InputMath.NonNegative(settings.StrikeTravel, 0f) * strikeTime / (recovery - strike);
-            return openingDirection * stride + strikeDirection * travel;
         }
     }
 }

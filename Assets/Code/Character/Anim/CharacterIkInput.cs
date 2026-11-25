@@ -18,27 +18,6 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("场景目标")] Scene, [InspectorName("地面接触点")] Ground
     }
 
-    /// <summary>一条两骨链的输入绑定。动画许可由实际混合的同名素材曲线提供，默认值为零。</summary>
-    [Serializable]
-    public sealed class CharacterIkChannel : CharacterIkTuning
-    {
-        [InspectorName("上段骨骼")] public Transform Root;
-        [InspectorName("中段骨骼")] public Transform Mid;
-        [InspectorName("末端骨骼")] public Transform Tip;
-        [InspectorName("动画目标骨"), Tooltip("绑定在同一动画器下、独立于被求解骨链的目标骨。")]
-        public Transform AnimationTarget;
-        [InspectorName("默认场景目标")] public Transform SceneTarget;
-
-        internal CharacterBoundIkChannel BindModel()
-        {
-            return new CharacterBoundIkChannel(this, new CharacterIkBones
-            {
-                Limb = Limb, Root = Root, Mid = Mid, Tip = Tip,
-                AnimationTarget = AnimationTarget, SceneTarget = SceneTarget
-            });
-        }
-    }
-
     internal struct CharacterIkRequest
     {
         public long Instance;
@@ -69,18 +48,15 @@ namespace ThreeC.CharacterBehavior
         public Pose Target;
     }
 
+    // 保存本帧各目标来源的候选与实地探测结果。
     internal struct CharacterIkInput
     {
         public CharacterIkCandidate Animation, Scene, Ground;
         public CharacterGroundFootProbes Probes;
         public int SceneStart, SceneCount;
-#if UNITY_EDITOR
-        public long DebugGripInstance;
-        public float DebugGripCoverage;
-        public byte DebugGripCoverageKnown;
-#endif
     }
 
+    // 将部位请求和片段许可整理为姿态作业所需的目标候选。
     internal sealed class CharacterIkInputSource
     {
         private long lastGrip;
@@ -151,16 +127,14 @@ namespace ThreeC.CharacterBehavior
             sceneRequests.Clear();
         }
 
+        // 采集动画握点、场景目标与地面探测，交给同一次姿态求解。
         public CharacterIkInput Sample(in CharacterAnimationComposition actions, NativeArray<CharacterIkCandidate> candidates,
-            ref int cursor, in CharacterFootProbeMotion probeMotion, float probeDelta, CharacterClipPlayback clips)
+            ref int cursor, in CharacterFootProbeMotion probeMotion, float probeDelta, in CharacterFootWarp warp, CharacterClipPlayback clips)
         {
             var input = new CharacterIkInput();
             if (bones.AnimationTarget)
             {
                 var grip = GripCandidate(actions, clips);
-#if UNITY_EDITOR
-                input.DebugGripInstance = grip.Instance;
-#endif
                 bool selected = Select(CharacterIkSource.Animation, channel.UseAnimationTarget, 0, actions, out var animation);
                 if (grip.Source != CharacterIkSource.None && (!selected || !requests[(int)CharacterIkSource.Animation].Active))
                 {
@@ -170,13 +144,6 @@ namespace ThreeC.CharacterBehavior
                 }
                 if (selected) input.Animation = animation;
             }
-#if UNITY_EDITOR
-            if (clips != null && !string.IsNullOrEmpty(channel.GripActionKey))
-            {
-                input.DebugGripCoverageKnown = 1;
-                input.DebugGripCoverage = clips.DebugActionCoverage(channel.Limb, channel.GripActionKey);
-            }
-#endif
 
             ref CharacterIkRequest sceneRequest = ref requests[(int)CharacterIkSource.Scene];
             Transform target = sceneRequest.Active ? sceneRequest.Target : bones.SceneTarget;
@@ -190,7 +157,7 @@ namespace ThreeC.CharacterBehavior
             if (Select(CharacterIkSource.Ground, channel.ProbeGround, 0, actions, out var ground))
             {
                 input.Ground = ground;
-                input.Probes.Cast(owner.gameObject.scene.GetPhysicsScene(), channel, owner, skeleton, walkableSlope, probeMotion, probeDelta, ref hits);
+                input.Probes.Cast(owner.gameObject.scene.GetPhysicsScene(), channel, owner, skeleton, walkableSlope, probeMotion, probeDelta, warp, ref hits);
                 if (channel.Limb != CharacterIkLimb.LeftFoot && channel.Limb != CharacterIkLimb.RightFoot)
                     input.Probes.AcceptCenter(ref input.Ground);
             }
@@ -208,24 +175,27 @@ namespace ThreeC.CharacterBehavior
             return input;
         }
 
+        // 按动作实例当前可见的混合贡献计算握点许可，退出时沿用该实例直到贡献归零。
         private CharacterIkCandidate GripCandidate(in CharacterAnimationComposition actions, CharacterClipPlayback clips)
         {
             if (string.IsNullOrEmpty(channel.GripActionKey)) return default;
             var selected = SelectedGrip(actions);
             long instance = selected.IsValid ? selected.InstanceId : lastGrip;
             if (instance == 0) return default;
-            var candidate = new CharacterIkCandidate { Source = CharacterIkSource.Animation, ActionBound = 1,
-                Instance = instance, GripWeight = selected.Weight };
-            if (clips == null) return selected.IsValid ? candidate : default;
             var visible = clips.Permission(channel.Limb, channel.WeightCurve, channel.GripActionKey, instance);
             float weight = selected.IsValid ? visible.Coverage : Mathf.Min(visible.Coverage, lastVisibleWeight);
             lastGrip = weight > 0f ? instance : 0;
             lastVisibleWeight = weight;
             if (weight <= 0f) return default;
-            candidate.UsesVisibleGrip = 1;
-            candidate.GripWeight = weight;
-            candidate.VisiblePermission = visible.Value * (weight / visible.Coverage);
-            return candidate;
+            return new CharacterIkCandidate
+            {
+                Source = CharacterIkSource.Animation,
+                ActionBound = 1,
+                Instance = instance,
+                UsesVisibleGrip = 1,
+                GripWeight = weight,
+                VisiblePermission = visible.Value * (weight / visible.Coverage)
+            };
         }
 
         private CharacterAnimationDemand SelectedGrip(in CharacterAnimationComposition actions)

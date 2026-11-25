@@ -1,4 +1,3 @@
-using UnityEditor.Animations;
 using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
@@ -8,34 +7,29 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterBehaviorAnimator owner;
         private CharacterAnimationConfiguration config;
-        private readonly Animator source;
         private readonly CharacterForecastSettings settings;
         private string cachedPath;
-        private AnimationClip cachedFallback, cachedClip, last;
+        private AnimationClip last;
+        private CharacterClipState[] cachedStates;
         private CharacterClipState cachedGroupState, lastGroupState;
-        private RuntimeAnimatorController cachedController;
-        private bool cached;
         private double lastClock, clipTime;
 
+        // 取得角色的有效配置，供编辑状态和播放状态共用。
         internal CharacterForecastPose(CharacterBehaviorAnimator owner, CharacterBehaviorDriver driver)
         {
             this.owner = owner;
-            source = owner.PreviewAnimator;
             try { config = owner.ActiveConfiguration ?? owner.Configuration(driver); }
             catch (System.ArgumentException error) { Debug.LogWarning(error.Message, owner); }
             settings = driver.ForecastSettings;
         }
 
+        // 按预测输入选择已烘焙状态并计算预览采样时间。
         internal AnimationClip Sample(in CharacterForecastSample pose, double clock, out double seconds, out CharacterClipState groupState)
         {
             seconds = 0d;
             groupState = null;
             var active = owner.ActiveConfiguration;
-            if (active != null && !ReferenceEquals(config, active))
-            {
-                config = active;
-                cached = false;
-            }
+            if (active != null) config = active;
             if (config == null) return null;
             string path = null;
             float rate = 1f;
@@ -44,8 +38,7 @@ namespace ThreeC.CharacterBehavior
             if (attack)
             {
                 path = AttackPath(pose.Attack);
-                attack = config.Modules == null || path != null;
-                if (attack) fallback = config.AttackSettings?.Moves?.Move(pose.Attack)?.Clip;
+                attack = path != null;
             }
             if (!attack && !pose.ExternallyControlled)
             {
@@ -63,24 +56,9 @@ namespace ThreeC.CharacterBehavior
                     rate = speed / Mathf.Max(0.01f, nominal);
                 }
             }
-            var library = config.PlaybackLibrary ? config.PlaybackLibrary.Playback : null;
-            AnimationClip clip;
-            if (library?.FromGroups == true)
-            {
-                if (!cached || cachedPath != path)
-                {
-                    cachedGroupState = null;
-                    if (!string.IsNullOrEmpty(path) && library.States != null)
-                        foreach (var state in library.States)
-                            if (state != null && state.Path == path) { cachedGroupState = state; break; }
-                    cachedPath = path;
-                    cached = true;
-                }
-                groupState = cachedGroupState;
-                clip = groupState?.Clip ? groupState.Clip : fallback;
-                if (groupState != null) rate *= groupState.Speed;
-            }
-            else clip = Resolve(path, fallback);
+            groupState = FindState(path);
+            AnimationClip clip = groupState?.Clip ? groupState.Clip : fallback;
+            if (groupState != null) rate *= groupState.Speed;
             if (clip != last || groupState != lastGroupState) clipTime = 0d;
             else clipTime += System.Math.Max(0d, clock - lastClock) * rate;
             lastClock = clock;
@@ -109,59 +87,18 @@ namespace ThreeC.CharacterBehavior
             return null;
         }
 
-        private AnimationClip Resolve(string path, AnimationClip fallback)
+        // 查找当前预览使用的烘焙状态，片段或库重烘焙时更新缓存。
+        private CharacterClipState FindState(string path)
         {
-            var controller = source ? source.runtimeAnimatorController : null;
-            if (!string.IsNullOrEmpty(path))
-            {
-                var live = owner.ActivePreviewClip(path);
-                if (live) return live;
-            }
-            if (cached && path == cachedPath && controller == cachedController && fallback == cachedFallback) return cachedClip;
-            cached = true;
+            var states = config.PlaybackLibrary ? config.PlaybackLibrary.Playback?.States : null;
+            if (states == cachedStates && path == cachedPath) return cachedGroupState;
+            cachedStates = states;
             cachedPath = path;
-            cachedController = controller;
-            cachedFallback = fallback;
-            AnimationClip clip = null;
-            if (!string.IsNullOrEmpty(path))
-            {
-                var states = config.PlaybackLibrary ? config.PlaybackLibrary.Playback?.States : null;
-                if (states != null)
-                    foreach (var state in states)
-                        if (state != null && state.Path == path) { clip = state.Clip; break; }
-            }
-            var overrides = controller as AnimatorOverrideController;
-            if (!clip && !string.IsNullOrEmpty(path))
-            {
-                var catalog = (overrides ? overrides.runtimeAnimatorController : controller) as AnimatorController;
-                if (catalog)
-                    foreach (var layer in catalog.layers)
-                    {
-                        if (!path.StartsWith(layer.name + ".", System.StringComparison.Ordinal)) continue;
-                        clip = FindClip(layer.stateMachine, path.Substring(layer.name.Length + 1));
-                        break;
-                    }
-            }
-            if (!clip) clip = fallback;
-            if (clip && overrides)
-            {
-                var replacement = overrides[clip];
-                if (replacement) clip = replacement;
-            }
-            return cachedClip = clip;
-        }
-
-        private static AnimationClip FindClip(AnimatorStateMachine machine, string path)
-        {
-            foreach (var state in machine.states)
-                if (state.state.name == path) return state.state.motion as AnimationClip;
-            foreach (var child in machine.stateMachines)
-            {
-                string prefix = child.stateMachine.name + ".";
-                if (path.StartsWith(prefix, System.StringComparison.Ordinal))
-                    return FindClip(child.stateMachine, path.Substring(prefix.Length));
-            }
-            return null;
+            cachedGroupState = null;
+            if (states != null && !string.IsNullOrEmpty(path))
+                foreach (var state in states)
+                    if (state != null && state.Path == path) { cachedGroupState = state; break; }
+            return cachedGroupState;
         }
     }
 }

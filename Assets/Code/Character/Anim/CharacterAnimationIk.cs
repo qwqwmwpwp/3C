@@ -7,17 +7,18 @@ using UnityEngine.Playables;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>在片段混合之后求解惯性和 IK，兼容已有控制器输出。</summary>
+    /// <summary>将惯性和 IK 作业连接到直接片段图，在分层混合后输出最终姿势。</summary>
     internal sealed class CharacterAnimationIk : IDisposable
     {
         private readonly Animator animator;
         private readonly CharacterAnimationPlayer player;
-        private CharacterClipPlayback clipGraph;
+        private readonly CharacterClipPlayback clips;
         private readonly CharacterBoundIkChannel[] channels;
         private readonly CharacterIkInputSource[] sources;
-        private readonly string[] issues;
         private readonly Transform owner;
         private readonly CharacterModelHeight modelHeight;
+        private readonly OrientationWarpTuning orientationTuning;
+        private readonly CharacterOrientationWarp orientation;
         private readonly CharacterInertiaTuning poseInertia;
         private readonly CharacterInertiaBones inertiaBones;
         private PlayableGraph graph;
@@ -28,35 +29,49 @@ namespace ThreeC.CharacterBehavior
         private NativeArray<CharacterIkState> states;
         private NativeArray<CharacterFootObservation> feet;
         private readonly bool sampleFeet;
+        private readonly GroundMatchTuning matchTuning;
+        private readonly GroundFeatureHistory featureHistory;
+        private readonly CharacterVisualRoot visualRoot;
+        private readonly TransitionInertiaModule transitionTuning;
+        private NativeArray<CharacterFootObservation> rawHistory;
+        private NativeArray<CharacterTransitionBone> transitionBones;
         private readonly bool hasFootChannels;
         private NativeArray<CharacterPoseBoneBinding> poseBindings;
         private NativeArray<CharacterPoseBoneHistory> poseHistory;
         private CharacterInertiaObservation inertiaObservation;
         private bool hasMotionVersion;
         private int motionVersion;
-        private RuntimeAnimatorController controller;
         private Avatar avatar;
         private bool triedBinding, frozen;
+
 #if UNITY_EDITOR
-        private CharacterAnimationEvaluationHistory Evaluations { get; set; }
+        internal VisualRootDebug RootDebug => visualRoot?.Debug ?? default;
 #endif
 
-        public CharacterAnimationIk(Animator animator, CharacterAnimationPlayer player, Transform owner, CharacterBoundIkChannel[] channels,
-            float walkableSlope, CharacterInertiaTuning poseInertia, CharacterInertiaBones inertiaBones, bool sampleFeet,
+        // 装配局部 IK 输入和模型高度状态，以便接入播放图。
+        public CharacterAnimationIk(Animator animator, CharacterAnimationPlayer player, CharacterClipPlayback clips, Transform owner,
+            CharacterBoundIkChannel[] channels, float walkableSlope, OrientationWarpTuning orientationTuning,
+            CharacterInertiaTuning poseInertia, CharacterInertiaBones inertiaBones, CharacterAnimationConfiguration config,
             float modelDropLimit, CharacterAnimationIk previous = null)
         {
             this.animator = animator;
             this.player = player;
+            this.clips = clips;
             this.owner = owner;
             this.channels = channels ?? Array.Empty<CharacterBoundIkChannel>();
             hasFootChannels = IndexOf(CharacterIkLimb.LeftFoot) >= 0 || IndexOf(CharacterIkLimb.RightFoot) >= 0;
             if (hasFootChannels)
                 modelHeight = CharacterModelHeight.Bind(animator, owner, modelDropLimit);
+            this.orientationTuning = orientationTuning;
+            orientation = orientationTuning == null ? null : new CharacterOrientationWarp(orientationTuning);
             this.poseInertia = poseInertia;
             this.inertiaBones = inertiaBones;
-            this.sampleFeet = sampleFeet;
+            sampleFeet = config.SamplesFeet || config.Modules.TransitionInertia;
+            matchTuning = config.MatchCosts;
+            featureHistory = new GroundFeatureHistory(config.FeatureLayout);
+            visualRoot = config.Modules.VisualRoot ? new CharacterVisualRoot(config.Modules.VisualRoot) : null;
+            transitionTuning = config.Modules.TransitionInertia;
             sources = new CharacterIkInputSource[this.channels.Length];
-            issues = new string[sources.Length];
             for (int i = 0; i < sources.Length; i++)
                 if (this.channels[i].Tuning != null && IndexOf(this.channels[i].Tuning.Limb) == i)
                 {
@@ -67,14 +82,13 @@ namespace ThreeC.CharacterBehavior
                 }
         }
 
-        // 改装一个肢体只替换它自己的输入；为新作业保留其他通道的世界锚点、脚姿和惯性历史。
+        // 改装一个肢体只替换它自己的输入；为新作业保留相同通道的平台锚点和胸臂状态，搜索历史从新的绑定开始。
         internal void TakeOver(CharacterAnimationIk previous)
         {
             bool live = previous.graph.IsValid() && previous.avatar == animator.avatar &&
-                previous.controller == player.Controller && !player.NeedsRebind;
+                !player.NeedsRebind;
             if (!live) { previous.Dispose(); return; }
             var saved = previous.states.ToArray();
-            var foot = previous.feet.Length > 0 ? previous.feet[0] : default;
             bool keepInertia = poseInertia != null && ReferenceEquals(poseInertia, previous.poseInertia);
             var history = keepInertia ? previous.poseHistory.ToArray() : null;
             var observation = previous.inertiaObservation;
@@ -89,10 +103,12 @@ namespace ThreeC.CharacterBehavior
             for (int i = 0; i < channels.Length; i++)
             {
                 int old = channels[i].Tuning != null ? previous.IndexOf(channels[i].Tuning.Limb) : -1;
-                if (old >= 0 && ReferenceEquals(channels[i].Tuning, previous.channels[old].Tuning)) states[i] = saved[old];
+                if (old < 0 || !ReferenceEquals(channels[i].Tuning, previous.channels[old].Tuning)) continue;
+                var state = saved[old];
+                state.ProbeMotion = default; // 重新装配后从新的骨盆与朝向基准采样。
+                states[i] = state;
             }
             modelHeight?.SetDrop(previousDrop);
-            if (feet.Length > 0) feet[0] = foot;
             if (history != null && poseHistory.Length == history.Length)
             {
                 poseHistory.CopyFrom(history);
@@ -102,13 +118,17 @@ namespace ThreeC.CharacterBehavior
             motionVersion = version;
         }
 
+        // 读取最近一次与当前模拟版本一致的直接动画脚姿。
         public CharacterFootObservation ReadFeet(CharacterAnimationMotion motion)
         {
             if (!feet.IsCreated || feet.Length == 0 || !hasMotionVersion || motionVersion != motion.SimulationVersion ||
-                frozen || avatar != animator.avatar || controller != player.Controller)
+                frozen || avatar != animator.avatar || player.NeedsRebind)
                 return default;
-            return feet[0];
+            return CharacterFootSampler.Snapshot(feet[0], rawHistory, Mathf.Clamp(matchTuning.HistorySeconds, 0f, 0.3f));
         }
+
+        // 主线程拷贝自定义布局所需的姿态，后台规划始终只读托管快照。
+        internal GroundFeatureQuery ReadFeatures(in CharacterFootObservation current) => featureHistory.Read(current, rawHistory);
 
         public bool Submit(CharacterIkLimb limb, CharacterIkSource source, long instance, Transform target, int priority,
             string action, string provider)
@@ -130,11 +150,12 @@ namespace ThreeC.CharacterBehavior
             return -1;
         }
 
+        // 读取本帧片段遮罩与曲线，准备求值前的惯性、IK 和脚姿采样参数。
         public void Prepare(in CharacterAnimationComposition selection, CharacterAnimationMotion motion,
-            in CharacterAnimationPlaybackPlan plan, float deltaTime)
+            in CharacterAnimationPlaybackPlan plan, float deltaTime, double sampleTime)
         {
-            if (sources.Length == 0 && poseInertia == null && !sampleFeet) return;
-            if (!triedBinding || player.Controller != controller || animator.avatar != avatar)
+            if (sources.Length == 0 && orientation == null && poseInertia == null && !sampleFeet && visualRoot == null && !transitionTuning) return;
+            if (!triedBinding || animator.avatar != avatar)
                 Bind();
             if (!graph.IsValid()) return;
             if (motion.IsValid && hasMotionVersion && motionVersion != motion.SimulationVersion)
@@ -146,66 +167,70 @@ namespace ThreeC.CharacterBehavior
             }
             bool resumed = frozen;
             SetFrozen(false);
-            float renderDelta = animator.updateMode == AnimatorUpdateMode.UnscaledTime ? Time.unscaledDeltaTime : deltaTime;
-            float animationDelta = clipGraph?.LayerBlendDelta(deltaTime) ?? Mathf.Max(0f, animator.speed) * renderDelta;
+            float animationDelta = clips.LayerBlendDelta(deltaTime);
             modelHeight?.Advance(states, motion.IsValid && (motion.CollisionFlags & CollisionFlags.Below) != 0, animationDelta);
-            bool directFeet = clipGraph != null && feet.Length > 0;
+            bool readsFeet = feet.Length > 0;
             Vector2 contacts = default;
-            bool prepareJob = poseBindings.Length > 0 || hasFootChannels || directFeet;
-#if UNITY_EDITOR
-            prepareJob |= Evaluations != null;
-#endif
+            float warpAngle = 0f;
+            var probeWarp = new CharacterFootWarp(Quaternion.identity, Quaternion.identity, Vector3.zero);
+            bool prepareJob = visualRoot != null || transitionBones.Length > 0 || orientation != null || poseBindings.Length > 0 || hasFootChannels || readsFeet;
             if (prepareJob)
             {
                 var job = playable.GetJobData<CharacterIkJob>();
+                if (job.VisualRoot.Bound)
+                {
+                    visualRoot.Advance(clips, motion, animator.transform, deltaTime);
+                    job.VisualRoot.Offset = visualRoot.Offset;
+                    job.VisualRoot.Yaw = visualRoot.Yaw;
+                }
+                job.Transition.Prepare(clips.Transition);
+                float near = motion.Trajectory.Match.Valid ? motion.Trajectory.Match.Windows.x : matchTuning.Windows.x;
+                if (job.Orientation.Bound)
+                    warpAngle = orientation.Advance(clips, motion, animator.transform, animationDelta, job.VisualRoot.Yaw, near);
+                job.Orientation.Angle = warpAngle;
+                probeWarp = new CharacterFootWarp(Quaternion.AngleAxis(job.VisualRoot.Yaw, Vector3.up),
+                    Quaternion.AngleAxis(warpAngle, Vector3.up), job.VisualRoot.Offset);
                 job.AppliedModelDrop = modelHeight?.Drop ?? 0f;
-                if (hasFootChannels) job.FootPlant = CharacterFootPlantFrame.Read(player, plan);
+                job.RemainingModelDrop = modelHeight?.Remaining ?? 0f;
+                if (hasFootChannels) job.FootPlant = CharacterFootPlantFrame.Read(clips, plan);
                 if (poseBindings.Length > 0)
                 {
                     job.Inertia = inertiaObservation.Prepare(selection, motion, plan, owner, poseInertia,
-                        clipGraph?.InertiaAllowance ?? selection.InertiaAllowance, resumed);
+                        clips.InertiaAllowance, resumed);
                 }
-                if (directFeet)
+                if (readsFeet)
                 {
-                    var left = clipGraph.Permission(CharacterIkLimb.LeftFoot, CharacterFootSampler.LeftCurve);
-                    var right = clipGraph.Permission(CharacterIkLimb.RightFoot, CharacterFootSampler.RightCurve);
+                    var left = clips.Permission(CharacterIkLimb.LeftFoot, CharacterFootSampler.LeftCurve);
+                    var right = clips.Permission(CharacterIkLimb.RightFoot, CharacterFootSampler.RightCurve);
                     contacts = new Vector2(left.Value, right.Value);
-                    var leftContact = clipGraph.Permission(CharacterIkLimb.LeftFoot, CharacterFootSampler.LeftContactCurve);
-                    var rightContact = clipGraph.Permission(CharacterIkLimb.RightFoot, CharacterFootSampler.RightContactCurve);
+                    var leftContact = clips.Permission(CharacterIkLimb.LeftFoot, CharacterFootSampler.LeftContactCurve);
+                    var rightContact = clips.Permission(CharacterIkLimb.RightFoot, CharacterFootSampler.RightContactCurve);
+                    job.Feet.SampleTime = sampleTime;
                     job.Feet.ClipContacts = new Vector2(leftContact.CoveredValue, rightContact.CoveredValue);
                     job.Feet.ClipConfidence = new Vector2(leftContact.Coverage, rightContact.Coverage);
                 }
-#if UNITY_EDITOR
-                job.DebugCapture.Prepared = 1;
-                job.DebugCapture.PreparedRenderFrame = Time.frameCount;
-                job.DebugCapture.FixedStep = motion.IsValid ? motion.FrameNumber : 0;
-#endif
                 playable.SetJobData(job);
             }
             EnsureCandidateCapacity();
-            float probeDelta = clipGraph == null && animator.updateMode == AnimatorUpdateMode.AnimatePhysics
-                ? Mathf.Max(0f, animator.speed) * Time.fixedDeltaTime : animationDelta;
             int cursor = 0;
             for (int i = 0; i < sources.Length; i++)
             {
                 var binding = bindings[i];
                 if (!binding.Valid) continue;
-                if (clipGraph != null)
-                {
-                    var tuning = channels[i].Tuning;
-                    if (directFeet && tuning.Limb == CharacterIkLimb.LeftFoot && tuning.WeightCurve == CharacterFootSampler.LeftCurve)
-                        binding.ClipPermission = contacts.x;
-                    else if (directFeet && tuning.Limb == CharacterIkLimb.RightFoot && tuning.WeightCurve == CharacterFootSampler.RightCurve)
-                        binding.ClipPermission = contacts.y;
-                    else binding.ClipPermission = clipGraph.Permission(tuning.Limb, tuning.WeightCurve).Value;
-                    bindings[i] = binding;
-                }
+                var tuning = channels[i].Tuning;
+                if (readsFeet && tuning.Limb == CharacterIkLimb.LeftFoot && tuning.WeightCurve == CharacterFootSampler.LeftCurve)
+                    binding.ClipPermission = contacts.x;
+                else if (readsFeet && tuning.Limb == CharacterIkLimb.RightFoot && tuning.WeightCurve == CharacterFootSampler.RightCurve)
+                    binding.ClipPermission = contacts.y;
+                else binding.ClipPermission = clips.Permission(tuning.Limb, tuning.WeightCurve).Value;
+                bindings[i] = binding;
                 var state = states[i];
                 inputs[i] = sources[i].Sample(selection, sceneCandidates, ref cursor,
-                    state.ProbeMotion, probeDelta, clipGraph);
+                    state.ProbeMotion, animationDelta, probeWarp, clips);
             }
         }
 
+        // 保证动画作业的场景候选缓冲能容纳本帧所有通道。
         private void EnsureCandidateCapacity()
         {
             int required = 0;
@@ -227,100 +252,78 @@ namespace ThreeC.CharacterBehavior
             sceneCandidates = larger;
         }
 
+        // 在直接播放图中绑定骨骼、许可和脚姿缓冲区，并将作业接到最终输出。
         private void Bind(bool keepTargets = false)
         {
             Invalidate(keepTargets);
+            if (!clips.Graph.IsValid()) return;
             triedBinding = true;
-            controller = player.Controller;
             avatar = animator.avatar;
             try
             {
                 bindings = new NativeArray<CharacterIkBinding>(channels.Length, Allocator.Persistent);
-                clipGraph = player.Direct;
-                var parameters = clipGraph != null ? null : animator.parameters;
                 bool any = false;
                 for (int i = 0; i < channels.Length; i++)
                 {
                     var channel = channels[i];
-                    issues[i] = BindingIssue(i, parameters);
-                    if (issues[i] != null) continue;
+                    if (!CanBindChannel(i)) continue;
                     bool hasGoal = channel.Bones.AnimationTarget != null && channel.Bones.AnimationTarget.IsChildOf(animator.transform)
                         && !IsDriven(channel.Bones.AnimationTarget);
-                    if (channel.Bones.AnimationTarget != null && !hasGoal)
-                        issues[i] = "动画目标骨不独立或不属于此骨架，已跳过该来源";
                     bindings[i] = new CharacterIkBinding { Valid = true, HasAnimationTarget = hasGoal,
                         Limb = channel.Tuning.Limb,
                         Root = animator.BindStreamTransform(channel.Bones.Root), Mid = animator.BindStreamTransform(channel.Bones.Mid),
                         Tip = animator.BindStreamTransform(channel.Bones.Tip),
                         AnimationTarget = hasGoal ? animator.BindStreamTransform(channel.Bones.AnimationTarget) : default,
-                        ClipDriven = (byte)(clipGraph != null ? 1 : 0),
-                        Curve = clipGraph != null ? default : animator.BindStreamProperty(animator.transform, typeof(Animator), channel.Tuning.WeightCurve),
                         PositionWeight = Mathf.Clamp01(channel.Tuning.PositionWeight), RotationWeight = Mathf.Clamp01(channel.Tuning.RotationWeight),
                         BlendSeconds = InputMath.NonNegative(channel.Tuning.BlendSeconds, 0f) };
                     any = true;
                 }
-                var bones = poseInertia != null ? inertiaBones.Bind(animator) : Array.Empty<CharacterPoseBoneBinding>();
+                var shared = new System.Collections.Generic.HashSet<Transform>();
+                var transitions = CharacterTransitionInertia.Bind(animator, transitionTuning, shared);
+                var bones = poseInertia != null ? inertiaBones.Bind(animator, shared) : Array.Empty<CharacterPoseBoneBinding>();
+                var rootBone = CharacterVisualRootBone.Bind(animator, visualRoot, owner);
                 CharacterFootSampler sampler = default;
-                bool validFeet = sampleFeet && CharacterFootSampler.TryBind(animator, clipGraph != null, parameters, out sampler);
-                if (!any && bones.Length == 0 && !validFeet) { DisposeBuffers(); return; }
+                bool validFeet = sampleFeet && CharacterFootSampler.TryBind(animator, out sampler);
+                var orientationBones = CharacterOrientationBones.Bind(animator, orientationTuning);
+                if (!any && !orientationBones.Bound && !rootBone.Bound && transitions.Length == 0 && bones.Length == 0 && !validFeet) { DisposeBuffers(); return; }
                 poseBindings = new NativeArray<CharacterPoseBoneBinding>(bones, Allocator.Persistent);
                 poseHistory = new NativeArray<CharacterPoseBoneHistory>(bones.Length, Allocator.Persistent);
                 inputs = new NativeArray<CharacterIkInput>(channels.Length, Allocator.Persistent);
                 states = new NativeArray<CharacterIkState>(channels.Length, Allocator.Persistent);
                 sceneCandidates = new NativeArray<CharacterIkCandidate>(1, Allocator.Persistent);
                 feet = new NativeArray<CharacterFootObservation>(validFeet ? 1 : 0, Allocator.Persistent);
+                rawHistory = new NativeArray<CharacterFootObservation>(validFeet ? 64 : 0, Allocator.Persistent);
+                transitionBones = new NativeArray<CharacterTransitionBone>(transitions, Allocator.Persistent);
+                var featureSampler = featureHistory.Bind(animator, validFeet ? rawHistory.Length : 0);
+                sampler.Ring = rawHistory;
                 sampler.History = feet;
-#if UNITY_EDITOR
-                Evaluations = new CharacterAnimationEvaluationHistory(animator, channels);
-#endif
-                graph = clipGraph != null ? clipGraph.Graph : PlayableGraph.Create("角色动画 IK");
-                if (clipGraph == null) graph.SetTimeUpdateMode(animator.updateMode == AnimatorUpdateMode.UnscaledTime
-                    ? DirectorUpdateMode.UnscaledGameTime : DirectorUpdateMode.GameTime);
+                graph = clips.Graph;
                 playable = AnimationScriptPlayable.Create(graph, new CharacterIkJob
-                    { Bindings = bindings, Inputs = inputs, States = states, Scenes = sceneCandidates, Feet = sampler,
-#if UNITY_EDITOR
-                        DebugCapture = Evaluations.Capture,
-#endif
-                        ProbeBasis = animator.BindSceneTransform(owner), AdjustModelHeight = (byte)(modelHeight != null ? 1 : 0),
+                    { Bindings = bindings, Inputs = inputs, States = states, Scenes = sceneCandidates, Feet = sampler, Features = featureSampler,
+                        VisualRoot = rootBone, Transition = new CharacterTransitionInertia { Bones = transitionBones },
+                        Orientation = orientationBones, ProbeBasis = animator.BindSceneTransform(owner), AdjustModelHeight = (byte)(modelHeight != null ? 1 : 0),
                         PoseBindings = poseBindings, PoseHistory = poseHistory,
                         LeftHand = IndexOf(CharacterIkLimb.LeftHand), RightHand = IndexOf(CharacterIkLimb.RightHand) });
-                if (clipGraph != null)
-                {
-                    clipGraph.ConnectIk(playable);
-                    return;
-                }
-                var output = AnimationPlayableOutput.Create(graph, "最终角色姿态", animator);
-                output.SetAnimationStreamSource(AnimationStreamSource.PreviousInputs);
-                output.SetSortingOrder(1000);
-                output.SetSourcePlayable(playable);
-                graph.Play();
+                clips.ConnectIk(playable);
             }
             catch (Exception error)
             {
                 Invalidate();
                 triedBinding = true;
-                controller = player.Controller;
                 avatar = animator.avatar;
-                string reason = $"IK 绑定失败：{error.Message}";
-                for (int i = 0; i < issues.Length; i++) issues[i] = reason;
-                Debug.LogWarning(reason, animator);
+                Debug.LogWarning($"IK 绑定失败：{error.Message}", animator);
             }
         }
 
-        private string BindingIssue(int i, AnimatorControllerParameter[] parameters)
+        // 验证关节链和素材许可曲线名称是否可供动画作业使用。
+        private bool CanBindChannel(int i)
         {
             var channel = channels[i];
             var bones = channel.Bones;
-            if (sources[i] == null) return "配置为空或部位重复";
-            if (!bones.Root || !bones.Mid || !bones.Tip || bones.Root == animator.transform || bones.Root == bones.Mid || bones.Mid == bones.Tip ||
-                !bones.Root.IsChildOf(animator.transform) || !bones.Mid.IsChildOf(bones.Root) || !bones.Tip.IsChildOf(bones.Mid))
-                return "缺少骨骼或骨链层级不匹配";
-            if (clipGraph != null) return string.IsNullOrWhiteSpace(channel.Tuning.WeightCurve) ? "未配置素材许可曲线" : null;
-            if (!string.IsNullOrWhiteSpace(channel.Tuning.WeightCurve))
-                foreach (var p in parameters)
-                    if (p.name == channel.Tuning.WeightCurve && p.type == AnimatorControllerParameterType.Float && p.defaultFloat == 0f)
-                        return null;
-            return "许可曲线缺少同名且默认值为零的浮点参数";
+            return sources[i] != null && bones.Root && bones.Mid && bones.Tip &&
+                bones.Root != animator.transform && bones.Root != bones.Mid && bones.Mid != bones.Tip &&
+                bones.Root.IsChildOf(animator.transform) && bones.Mid.IsChildOf(bones.Root) && bones.Tip.IsChildOf(bones.Mid) &&
+                !string.IsNullOrWhiteSpace(channel.Tuning.WeightCurve);
         }
 
         private bool IsDriven(Transform goal)
@@ -330,24 +333,24 @@ namespace ThreeC.CharacterBehavior
             return false;
         }
 
+        // 冻结作业时丢弃环境运动和旧脚姿，恢复时重新建立骨骼速度基准。
         public void SetFrozen(bool value)
         {
             if (!graph.IsValid()) return;
-            if (controller != player.Controller || avatar != animator.avatar)
+            if (player.NeedsRebind || avatar != animator.avatar)
             {
                 Invalidate();
                 return;
             }
             if (frozen == value) return;
+            visualRoot?.Reset();
+            CharacterTransitionInertia.Reset(transitionBones);
+            orientation?.Reset();
             if (feet.IsCreated && feet.Length > 0) feet[0] = default;
             var job = playable.GetJobData<CharacterIkJob>();
             if (value)
             {
                 hasMotionVersion = false;
-#if UNITY_EDITOR
-                Evaluations?.Clear();
-                job.DebugCapture.Prepared = 0;
-#endif
                 for (int i = 0; i < states.Length; i++)
                 {
                     var state = states[i];
@@ -362,17 +365,20 @@ namespace ThreeC.CharacterBehavior
                     state.RebaseVelocity = 1;
                     poseHistory[i] = state;
                 }
+            job.Orientation.Angle = job.VisualRoot.Yaw = 0f;
+            job.VisualRoot.Offset = Vector3.zero;
             frozen = job.Frozen = value;
             playable.SetJobData(job);
         }
 
+        // 清除旧模拟版本的握持、脚姿和惯性状态。
         public void ClearPose()
         {
+            visualRoot?.Reset();
+            CharacterTransitionInertia.Reset(transitionBones);
+            orientation?.Reset();
             modelHeight?.SetDrop(0f);
             foreach (var source in sources) source?.ForgetGrip();
-#if UNITY_EDITOR
-            Evaluations?.Clear();
-#endif
             hasMotionVersion = false;
             if (feet.IsCreated && feet.Length > 0) feet[0] = default;
             inertiaObservation.ClearSelection();
@@ -382,10 +388,9 @@ namespace ThreeC.CharacterBehavior
             {
                 var job = playable.GetJobData<CharacterIkJob>();
                 job.Inertia = default;
-                job.AppliedModelDrop = 0f;
-#if UNITY_EDITOR
-                job.DebugCapture.Prepared = 0;
-#endif
+                job.VisualRoot.Offset = Vector3.zero;
+                job.Orientation.Angle = job.VisualRoot.Yaw = 0f;
+                job.AppliedModelDrop = job.RemainingModelDrop = 0f;
                 playable.SetJobData(job);
             }
             if (!states.IsCreated) return;
@@ -402,29 +407,29 @@ namespace ThreeC.CharacterBehavior
             foreach (var source in sources) source?.Clear();
         }
 
+        // 断开本作业并释放对应缓冲区，按需为重绑保留已提交目标。
         public void Invalidate(bool keepTargets = false)
         {
+            visualRoot?.Reset();
+            CharacterTransitionInertia.Reset(transitionBones);
+            orientation?.Reset();
             modelHeight?.SetDrop(0f);
             if (!keepTargets) foreach (var source in sources) source?.ForgetGrip();
-            if (clipGraph != null) clipGraph.DisconnectIk(playable);
-            else if (graph.IsValid()) graph.Destroy();
-            clipGraph = null;
+            clips.DisconnectIk(playable);
             graph = default;
             playable = default;
             DisposeBuffers();
-            Array.Clear(issues, 0, issues.Length);
             triedBinding = hasMotionVersion = frozen = false;
             inertiaObservation = default;
-            controller = null;
             avatar = null;
         }
 
+        // 释放动画作业使用的原生缓冲区。
         private void DisposeBuffers()
         {
-#if UNITY_EDITOR
-            Evaluations?.Dispose();
-            Evaluations = null;
-#endif
+            featureHistory.Dispose();
+            if (transitionBones.IsCreated) transitionBones.Dispose();
+            if (rawHistory.IsCreated) rawHistory.Dispose();
             if (feet.IsCreated) feet.Dispose();
             if (poseHistory.IsCreated) poseHistory.Dispose();
             if (poseBindings.IsCreated) poseBindings.Dispose();
@@ -435,27 +440,5 @@ namespace ThreeC.CharacterBehavior
         }
 
         public void Dispose() => Invalidate();
-
-#if UNITY_EDITOR
-        public CharacterAnimationEvaluationHistory ReadEvaluations() =>
-            frozen || !animator || avatar != animator.avatar || controller != player.Controller ? null : Evaluations;
-
-        public string DescribeBindings()
-        {
-            if (!triedBinding) return "等待有效动画资源";
-            if (channels.Length == 0) return "未配置 IK 通道";
-            System.Text.StringBuilder text = null;
-            for (int i = 0; i < channels.Length; i++)
-            {
-                if (issues[i] == null) continue;
-                if (text == null) text = new System.Text.StringBuilder();
-                else text.AppendLine();
-                string limb = channels[i].Tuning?.Limb switch { CharacterIkLimb.LeftHand => "左手", CharacterIkLimb.RightHand => "右手",
-                    CharacterIkLimb.LeftFoot => "左脚", CharacterIkLimb.RightFoot => "右脚", _ => "未知部位" };
-                text.Append(limb).Append(" · ").Append(issues[i]);
-            }
-            return text?.ToString();
-        }
-#endif
     }
 }

@@ -13,6 +13,8 @@ namespace ThreeC.CharacterBehavior
         private Vector3 restLocalPosition, lastWritten;
         public float Drop { get; private set; } // 相对模型原点的向下距离（世界米）。
 
+        internal float Remaining => Mathf.Max(0f, limit - Drop);
+
         private CharacterModelHeight(Transform visual, float limit)
         {
             this.visual = visual;
@@ -48,12 +50,15 @@ namespace ThreeC.CharacterBehavior
             Drop = next;
         }
 
+        // 同一坡面条件同时约束锁脚可用的竖直余量与实际模型降高。
+        internal static bool AllowsDrop(in CharacterGroundFootHit ground) => ground.Platform != 0 && ground.Normal.y < 0.99985f;
+
+        // 从未降模的髋位置求承重脚所需竖直行程，交给下一帧的限高处理。
         public static float RequiredDrop(AnimationStream stream, in CharacterIkBinding leg, in CharacterIkState state,
             in CharacterGroundFootHit ground, in CharacterFootObservation feet, float appliedDrop)
         {
-            const float flatNormalY = 0.99985f; // 约 1° 以内按平地处理。
             if (!state.Locked || state.Source != CharacterIkSource.Ground ||
-                ground.Platform == 0 || ground.Normal.y >= flatNormalY || state.Plan.PositionWeight <= 0f) return 0f;
+                !AllowsDrop(ground) || state.Plan.PositionWeight <= 0f) return 0f;
 
             float support = feet.SupportWeight(leg.Limb, state.Gate) * state.Plan.PositionWeight;
             if (support <= 0f) return 0f;

@@ -32,6 +32,25 @@ MonoBehaviour:
         Braking: 28
         StrikeTravel: 0
         CooldownSeconds: 0
+        Alignment:
+          Enabled: 1
+          Window: {x: 0.08, y: 0.55}
+          Reach: 1.4
+          Height: 0.35
+          Cone: 80
+          Distance: 0.65
+          Speed: 2.5
+          Angle: 48
+          TurnSpeed: 200
+          Tracking: 0
+          JumpDistance: 0.6
+          JumpAngle: 55
+          OnLost: 0
+          OnJump: 0
+          Obstruction: 0
+          MinimumProgress: 0.35
+          PositionTolerance: 0.09
+          AngleTolerance: 9
       LightTwo:
         Clip: {fileID: -4705555360703855209, guid: 0c17a750330e6e04c9685ac96f8e0351,
           type: 3}
@@ -42,6 +61,25 @@ MonoBehaviour:
         Braking: 28
         StrikeTravel: 0
         CooldownSeconds: 0
+        Alignment:
+          Enabled: 1
+          Window: {x: 0.08, y: 0.55}
+          Reach: 1.4
+          Height: 0.35
+          Cone: 80
+          Distance: 0.65
+          Speed: 2.5
+          Angle: 48
+          TurnSpeed: 200
+          Tracking: 0
+          JumpDistance: 0.6
+          JumpAngle: 55
+          OnLost: 0
+          OnJump: 0
+          Obstruction: 0
+          MinimumProgress: 0.35
+          PositionTolerance: 0.09
+          AngleTolerance: 9
       Heavy:
         Clip: {fileID: -5630466525676994369, guid: 28c7be177e10c4c4cafe6fa3949cb723,
           type: 3}
@@ -52,6 +90,25 @@ MonoBehaviour:
         Braking: 28
         StrikeTravel: 0
         CooldownSeconds: 0
+        Alignment:
+          Enabled: 1
+          Window: {x: 0.08, y: 0.55}
+          Reach: 1.4
+          Height: 0.35
+          Cone: 80
+          Distance: 0.65
+          Speed: 2.5
+          Angle: 48
+          TurnSpeed: 200
+          Tracking: 0
+          JumpDistance: 0.6
+          JumpAngle: 55
+          OnLost: 0
+          OnJump: 0
+          Obstruction: 0
+          MinimumProgress: 0.35
+          PositionTolerance: 0.09
+          AngleTolerance: 9
       Additional:
       - Id: 4
         Parameters:
@@ -64,6 +121,25 @@ MonoBehaviour:
           Braking: 28
           StrikeTravel: 0
           CooldownSeconds: 3
+          Alignment:
+            Enabled: 1
+            Window: {x: 0.08, y: 0.55}
+            Reach: 1.4
+            Height: 0.35
+            Cone: 80
+            Distance: 0.65
+            Speed: 2.5
+            Angle: 48
+            TurnSpeed: 200
+            Tracking: 0
+            JumpDistance: 0.6
+            JumpAngle: 55
+            OnLost: 0
+            OnJump: 0
+            Obstruction: 0
+            MinimumProgress: 0.35
+            PositionTolerance: 0.09
+            AngleTolerance: 9
     AllowWithoutClip: 0
     LightSeconds: 0.6
     HeavySeconds: 0.8

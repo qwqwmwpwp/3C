@@ -4,27 +4,23 @@ using UnityEngine.Animations;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 保存用于动画流求解的骨链及当前片段曲线许可。
     internal struct CharacterIkBinding
     {
         private byte valid, hasAnimationTarget; // 固定宽度标记，托管端和动画线程共用布局。
         public bool Valid { get => valid != 0; set => valid = (byte)(value ? 1 : 0); }
         public bool HasAnimationTarget { get => hasAnimationTarget != 0; set => hasAnimationTarget = (byte)(value ? 1 : 0); }
         public TransformStreamHandle Root, Mid, Tip, AnimationTarget;
-        public PropertyStreamHandle Curve;
-        public byte ClipDriven;
         public CharacterIkLimb Limb;
         public bool IsFoot => Limb == CharacterIkLimb.LeftFoot || Limb == CharacterIkLimb.RightFoot;
         public float ClipPermission;
         public float PositionWeight, RotationWeight, BlendSeconds;
 
+        // 核对当前动画流中的骨链句柄是否仍可用。
         public bool IsReady(AnimationStream stream) => Valid && Root.IsValid(stream) && Mid.IsValid(stream) &&
-            Tip.IsValid(stream) && (ClipDriven != 0 || Curve.IsValid(stream));
+            Tip.IsValid(stream);
         public bool CanReadTarget(AnimationStream stream) => HasAnimationTarget && AnimationTarget.IsValid(stream);
-        public float Permission(AnimationStream stream)
-        {
-            float value = ClipDriven != 0 ? ClipPermission : Curve.GetFloat(stream);
-            return value > 0f ? Mathf.Min(value, 1f) : 0f;
-        }
+        public float Permission => ClipPermission > 0f ? Mathf.Min(ClipPermission, 1f) : 0f;
     }
 
     internal struct CharacterIkPlan
@@ -33,10 +29,11 @@ namespace ThreeC.CharacterBehavior
         public float PositionWeight, RotationWeight;
     }
 
+    // 保存各骨链的目标过渡、平台锁点和当帧求解计划。
     internal struct CharacterIkState
     {
         public CharacterIkSource Source;
-        public int CandidateMask, ObjectId, Slot, SceneCount;
+        public int ObjectId, Slot;
         public long Instance;
         public float Gate, Envelope, Transition, RequiredModelDrop;
         private byte locked;
@@ -54,8 +51,9 @@ namespace ThreeC.CharacterBehavior
         private const float LockGate = 0.7f;
         private const float ReleaseGate = 0.3f;
 
-        public static void Resolve(in CharacterIkBinding binding, in CharacterIkInput input, in CharacterGroundFootHit ground, float gate,
-            in CharacterIkCandidate best, int mask, float deltaTime, in CharacterFootPlantFrame footPlant, Vector3 ankle, ref CharacterIkState state)
+        // 按当前目标和片段许可更新目标过渡、锁点和骨链求解权重。
+        public static void Resolve(in CharacterIkBinding binding, in CharacterGroundFootHit ground, float gate,
+            in CharacterIkCandidate best, float deltaTime, in CharacterFootPlantFrame footPlant, Vector3 ankle, in CharacterFootReach reach, ref CharacterIkState state)
         {
             if (state.WasVisibleGrip != 0 && best.UsesVisibleGrip == 0)
             {
@@ -65,8 +63,6 @@ namespace ThreeC.CharacterBehavior
             state.WasVisibleGrip = best.UsesVisibleGrip;
             if (best.UsesVisibleGrip != 0) gate = best.VisiblePermission;
             state.Gate = gate;
-            state.CandidateMask = mask;
-            state.SceneCount = input.SceneCount + (input.Scene.Source == CharacterIkSource.Scene ? 1 : 0);
             float step = BlendStep(binding, deltaTime);
             if (best.Source == CharacterIkSource.None)
             {
@@ -100,7 +96,7 @@ namespace ThreeC.CharacterBehavior
                 if (binding.IsFoot && best.Source == CharacterIkSource.Ground)
                 {
                     float positionWeight = binding.PositionWeight * gate * state.Envelope;
-                    CharacterFootPlant.Place(ref state, footPlant, binding.Limb, ground, ankle, gate, positionWeight, deltaTime, ref target);
+                    CharacterFootPlant.Place(ref state, footPlant, binding.Limb, ground, ankle, gate, positionWeight, deltaTime, reach, ref target);
                 }
                 else if (best.Source == CharacterIkSource.Ground)
                 {
@@ -133,26 +129,25 @@ namespace ThreeC.CharacterBehavior
         public static float BlendStep(in CharacterIkBinding binding, float deltaTime) =>
             binding.BlendSeconds > 0f ? Mathf.Max(0f, deltaTime) / binding.BlendSeconds : 1f;
 
+        // 按优先级选出当前目标，同级优先保留上一帧目标。
         public static CharacterIkCandidate Select(in CharacterIkInput input, NativeArray<CharacterIkCandidate> scenes,
-            in CharacterIkState state, out int mask)
+            in CharacterIkState state)
         {
-            mask = 0;
             var best = default(CharacterIkCandidate);
-            Consider(input.Animation, state, ref best, ref mask);
-            Consider(input.Scene, state, ref best, ref mask);
-            for (int i = 0; i < input.SceneCount; i++) Consider(scenes[input.SceneStart + i], state, ref best, ref mask);
-            Consider(input.Ground, state, ref best, ref mask);
+            Consider(input.Animation, state, ref best);
+            Consider(input.Scene, state, ref best);
+            for (int i = 0; i < input.SceneCount; i++) Consider(scenes[input.SceneStart + i], state, ref best);
+            Consider(input.Ground, state, ref best);
             return best;
         }
 
         private static bool IsCurrent(in CharacterIkCandidate next, in CharacterIkState state) =>
             next.Source == state.Source && next.Instance == state.Instance && next.ObjectId == state.ObjectId && next.Slot == state.Slot;
 
-        private static void Consider(CharacterIkCandidate next, in CharacterIkState state, ref CharacterIkCandidate best,
-            ref int mask)
+        // 若新候选优先级更高或在同级中延续当前目标，就更新选中项。
+        private static void Consider(CharacterIkCandidate next, in CharacterIkState state, ref CharacterIkCandidate best)
         {
             if (next.Source == CharacterIkSource.None) return;
-            mask |= 1 << (int)next.Source;
             if (best.Source == CharacterIkSource.None || next.Priority > best.Priority ||
                 (next.Priority == best.Priority && IsCurrent(next, state)))
                 best = next;
@@ -171,25 +166,37 @@ namespace ThreeC.CharacterBehavior
         public CharacterPoseInertiaFrame Inertia;
         public int LeftHand, RightHand;
         public CharacterFootSampler Feet;
+        public GroundFeatureSampler Features;
+        public CharacterVisualRootBone VisualRoot;
+        public CharacterTransitionInertia Transition;
+        public CharacterOrientationBones Orientation;
         public CharacterFootPlantFrame FootPlant;
         public byte AdjustModelHeight;
-        public float AppliedModelDrop;
+        public float AppliedModelDrop, RemainingModelDrop;
         public TransformSceneHandle ProbeBasis;
-#if UNITY_EDITOR
-        public CharacterAnimationEvaluationCapture DebugCapture;
-#endif
         private byte frozen;
         public bool Frozen { get => frozen != 0; set => frozen = (byte)(value ? 1 : 0); }
 
         public void ProcessRootMotion(AnimationStream stream) { }
 
+        // 原始姿态先入历史，再依次执行切换惯性、视觉根、剩余腿向、胸臂表现和最终 IK。
         public void ProcessAnimation(AnimationStream stream)
         {
-#if UNITY_EDITOR
-            bool capture = !Frozen && DebugCapture.Active;
-            var frame = capture ? DebugCapture.Start(stream, Inertia, PoseBindings.Length > 0, Bindings) : default;
-#endif
-            if (!Frozen) Feet.Capture(stream);
+            if (!Frozen && Feet.History.Length > 0)
+            {
+                var before = Feet.History[0];
+                Feet.Capture(stream);
+                Features.Capture(stream, before, Feet.History[0]);
+            }
+            if (!Frozen && Transition.Bones.Length > 0)
+            {
+                var contact = Feet.History.Length > 0 ? Feet.History[0] : default;
+                var support = Vector2.Scale(contact.Pose.Contact, contact.ContactConfidence);
+                Transition.Apply(stream, support, ReadHand(stream, LeftHand).Grip, ReadHand(stream, RightHand).Grip);
+            }
+            var rootYaw = VisualRoot.Apply(stream, out var rootPivot, out var displacement);
+            var legYaw = Orientation.Apply(stream, out var pivot);
+            var warp = new CharacterFootWarp(rootYaw, legYaw, displacement);
             var left = default(HandReference);
             var right = default(HandReference);
             if (PoseBindings.Length > 0)
@@ -201,9 +208,6 @@ namespace ThreeC.CharacterBehavior
                 }
                 CharacterPoseInertia.Apply(stream, PoseBindings, PoseHistory, Inertia, left.Grip, right.Grip, Frozen);
             }
-#if UNITY_EDITOR
-            if (capture) DebugCapture.ObserveAdditionalPoses(stream, ref frame, CharacterAnimationEvaluationCapture.PoseStage.Inertial);
-#endif
             for (int i = 0; i < Bindings.Length; i++)
             {
                 var binding = Bindings[i];
@@ -217,28 +221,20 @@ namespace ThreeC.CharacterBehavior
                 var state = States[i];
                 var ground = default(CharacterGroundFootHit);
                 Vector3 ankle = default;
-#if UNITY_EDITOR
-                int probeRay = -1;
-#endif
                 if (binding.IsFoot)
                 {
                     ankle = binding.Tip.GetPosition(stream);
-                    state.ProbeMotion.Observe(stream, ProbeBasis, ankle);
+                    state.ProbeMotion.Observe(stream, ProbeBasis, ankle, warp, rootPivot, pivot);
                     if (input.Ground.Source == CharacterIkSource.Ground)
-#if UNITY_EDITOR
-                        probeRay = input.Probes.Resolve(ankle, ref input.Ground, out ground);
-#else
                         input.Probes.Resolve(ankle, ref input.Ground, out ground);
-#endif
                 }
                 else if (input.Ground.Source == CharacterIkSource.Ground)
                 {
                     ankle = binding.Tip.GetPosition(stream);
-                    ground = input.Probes.Ray(0);
+                    ground = input.Probes.Center;
                 }
                 var hand = i == LeftHand ? left : i == RightHand ? right : default;
-                int mask = hand.Mask;
-                var best = hand.Selected ? hand.Best : SelectTarget(stream, binding, input, state, out mask);
+                var best = hand.Selected ? hand.Best : SelectTarget(stream, binding, input, state);
                 if (best.Source == CharacterIkSource.Animation)
                 {
                     best.Target = new Pose(binding.AnimationTarget.GetPosition(stream), binding.AnimationTarget.GetRotation(stream));
@@ -251,16 +247,22 @@ namespace ThreeC.CharacterBehavior
                     best.Target.position = ankle + up * rise;
                     best.Target.rotation *= binding.Tip.GetRotation(stream);
                 }
-                CharacterIkDecision.Resolve(binding, input, ground, binding.Permission(stream), best, mask, stream.deltaTime, FootPlant, ankle, ref state);
+                CharacterFootReach reach = default;
+                if (binding.IsFoot && best.Source == CharacterIkSource.Ground)
+                {
+                    Vector3 legRoot = binding.Root.GetPosition(stream);
+                    Vector3 knee = binding.Mid.GetPosition(stream);
+                    float length = Vector3.Distance(legRoot, knee) + Vector3.Distance(knee, ankle);
+                    reach = new CharacterFootReach(legRoot, length, CharacterModelHeight.AllowsDrop(ground) ? RemainingModelDrop : 0f);
+                }
+                CharacterIkDecision.Resolve(binding, ground, binding.Permission, best, stream.deltaTime, FootPlant,
+                    ankle, reach, ref state);
                 if (AdjustModelHeight != 0 && binding.IsFoot)
                 {
                     var feet = Feet.History.Length > 0 ? Feet.History[0] : default;
                     state.RequiredModelDrop = CharacterModelHeight.RequiredDrop(stream, binding, state, ground, feet, AppliedModelDrop);
                 }
                 States[i] = state;
-#if UNITY_EDITOR
-                if (capture) CharacterAnimationEvaluationCapture.ObservePlan(stream, ref frame, binding, input, state, best, ground, probeRay);
-#endif
             }
             for (int i = 0; i < Bindings.Length; i++)
             {
@@ -268,17 +270,14 @@ namespace ThreeC.CharacterBehavior
                 if (plan.PositionWeight > 0f || plan.RotationWeight > 0f)
                     Solve(stream, Bindings[i], plan);
             }
-#if UNITY_EDITOR
-            if (capture) DebugCapture.Complete(stream, ref frame, Bindings, Inputs, PoseBindings, PoseHistory, left.Grip, right.Grip);
-#endif
         }
 
+        // 保存惯性前的手部目标及握持权重，用于惯性后的骨链求解。
         private struct HandReference
         {
             public float Grip;
             public bool HasDefault, Selected;
             public CharacterIkCandidate Best;
-            public int Mask;
             public Pose Tip, Marker;
 
             public void TransportDefault(AnimationStream stream, TransformStreamHandle tip, ref Pose target)
@@ -293,14 +292,15 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 根据手部目标和可见握持权重准备惯性约束。
         private HandReference ReadHand(AnimationStream stream, int index)
         {
             if (index < 0) return default;
             var binding = Bindings[index];
             if (!binding.IsReady(stream)) return default;
             var state = States[index];
-            var best = SelectTarget(stream, binding, Inputs[index], state, out int mask);
-            var hand = new HandReference { Selected = true, Best = best, Mask = mask };
+            var best = SelectTarget(stream, binding, Inputs[index], state);
+            var hand = new HandReference { Selected = true, Best = best };
             if (best.Source == CharacterIkSource.Animation && best.ActionBound == 0)
             {
                 hand.HasDefault = true;
@@ -311,18 +311,19 @@ namespace ThreeC.CharacterBehavior
             {
                 float from = state.WasVisibleGrip != 0 && best.UsesVisibleGrip == 0 ? 0f : state.Envelope;
                 float envelope = Mathf.MoveTowards(from, 1f, CharacterIkDecision.BlendStep(binding, stream.deltaTime));
-                float permission = best.UsesVisibleGrip != 0 ? best.VisiblePermission : binding.Permission(stream) *
+                float permission = best.UsesVisibleGrip != 0 ? best.VisiblePermission : binding.Permission *
                     (best.Source == CharacterIkSource.Animation ? best.GripWeight : 1f);
                 hand.Grip = permission * envelope * Mathf.Max(binding.PositionWeight, binding.RotationWeight);
             }
             return hand;
         }
 
+        // 排除动画流中不可读取的标记，再选择该骨链的目标。
         private CharacterIkCandidate SelectTarget(AnimationStream stream, in CharacterIkBinding binding,
-            CharacterIkInput input, in CharacterIkState state, out int mask)
+            CharacterIkInput input, in CharacterIkState state)
         {
             if (!binding.CanReadTarget(stream)) input.Animation = default;
-            return CharacterIkDecision.Select(input, Scenes, state, out mask);
+            return CharacterIkDecision.Select(input, Scenes, state);
         }
 
         // 使用基础动画的弯曲平面，按余弦定理解中间关节，目标距离夹在骨链可达范围内。

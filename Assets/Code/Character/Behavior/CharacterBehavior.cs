@@ -12,18 +12,37 @@ namespace ThreeC.CharacterBehavior
         public virtual bool SharesMovementOnStart => false;
         /// <summary>供有向打断规则读取的当前阶段。</summary>
         public virtual CharacterBehaviorPhase Phase => CharacterBehaviorPhase.Active;
+        /// <summary>返回下一阶段、接续或结束边界的余时（秒），正无穷表示没有边界。</summary>
+        public virtual double NextBoundaryDelay => double.PositiveInfinity;
+        /// <summary>允许下一边界吸附到紧邻的离散输入时刻的单向误差（秒）。</summary>
+        public virtual float InputEndpointTolerance => 0f;
+        /// <summary>完成正时长时间段后，保留行为至端点的零时长裁决。</summary>
+        public virtual bool DefersCompletionAtEndpoint => false;
+        /// <summary>零时长裁决时允许普通移动取得本位移动作交还的许可。</summary>
+        public virtual bool AllowsOrdinaryMotionNow => false;
 
-        /// <summary>只读评估行为自身的条件，本步执行归属由流程裁决。</summary>
+        /// <summary>在正时长步骤的完成处理后推进跨活动期的计时。</summary>
+        public virtual void AfterStep(float seconds) { }
+
+        /// <summary>只读判断行为自身是否允许开始，互斥和打断由规则裁决。</summary>
         public abstract bool Evaluate(CharacterBehaviorContext context);
 
-        internal virtual CharacterBehaviorContext PrepareRequest(CharacterBehaviorContext context) => context;
+        // 判断动作自身的请求条件，供共享准入检查继续验证体力。
+        internal virtual bool EvaluateRequest(CharacterBehaviorContext context) => Evaluate(context);
 
-        /// <summary>输入仍希望开启行为。默认只在未活动时评估请求。</summary>
-        public virtual bool RequestsStart(CharacterBehaviorContext context) => !IsActive && Evaluate(context);
+        // 只为满足自身条件的动作建立启动请求并记录本次报价。
+        internal virtual CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context) =>
+            EvaluateRequest(context) ? new CharacterBehaviorStart(context, GetStaminaCost(context)) : null;
 
-        /// <summary>请求已存在时的资源或行为条件检查，裁决流程批准前不得修改状态。</summary>
-        public virtual CharacterBehaviorRejection GetStartRejection(CharacterBehaviorContext context) =>
-            CharacterBehaviorRejection.None;
+        // 将通用请求交给已有行为的公开启动入口。
+        internal virtual void StartPrepared(CharacterBehaviorStart request) => Start(request.Context);
+
+        // 一次性解析并检查申请条件和体力报价，供许可后使用同一份请求。
+        internal bool TryPrepareStart(CharacterBehaviorContext context, out CharacterBehaviorStart request)
+        {
+            request = PrepareStart(context);
+            return request != null && CharacterStaminaBlackboard.CanAfford(context.StaminaRemaining, request.Cost);
+        }
 
         /// <summary>成功开始时消耗的共享体力。此查询不更改行为或体力。</summary>
         public virtual float GetStaminaCost(CharacterBehaviorContext context) => 0f;
@@ -47,18 +66,65 @@ namespace ThreeC.CharacterBehavior
         public virtual CharacterBehaviorMotion AdvanceStep(CharacterBehaviorContext context) =>
             new CharacterBehaviorMotion(Update(context));
 
-        internal virtual void CopyStateTo(CharacterBehavior target) => target.IsActive = IsActive;
+        // 将行为在本步实际执行后的结果写入行为帧。
+        internal virtual void RecordOutcome(bool ordinaryMovementApproved, ref CharacterBehaviorStep step) { }
 
-        internal void Activate(CharacterBehaviorContext context)
+        // 将未推进固定步时可观测的当前状态写入行为帧。
+        internal virtual void ReadOutcome(ref CharacterBehaviorStep step) { }
+
+        /// <summary>输入连续性结束时释放本行为保留的输入，活动状态由正常调度维护。</summary>
+        protected virtual void OnInputContinuityEnded() { }
+
+        // 把输入连续性结束事件交给具体行为处理。
+        internal void EndInputContinuity() => OnInputContinuityEnded();
+
+        /// <summary>返回需在复制前检查引用隔离的独占可变容器。</summary>
+        protected virtual object ExclusiveRuntimeStorage => null;
+
+        /// <summary>将运行状态复制到已校验且独立的同类型目标。</summary>
+        protected virtual void CopyRuntimeStateTo(CharacterBehavior target) { }
+
+        /// <summary>用目标持有的定义刷新需要重新绑定的预测运行参数。</summary>
+        protected virtual void BindPredictionDefinition() { }
+
+        internal object RuntimeStorageForCopy => ExclusiveRuntimeStorage;
+
+        // 流程完成整组预检后，复制框架活动位，再交给动作复制其私有状态。
+        internal void ApplyRuntimeCopyTo(CharacterBehavior target)
         {
-            Start(context);
+            target.IsActive = IsActive;
+            CopyRuntimeStateTo(target);
+        }
+
+        // 完成整组运行状态复制后，将当前动作与目标的预测定义绑定。
+        internal void RebindPredictionDefinition() => BindPredictionDefinition();
+
+        // 仅在启动回调成功后提交活动状态，异常时释放未完成的启动。
+        internal void Activate(CharacterBehaviorStart request)
+        {
+            try
+            {
+                StartPrepared(request);
+            }
+            catch
+            {
+                IsActive = false;
+                throw;
+            }
             IsActive = true;
         }
 
+        // 结束回调报错时仍释放框架拥有的活动状态。
         internal void Deactivate()
         {
-            End();
-            IsActive = false;
+            try
+            {
+                End();
+            }
+            finally
+            {
+                IsActive = false;
+            }
         }
 
         internal virtual void Reset()
@@ -79,14 +145,9 @@ namespace ThreeC.CharacterBehavior
         public float DashCooldownRemaining { get; }
         internal double SimulationTime { get; }
         internal Vector2 GroundVelocity { get; }
-        internal CharacterAttackOpening? AttackOpening { get; }
+        internal bool SeparateBoundaries { get; }
 
-        internal CharacterBehaviorContext(CharacterBehaviorContext context, CharacterAttackOpening opening)
-        {
-            this = context;
-            AttackOpening = opening;
-        }
-
+        // 保存外部调用者提供的共享输入、体力与兼容冷却快照。
         public CharacterBehaviorContext(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
             CharacterMovementSettings settings, float staminaRemaining, float dashCooldownRemaining)
         {
@@ -96,15 +157,16 @@ namespace ThreeC.CharacterBehavior
             Settings = settings ?? new CharacterMovementSettings();
             StaminaRemaining = staminaRemaining;
             DashCooldownRemaining = dashCooldownRemaining;
-            AttackOpening = null;
+            SeparateBoundaries = false;
             SimulationTime = 0d;
             GroundVelocity = default;
         }
 
         internal CharacterBehaviorContext(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
-            CharacterMovementSettings settings, float stamina, float dashCooldown, double simulationTime, Vector2 groundVelocity)
+            CharacterMovementSettings settings, float stamina, float dashCooldown, double simulationTime, Vector2 groundVelocity, bool separateBoundaries = false)
             : this(input, facing, deltaTime, settings, stamina, dashCooldown)
         {
+            SeparateBoundaries = separateBoundaries;
             SimulationTime = simulationTime;
             GroundVelocity = groundVelocity;
         }

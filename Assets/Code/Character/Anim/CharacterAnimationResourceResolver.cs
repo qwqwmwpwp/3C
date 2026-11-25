@@ -4,6 +4,7 @@ namespace ThreeC.CharacterBehavior
 {
     internal enum CharacterAnimationPlaybackCommand { Keep, Play, CrossFade }
 
+    // 记录最终播放命令由哪项资源、规则或匹配决策产生。
     internal enum CharacterAnimationPlaybackReason
     {
         Unselected,
@@ -14,7 +15,7 @@ namespace ThreeC.CharacterBehavior
         ReplayInstance,
         SynchronizeGait,
         MatchPose,
-        RestoreState
+        ContinueMatch
     }
 
     internal readonly struct CharacterClipStart
@@ -47,10 +48,9 @@ namespace ThreeC.CharacterBehavior
         public static CharacterBlendDuration SourceFraction(float value) => new CharacterBlendDuration(value, false);
         public static CharacterBlendDuration Seconds(float value) => new CharacterBlendDuration(value, true);
         public float InSeconds(float sourceLength) => IsSeconds ? Value : Value * sourceLength;
-        public float InSourceFraction(float sourceLength) => !IsSeconds ? Value : sourceLength > 0f ? Value / sourceLength : 0f;
     }
 
-    /// <summary>资源解析后的单层执行指令；播放端无需再判断动作语义或素材回退。</summary>
+    /// <summary>保存单个播放源的片段、播放动作与混合参数。</summary>
     internal readonly struct CharacterAnimationLayerPlan
     {
         public bool HasState { get; }
@@ -60,29 +60,52 @@ namespace ThreeC.CharacterBehavior
         public int StateHash => Binding.StateHash;
         public CharacterAnimationPlaybackCommand Command { get; }
         public CharacterAnimationPlaybackReason Reason { get; }
-        public bool UsedResourceFallback { get; }
         public float Weight { get; }
         public CharacterClipStart Start { get; }
         public CharacterBlendDuration Blend { get; }
+        internal CharacterTransitionProfile EntryProfile { get; }
+        internal CharacterTransitionProfile ExitProfile { get; }
         public bool ResumeLoop { get; }
         public float LayerBlendSeconds { get; }
 
+        // 保存当前播放需求解析出的片段、入点和混合参数。
         public CharacterAnimationLayerPlan(CharacterAnimationDemand demand, CharacterAnimationBinding binding, CharacterAnimationPlaybackCommand command,
-            CharacterAnimationPlaybackReason reason, bool usedResourceFallback,
-            float weight, CharacterClipStart start, CharacterBlendDuration transition, float blendSeconds,
+            CharacterAnimationPlaybackReason reason, float weight, CharacterClipStart start, CharacterBlendDuration transition, float blendSeconds,
             bool resumeLoop = false)
         {
+            EntryProfile = ExitProfile = null;
             HasState = true;
             Demand = demand;
             Binding = binding;
             Command = command;
             Reason = reason;
-            UsedResourceFallback = usedResourceFallback;
             Weight = weight;
             Start = start;
             Blend = transition;
             ResumeLoop = resumeLoop;
             LayerBlendSeconds = blendSeconds;
+        }
+
+        // 在统一计划阶段修改可调淡变时长，动作自己的交接时钟保持优先。
+        internal CharacterAnimationLayerPlan(in CharacterAnimationLayerPlan source, in CharacterAnimationLayerPlan previous,
+            CharacterTransitionProfiles profiles)
+        {
+            this = source;
+            if (profiles == null) return;
+            if (!HasState)
+            {
+                if (previous.HasState && !previous.Demand.HasHandoff)
+                    LayerBlendSeconds = previous.ExitProfile?.Duration(LayerBlendSeconds) ?? LayerBlendSeconds;
+                return;
+            }
+            EntryProfile = profiles.Select(source, false);
+            ExitProfile = profiles.Select(source, true);
+            if (EntryProfile == null || Demand.HasHandoff) return;
+            LayerBlendSeconds = EntryProfile.Duration(LayerBlendSeconds);
+            if (!previous.HasState || Command == CharacterAnimationPlaybackCommand.Keep) return;
+            if (EntryProfile.Method == TransitionMethod.Inertial || EntryProfile.FadeSeconds >= 0f)
+                Blend = CharacterBlendDuration.Seconds(EntryProfile.Duration(0f));
+            Command = Blend.Value > 0f ? CharacterAnimationPlaybackCommand.CrossFade : CharacterAnimationPlaybackCommand.Play;
         }
 
         public float WeightAfter(float current, float deltaTime)
@@ -97,7 +120,7 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>最终播放计划：各层播放指令、播放倍率与收步进度。</summary>
+    /// <summary>最终播放计划：各层播放指令、共用的物理速度与收步进度。</summary>
     internal readonly struct CharacterAnimationPlaybackPlan
     {
         public CharacterAnimationLayerPlan FullBody { get; }
@@ -106,14 +129,15 @@ namespace ThreeC.CharacterBehavior
         private readonly float upperRelease, lowerRelease, sharedRelease;
 
         public CharacterAnimationLayerPlan Overlay => UpperOwner.HasState &&
-            UpperOwner.Demand.Region == CharacterAnimationBodyRegion.FullBodyOverlay &&
+            UpperOwner.Demand.Source == CharacterAnimationSource.FullBodyOverlay &&
             UpperOwner.Demand.Key == LowerOwner.Demand.Key && UpperOwner.Demand.InstanceId == LowerOwner.Demand.InstanceId
             ? UpperOwner : new CharacterAnimationLayerPlan(sharedRelease);
-        public CharacterAnimationLayerPlan UpperBody => UpperOwner.Demand.Region == CharacterAnimationBodyRegion.UpperBody
+        public CharacterAnimationLayerPlan UpperBody => UpperOwner.Demand.Source == CharacterAnimationSource.UpperBody
             ? UpperOwner : new CharacterAnimationLayerPlan(upperRelease);
-        public CharacterAnimationLayerPlan LowerBody => LowerOwner.Demand.Region == CharacterAnimationBodyRegion.LowerBody
+        public CharacterAnimationLayerPlan LowerBody => LowerOwner.Demand.Source == CharacterAnimationSource.LowerBody
             ? LowerOwner : new CharacterAnimationLayerPlan(lowerRelease);
-        public CharacterAnimationPlaybackRates Rates { get; }
+        public float? StrideSpeed { get; }
+        public float? StartSpeed { get; }
         public float? StopClipTime { get; }
         public bool StopObserved { get; }
         public float StopRate { get; }
@@ -122,11 +146,12 @@ namespace ThreeC.CharacterBehavior
         public CharacterStopPoseSample StopPose { get; }
         public CharacterReleaseDecision ReleaseDecision { get; }
 
+        // 保存已获选的基础和覆盖计划，给每个部位确定最终姿态来源。
         public CharacterAnimationPlaybackPlan(CharacterAnimationLayerPlan fullBody,
             CharacterAnimationLayerPlan lowerBody, CharacterAnimationLayerPlan upperBody, CharacterAnimationLayerPlan overlay,
-            CharacterAnimationPlaybackRates rates, float? stopClipTime, bool stopObserved,
+            float? strideSpeed, float? stopClipTime, bool stopObserved,
             float stopRate, CharacterStopPoseSample stopPose, CharacterReleaseDecision releaseDecision,
-            float stopEntryTime = 0f, float stopEntryTravelPhase = 0f)
+            float stopEntryTime = 0f, float stopEntryTravelPhase = 0f, float? startSpeed = null)
         {
             FullBody = fullBody;
             UpperOwner = overlay.HasState ? overlay : upperBody.HasState ? upperBody : fullBody;
@@ -134,7 +159,8 @@ namespace ThreeC.CharacterBehavior
             upperRelease = upperBody.LayerBlendSeconds;
             lowerRelease = lowerBody.LayerBlendSeconds;
             sharedRelease = overlay.LayerBlendSeconds;
-            Rates = rates;
+            StrideSpeed = strideSpeed;
+            StartSpeed = startSpeed;
             StopClipTime = stopClipTime;
             StopObserved = stopObserved;
             StopRate = stopRate;
@@ -142,51 +168,6 @@ namespace ThreeC.CharacterBehavior
             StopEntryTravelPhase = stopEntryTravelPhase;
             StopPose = stopPose;
             ReleaseDecision = releaseDecision;
-        }
-    }
-
-    /// <summary>将已选的片段与入点转换为一次图层播放命令；只读上次实际提交的结果。</summary>
-    internal static class CharacterAnimationResourceResolver
-    {
-        public static CharacterAnimationPlaybackCommand Continue(CharacterAnimationDemand demand, in CharacterLayerObservation seen,
-            ref CharacterAnimationPlaybackReason reason)
-        {
-            if (demand.Playback != null || seen.Confirmation != CharacterPlaybackConfirmation.Lost)
-                return CharacterAnimationPlaybackCommand.Keep;
-            reason = CharacterAnimationPlaybackReason.RestoreState;
-            return CharacterAnimationPlaybackCommand.Play;
-        }
-
-        public static CharacterAnimationPlaybackCommand ChooseCommand(CharacterAnimationDemand demand,
-            CharacterAnimationBinding binding, in CharacterAnimationLayerPlan previous, in CharacterLayerObservation seen, bool shouldFade,
-            out CharacterAnimationPlaybackReason reason)
-        {
-            bool sameResource = previous.HasState && previous.StateHash == binding.StateHash;
-            bool consecutive = previous.Demand.IsLocomotion && demand.IsLocomotion;
-            bool sameInstance = sameResource && previous.Binding.Variant == binding.Variant &&
-                previous.Demand.InstanceId == demand.InstanceId && (previous.Demand.Key == demand.Key ||
-                    consecutive && binding.Variant != CharacterLocomotionVariant.None);
-            bool continuous = sameResource && consecutive && binding.Variant == CharacterLocomotionVariant.None &&
-                (previous.Binding.Variant == CharacterLocomotionVariant.None ||
-                    previous.Binding.Variant == CharacterLocomotionVariant.Start);
-            CharacterAnimationPlaybackCommand command;
-            if (sameInstance || continuous)
-            {
-                reason = sameInstance ? CharacterAnimationPlaybackReason.KeepInstance :
-                    CharacterAnimationPlaybackReason.KeepSharedResource;
-                command = Continue(demand, seen, ref reason);
-            }
-            else if (!previous.HasState)
-            {
-                command = CharacterAnimationPlaybackCommand.Play;
-                reason = CharacterAnimationPlaybackReason.Enter;
-            }
-            else
-            {
-                command = shouldFade ? CharacterAnimationPlaybackCommand.CrossFade : CharacterAnimationPlaybackCommand.Play;
-                reason = sameResource ? CharacterAnimationPlaybackReason.ReplayInstance : CharacterAnimationPlaybackReason.SwitchState;
-            }
-            return command;
         }
     }
 }

@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>只编排观测、语义选择、仲裁、资源解析与播放，统一生命周期与控制器缓存失效。</summary>
+    /// <summary>只编排观测、语义选择、仲裁、资源解析与播放，统一播放图的生命周期与资源缓存失效。</summary>
     internal sealed class CharacterAnimationPipeline
     {
         private readonly Animator animator;
@@ -14,54 +14,50 @@ namespace ThreeC.CharacterBehavior
         private CharacterAnimationPlaybackPlan committedPlan;
         public CharacterAnimationIk Ik => modules.Ik;
         public CharacterMotionMatcher Matcher => modules.Matcher;
-        private readonly List<(CharacterControllerFrameResult frame, CharacterAnimationMotion motion, bool reset)> steps =
-            new List<(CharacterControllerFrameResult, CharacterAnimationMotion, bool)>();
+        private readonly List<(CharacterControllerFrameResult frame, CharacterAnimationMotion motion, bool reset, double time, bool preserve)> steps =
+            new List<(CharacterControllerFrameResult, CharacterAnimationMotion, bool, double, bool)>();
         private CharacterPresentationInput input;
-        private CharacterAnimationComposition selection;
+        private CharacterPoseCandidate candidate;
         private CharacterPlaybackObservation observed;
-        private CharacterAnimationLayerPlan lower;
-        private CharacterReleaseDecision release;
-        private CharacterMatchResult match;
-        private bool lowerCoversFeet, matchRecovery, forecastEnabled;
         private bool prepared;
-        private string warning;
+        private bool awaitingGaitForecast;
+        private int capturedSteps, deferredSteps;
         private Task job;
         private readonly System.Action compute;
         private int capturedSimulation;
         private Avatar capturedAvatar;
-        private bool hasAvatar;
         private bool reselect;
         private int stateVersion;
         private string reportedError;
         private bool animatorUnavailable;
+        private CharacterBehaviorObservation lastBehavior;
 #if UNITY_EDITOR
-        internal AnimationClip ActivePreviewClip(int stateHash) => modules.Player.Direct?.StateClip(stateHash);
         private readonly CharacterAnimationDebugTrace debugTrace = new CharacterAnimationDebugTrace();
-        private RuntimeAnimatorController debugController;
-        private int debugSimulationVersion;
 #endif
 
+        // 从最近求解步恢复同源运动轨迹，再以当前行为恢复动作绑定。
         public CharacterAnimationPipeline(Animator animator, CharacterAnimationConfiguration configuration,
-            CharacterBehaviorAnimator logContext, CharacterControllerFrameResult latestFrame, int currentStateVersion,
-            int simulationVersion)
+            CharacterBehaviorAnimator logContext, CharacterControllerFrameResult latestFrame, CharacterBehaviorObservation behavior, int currentStateVersion,
+            int simulationVersion, CharacterGroundTrajectory externalTrajectory)
         {
             compute = Plan;
             this.animator = animator;
             this.logContext = logContext;
             observer = new CharacterAnimationMotionObserver(logContext.transform, configuration.IkTeleportDistance);
-            modules = new CharacterAnimationModules(animator, logContext, configuration,
-                latestFrame.SimulationVersion == simulationVersion ? latestFrame : default);
+            lastBehavior = behavior.SimulationVersion == simulationVersion ? behavior : default;
+            modules = new CharacterAnimationModules(animator, logContext, configuration, lastBehavior);
             stateVersion = currentStateVersion;
-            observer.Reset(latestFrame, simulationVersion);
-            modules.Intent.Reset(latestFrame.Behavior);
+            observer.Reset(latestFrame, simulationVersion, externalTrajectory);
+            modules.Intent.ResetGait(lastBehavior.Behavior);
             SynchronizeResources();
         }
 
-        internal void Reconfigure(CharacterAnimationConfiguration config, CharacterControllerFrameResult seed)
+        // 交接旧配置下的固定步后重新装配模块。
+        internal void Reconfigure(CharacterAnimationConfiguration config, CharacterBehaviorObservation seed)
         {
             Join();
             if (prepared) Discard();
-            ConsumeSteps();
+            ConsumeSteps(steps.Count);
             modules.Reconfigure(config, seed);
         }
 
@@ -72,50 +68,90 @@ namespace ThreeC.CharacterBehavior
                 ? observer.Read(latestFrame, simulationVersion, simulating) : default;
         }
 
+        // 记录已结算的固定步及外部来源提供的表现轨迹，供步态历史按原顺序消费。
         public void Receive(CharacterControllerFrameResult frame, int currentStateVersion,
-            int simulationVersion, bool simulating)
+            int simulationVersion, bool simulating, double time, CharacterGroundTrajectory externalTrajectory = default)
         {
             Join();
             if (stateVersion != currentStateVersion)
                 Reset(default, currentStateVersion, simulationVersion);
-            bool received = observer.Receive(frame, simulationVersion, simulating, out bool resetPose);
+            bool received = observer.Receive(frame, simulationVersion, simulating, out bool resetPose, externalTrajectory);
             if (resetPose) Ik.ClearPose();
             if (received)
-            {
-#if UNITY_EDITOR
-                debugTrace.ObserveGroundStep(frame);
-#endif
-                var motion = observer.Read(frame, simulationVersion, simulating);
-                steps.Add((frame, motion, resetPose));
-            }
-            else if (resetPose) steps.Add((default, default, true));
+                steps.Add((frame, observer.Read(frame, simulationVersion, simulating), resetPose, time, false));
+            else if (resetPose) steps.Add((default, default, true, time, false));
         }
 
-        private void ConsumeSteps()
+        // 接收当前代次的新行为片段；固定步重读与同帧重复采集均不会触发动作。
+        internal void ReceiveBehavior(in CharacterBehaviorObservation frame, int currentStateVersion, int simulationVersion)
+        {
+            if (stateVersion != currentStateVersion) Reset(default, currentStateVersion, simulationVersion);
+            if (frame.FrameNumber == 0 || frame.SimulationVersion != simulationVersion ||
+                (frame.SimulationVersion == lastBehavior.SimulationVersion && frame.FrameNumber <= lastBehavior.FrameNumber)) return;
+            lastBehavior = frame;
+            modules.Bindings.Observe(frame);
+            modules.Intent.ObserveDash(frame.Behavior);
+        }
+
+        // 按顺序消化本次采集覆盖的固定步，后到的提交留给下一次采集。
+        private void ConsumeSteps(int count, bool deferGait = false)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                var step = steps[i];
+                if (step.reset) Matcher.Reset();
+                if (step.frame.FrameNumber != 0)
+                {
+                    modules.Intent.ObserveActionVariantMotion(step.motion);
+                    step.preserve = modules.Bindings.PreservesEntryGait(step.frame);
+                }
+                if (deferGait) steps[i] = step;
+                else ReceiveIntent(step, false);
+            }
+            if (deferGait) deferredSteps = count;
+            else steps.RemoveRange(0, count);
+        }
+
+        // 用与本步绑定结果对应的步态许可推进意图。
+        private void ReceiveIntent(in (CharacterControllerFrameResult frame, CharacterAnimationMotion motion,
+            bool reset, double time, bool preserve) step, bool projectGait)
+        {
+            if (step.reset) modules.Intent.InvalidateMotion();
+            if (step.frame.FrameNumber == 0) return;
+            var motion = projectGait && modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)
+                ? input.ProjectStep(step.frame, step.motion, step.time) : step.motion;
+            modules.Intent.Receive(motion, step.frame.Behavior, step.frame.Input, step.frame.DeltaTime, step.preserve);
+        }
+
+        // 只补交已处理绑定的固定步意图，绑定和许可仍然按原计划发布一次。
+        private void FinishDeferredGait(bool projectGait)
+        {
+            for (int i = 0; i < deferredSteps; i++) ReceiveIntent(steps[i], projectGait);
+            steps.RemoveRange(0, deferredSteps);
+            deferredSteps = 0;
+        }
+
+        // 找出需要先核对发布预测、再更新持久步态的固定步批次。
+        private bool HasForecastSensitiveSteps()
         {
             foreach (var step in steps)
-            {
-                if (step.reset) { Matcher.Reset(); modules.Intent.InvalidateMotion(); }
-                if (step.frame.FrameNumber == 0) continue;
-                if (step.motion.IsValid) modules.Resources.ObserveMovement(step.motion);
-                modules.Bindings.Observe(step.frame);
-                modules.Intent.Receive(step.motion, step.frame.Behavior, step.frame.Input, step.frame.DeltaTime, modules.Bindings.PreserveEntryGait);
-            }
-            steps.Clear();
+                if (modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)) return true;
+            return false;
         }
 
-        public bool Capture(CharacterControllerFrameResult latestFrame, int currentStateVersion,
-            int simulationVersion, bool simulating, float deltaTime, long guardGrant, CharacterMovementForecast forecast)
+        // 采样动画更新所需输入，并处理暂停、Animator 停用与资源缺失。
+        public bool Capture(CharacterControllerFrameResult latestFrame, CharacterBehaviorObservation behavior, int currentStateVersion,
+            int simulationVersion, bool simulating, float deltaTime, double now, long guardGrant, CharacterMovementForecast forecast)
         {
-            Receive(latestFrame, currentStateVersion, simulationVersion, simulating); // 补读遗漏的固定步提交，观测端负责去重。
+            Receive(latestFrame, currentStateVersion, simulationVersion, simulating, now); // 补读遗漏的固定步提交，观测端负责去重。
             CharacterAnimationMotion motion = observer.Read(latestFrame, simulationVersion, simulating);
-            bool validGrant = simulating && latestFrame.SimulationVersion == simulationVersion;
+            bool validGrant = simulating && behavior.FrameNumber > 0 && behavior.SimulationVersion == simulationVersion;
 #if UNITY_EDITOR
-            debugSimulationVersion = simulationVersion;
+            debugTrace.CaptureSimulation(simulationVersion);
 #endif
             if (animator == null || !animator.isActiveAndEnabled)
             {
-                ConsumeSteps();
+                ConsumeSteps(steps.Count);
                 modules.Bindings.UpdateGrants(validGrant, guardGrant);
                 modules.Bindings.SuspendPulses();
                 // Animator 停用时仍接收固定步，恢复时重发播放状态并重建步态相位。
@@ -131,23 +167,17 @@ namespace ThreeC.CharacterBehavior
                 animatorUnavailable = true;
                 modules.Intent.InvalidateMotion();
 #if UNITY_EDITOR
+                CharacterMatchDebugCapture.Clear(animator);
                 debugTrace.SetStatus(CharacterAnimationDebugStatus.AnimatorUnavailable);
 #endif
                 return false;
-            }
-            if (hasAvatar && capturedAvatar != animator.avatar)
-            {
-                ClearPoseHistory();
-                committedPlan = default;
-                modules.Composer.ResetSelection();
-                modules.Bindings.RebindGrantedEntries();
             }
             animatorUnavailable = false;
             modules.Player.SetPaused(!simulating);
             bool ready = SynchronizeResources();
             if (!simulating || !ready)
             {
-                ConsumeSteps();
+                ConsumeSteps(steps.Count);
                 modules.Bindings.UpdateGrants(validGrant, guardGrant);
                 modules.Bindings.SuspendPulses();
                 Matcher.Reset();
@@ -155,6 +185,7 @@ namespace ThreeC.CharacterBehavior
                 else Ik.SetFrozen(true);
                 modules.Intent.InvalidateMotion();
 #if UNITY_EDITOR
+                CharacterMatchDebugCapture.Clear(animator);
                 if (!simulating)
                     debugTrace.SetStatus(CharacterAnimationDebugStatus.Paused);
 #endif
@@ -163,13 +194,14 @@ namespace ThreeC.CharacterBehavior
             modules.Resources.CaptureWeights(deltaTime);
             Matcher.CaptureCompatibility();
             var feet = motion.IsValid ? Ik.ReadFeet(motion) : default;
+            Matcher.Features = Ik.ReadFeatures(feet);
             var seen = modules.Playback.Capture(committedPlan.FullBody, feet);
-            forecastEnabled = forecast != null;
-            input = new CharacterPresentationInput(latestFrame, motion, forecast?.Snapshot(), seen, feet,
-                deltaTime, Time.timeAsDouble, validGrant, guardGrant);
+            input = new CharacterPresentationInput(latestFrame, behavior.Behavior, motion, forecast, seen, feet,
+                deltaTime, now, validGrant, guardGrant, Matcher.Windows);
+            capturedSteps = steps.Count;
+            awaitingGaitForecast = forecast != null && HasForecastSensitiveSteps();
             capturedSimulation = simulationVersion;
             capturedAvatar = animator.avatar;
-            hasAvatar = true;
             reselect = false;
             prepared = true;
             return true;
@@ -203,128 +235,111 @@ namespace ThreeC.CharacterBehavior
                 animator && animator.isActiveAndEnabled && animator.avatar == capturedAvatar && !modules.Player.NeedsRebind;
         }
 
+        // 按计划时点提交绑定；预测敏感的步态要等最终核对后才用于选姿。
         private void Plan()
         {
             using var sample = CharacterPresentationBatch.Planning.Auto();
             modules.Composer.BeginPlan();
-            ConsumeSteps();
+            ConsumeSteps(capturedSteps, awaitingGaitForecast);
             var motion = input.Motion;
             modules.Bindings.UpdateGrants(input.ValidGrant, input.GuardGrant);
-            if (!motion.IsValid && !motion.RetainedStrideSpeed.HasValue) modules.Resources.ObserveMovement(default);
-            modules.Bindings.SubmitGranted(input.FixedRemainder);
-            if (motion.IsValid) modules.Intent.AdvancePresentation(input.DeltaTime);
+            if (!motion.IsValid) modules.Intent.ObserveActionVariantMotion(motion);
+            modules.Bindings.SubmitGranted();
+            if (!awaitingGaitForecast) PlanSelection();
+        }
+
+        // 用此批次已更新的步态历史推进表现时间和候选选择。
+        private void PlanSelection()
+        {
+            if (input.Motion.IsValid) modules.Intent.AdvancePresentation(input.DeltaTime);
             else modules.Intent.InvalidateMotion();
-            observed = input.Observation.ForPhase(modules.Intent.Phase, committedPlan.FullBody);
+            observed = input.Observation.ForPhase(modules.Intent.Phase);
             Matcher.SaveSelectionHistory();
-            EvaluateCandidate();
+            candidate = EvaluateCandidate();
         }
 
-        private void SelectOwners()
+        // 以当前意图仲裁部位，计算下身片段及足部覆盖许可。
+        private CharacterPoseOwners SelectOwners()
         {
-            selection = modules.Composer.Preview(modules.Intent.Current);
-            bool returning = modules.Bindings.IsReturningToMovement(selection.Overlay, input.Frame.Behavior);
-            lower = modules.Poses.SelectLower(selection, observed, committedPlan, returning, input.DeltaTime,
-                out lowerCoversFeet, out matchRecovery);
+            var selection = modules.Composer.Preview(modules.Intent.Current);
+            bool returning = modules.Bindings.IsReturningToMovement(selection.Overlay, input.Behavior);
+            return modules.Poses.SelectOwners(selection, observed, committedPlan, returning, modules.Intent.UsesMovingActionVariant);
         }
 
-        private void EvaluateCandidate()
+        // 用本帧观测和最近提交的播放计划计算完整候选。
+        private CharacterPoseCandidate EvaluateCandidate() =>
+            modules.Poses.EvaluateCandidate(SelectOwners(), modules.Intent, Matcher, input, observed, committedPlan);
+
+        // 在提交前更新本帧的预测输入，轨迹发生变化时重新选择。
+        internal void RefreshForecast(CharacterMovementForecast published)
         {
-            SelectOwners();
-            Matcher.PrepareReturn(input.Forecast, input.Time, selection.FullBody, lowerCoversFeet, matchRecovery, input.Motion, input.Feet);
-            release = modules.Poses.EvaluateRelease(modules.Intent, Matcher, selection.FullBody, lowerCoversFeet,
-                matchRecovery, observed, committedPlan, input.Motion, input.Feet, input.DeltaTime, out match);
+            input = input.RefreshForecast(published, out bool changed);
+            reselect |= changed;
         }
 
-        internal void RefreshForecast(CharacterMovementForecast published, CharacterControllerFrameResult actual)
-        {
-            var snapshot = published?.Snapshot();
-            if (forecastEnabled == (published != null) && ReferenceEquals(snapshot, input.Forecast)) return;
-            forecastEnabled = published != null;
-            var latest = CharacterForecastQuery.ForAnimation(actual, published, input.Time);
-            var motion = new CharacterAnimationMotion(input.Motion, latest.Trajectory);
-            input = new CharacterPresentationInput(latest, motion, snapshot, input.Observation, input.Feet,
-                input.DeltaTime, input.Time, input.ValidGrant, input.GuardGrant);
-            reselect = true;
-        }
-
+        // 在预测核对后处理尚未计划的步态批次，并提交动画组合。
         internal void Apply()
         {
             if (!prepared) return;
             prepared = false;
-            modules.Composer.BeginPlan(); // 单次动作的完成回执随最终播放结果发布。
-            try { ApplySelection(); }
+            try
+            {
+                if (awaitingGaitForecast)
+                {
+                    FinishDeferredGait(true);
+                    PlanSelection();
+                    reselect = false;
+                }
+                modules.Composer.BeginPlan(); // 单次动作的完成回执随最终播放结果发布。
+                ApplySelection();
+            }
             catch { Discard(); throw; }
         }
 
+        // 核对单次动作回执并重新选择，完成播放下发后发布最终结果。
         private void ApplySelection()
         {
-            if (reselect) selection = modules.Composer.Preview(modules.Intent.Current);
-            if (ResolveOneShots(observed, selection))
+            var preview = reselect ? modules.Composer.Preview(modules.Intent.Current) : candidate.Owners.Selection;
+            if (modules.Player.ReconcileOneShots(committedPlan, observed, preview, modules.Composer))
             {
-                modules.Bindings.SubmitGranted(input.FixedRemainder);
+                modules.Bindings.SubmitGranted();
                 reselect = true;
             }
             if (reselect)
             {
                 Matcher.RestoreSelectionHistory();
-                EvaluateCandidate();
+                candidate = EvaluateCandidate();
             }
             var entryVelocity = modules.Intent.StopEntryVelocity;
-            if (modules.Intent.ApplyRelease(release)) SelectOwners();
+            if (modules.Intent.ApplyRelease(candidate.Release))
+                candidate = new CharacterPoseCandidate(SelectOwners(), candidate.Release, candidate.Match);
             var motion = input.Motion;
             float deltaTime = input.DeltaTime;
-            var plan = modules.Poses.Select(selection, lower, lowerCoversFeet, matchRecovery, observed, motion,
-                entryVelocity, committedPlan, release, match);
-            selection = selection.WithPlaybackWeights(plan);
-            var emission = modules.Player.Active.Apply(plan, deltaTime);
+            var plan = modules.Poses.Select(candidate, modules.Intent.UsesMovingActionVariant, observed, motion, entryVelocity, committedPlan);
+            var selection = candidate.Owners.Selection.WithPlaybackWeights(plan);
+            var emission = modules.Player.ApplyPlan(plan, deltaTime);
             modules.Composer.PublishReceipts(true);
             modules.Composer.Commit(selection);
-            if (emission.FullBody) plan.FullBody.Demand.Playback?.Start();
-            if (emission.Overlay) plan.Overlay.Demand.Playback?.Start();
-            if (emission.LowerBody) plan.LowerBody.Demand.Playback?.Start();
-            if (emission.UpperBody) plan.UpperBody.Demand.Playback?.Start();
+            modules.Player.PublishOneShotStarts(plan, emission);
             modules.Bindings.ReleaseExpiredRequests();
             committedPlan = plan;
-            Ik.Prepare(selection, motion, plan, deltaTime); // 目标许可与当前片段混合、分层遮罩同步。
-            modules.Player.Direct?.Evaluate();
+            Ik.Prepare(selection, motion, plan, deltaTime, input.Time); // 目标许可与当前片段混合、分层遮罩同步。
+            modules.Player.EvaluatePose();
 #if UNITY_EDITOR
-            var handoff = new CharacterDebugHandoff(input.Frame.Behavior, modules.Player);
-            debugTrace.Record(motion, modules.Intent.Phase, modules.Intent.PhaseReason, selection, plan, emission,
-                observed.LeftSupport, entryVelocity, handoff);
+            Matcher.Publish(candidate.Match, plan);
+            debugTrace.Publish(plan, emission, modules.Player.CaptureDebugMix(), Ik.RootDebug);
 #endif
             modules.Bindings.FlushWarnings();
-            if (warning != null) { Debug.LogWarning(warning, logContext); warning = null; }
+            modules.Player.FlushWarnings(logContext);
         }
 
+        // 撤销本帧回执，已结算意图仍以固定步观测完成交接。
         internal void Discard()
         {
             prepared = false;
+            if (deferredSteps != 0) FinishDeferredGait(false);
             modules.Composer.PublishReceipts(false);
             Matcher.Reset();
-        }
-
-        private bool ResolveOneShots(in CharacterPlaybackObservation seen, in CharacterAnimationComposition selected)
-        {
-            if (committedPlan.FullBody.Demand.Playback == null && committedPlan.UpperBody.Demand.Playback == null &&
-                committedPlan.LowerBody.Demand.Playback == null && committedPlan.Overlay.Demand.Playback == null) return false;
-            bool changed = InspectOneShot(committedPlan.FullBody, seen.Full, selected.FullBody);
-            changed |= InspectOneShot(committedPlan.Overlay, seen.Overlay, selected.Overlay);
-            changed |= InspectOneShot(committedPlan.LowerBody, seen.Lower, selected.LowerBody);
-            changed |= InspectOneShot(committedPlan.UpperBody, seen.Upper, selected.UpperBody);
-            return changed;
-        }
-
-        private bool InspectOneShot(in CharacterAnimationLayerPlan previous, in CharacterLayerObservation layer,
-            CharacterAnimationDemand selected)
-        {
-            var playback = previous.Demand.Playback;
-            if (playback == null || playback.Status != CharacterActionPlaybackStatus.Started ||
-                selected.Playback != playback) return false;
-            var status = playback.Observe(previous.StateHash, layer);
-            if (status == CharacterActionPlaybackStatus.Started) return false;
-            if (layer.Destination.fullPathHash == previous.StateHash && layer.Destination.loop)
-                warning = $"单次动作 {playback.Key} 绑定了循环状态 {previous.StateName}，已中止。";
-            return modules.Composer.End(playback.Key, playback.InstanceId, status);
         }
 
         public CharacterActionPlayback PlayOnce(string key, float weight, CharacterControllerFrameResult latestFrame,
@@ -337,11 +352,12 @@ namespace ThreeC.CharacterBehavior
             return result;
         }
 
+        // 消费已结算固定步并重新建立位移及姿态历史。
         public void ResetPoseHistory()
         {
             Join();
             Discard();
-            ConsumeSteps();
+            ConsumeSteps(steps.Count);
             observer.InvalidatePosition();
             ClearPoseHistory();
         }
@@ -383,6 +399,7 @@ namespace ThreeC.CharacterBehavior
             return removed;
         }
 
+        // 清空两个时间域的观察历史，等待新代次的动作与位移。
         public void Reset(CharacterControllerFrameResult latestFrame, int currentStateVersion, int simulationVersion)
         {
             Join();
@@ -390,28 +407,31 @@ namespace ThreeC.CharacterBehavior
             steps.Clear();
             stateVersion = currentStateVersion;
             observer.Reset(latestFrame, simulationVersion);
-            modules.Intent.Reset(latestFrame.Behavior);
+            lastBehavior = default;
+            modules.Intent.ResetGait(default);
+            modules.Intent.ObserveActionVariantMotion(default);
             modules.Bindings.Reset();
-            modules.Resources.ObserveMovement(default);
             modules.Composer.Reset();
             committedPlan = default;
             Ik.Reset();
-            modules.Player.ResetPlayback();
+            modules.Player.CloseGraph();
 #if UNITY_EDITOR
+            CharacterMatchDebugCapture.Clear(animator);
             debugTrace.Clear();
 #endif
         }
 
+        // Animator 的 Avatar 或控制器占用变化时重新验证资源与播放可用状态。
         private bool SynchronizeResources()
         {
             if (modules.Player.NeedsRebind)
             {
                 Discard();
                 modules.Intent.InvalidateMotion();
-                // 更换控制器只清播放和选择历史，保留持续需求及实例编号。
+                // 资源重绑时保留持续需求及实例编号，清除上一次播放和姿态历史。
                 committedPlan = default;
                 Ik.Invalidate();
-                modules.Player.BindController();
+                modules.Player.BindPlayback();
                 modules.Resources.RefreshBindings();
                 modules.Poses.BindClips();
                 modules.Bindings.RebindGrantedEntries();
@@ -424,19 +444,12 @@ namespace ThreeC.CharacterBehavior
                             Debug.LogWarning($"当前动画资源缺少动作 {key}，持续请求将在资源恢复后参与选择。", logContext);
                 }
 #if UNITY_EDITOR
-                debugController = modules.Player.Controller;
+                CharacterMatchDebugCapture.Clear(animator);
                 debugTrace.Clear();
 #endif
             }
-            if (!modules.Resources.Ready)
-            {
-                if (modules.Resources.ValidationError != null)
-                    ReportError(modules.Resources.ValidationError);
-#if UNITY_EDITOR
-                else
-                    debugTrace.SetStatus(CharacterAnimationDebugStatus.ResourceUnavailable, "缺少可用的动画播放库或 Animator Controller。");
-#endif
-            }
+            if (modules.Resources.Ready) reportedError = null;
+            else ReportError(modules.Resources.ValidationError);
             return modules.Resources.Ready;
         }
 
@@ -451,8 +464,12 @@ namespace ThreeC.CharacterBehavior
             Debug.LogError(error, logContext);
         }
 
+        // 销毁播放图并释放该角色最后一次诊断结果。
         public void Release()
         {
+#if UNITY_EDITOR
+            CharacterMatchDebugCapture.Clear(animator);
+#endif
             Join();
             Discard();
             steps.Clear();
@@ -462,22 +479,10 @@ namespace ThreeC.CharacterBehavior
         }
 
 #if UNITY_EDITOR
-        public CharacterAnimationDebugSnapshot ReadDebug(int currentStateVersion, int simulationVersion, bool simulating,
-            out ICharacterAnimationDebugHistory history)
+        // 读取当前动画实例已发布的播放结果。
+        public CharacterAnimationDebugSnapshot ReadDebug(int currentStateVersion, int simulationVersion, bool simulating)
         {
-            bool matchingOwner = stateVersion == currentStateVersion && animator != null &&
-                debugController == modules.Player.Controller;
-            history = matchingOwner ? debugTrace : null;
-            if (animator == null || !animator.isActiveAndEnabled)
-                return new CharacterAnimationDebugSnapshot(CharacterAnimationDebugStatus.AnimatorUnavailable);
-            if (!simulating)
-                return new CharacterAnimationDebugSnapshot(CharacterAnimationDebugStatus.Paused);
-            CharacterAnimationDebugSnapshot snapshot = debugTrace.Current;
-            if (!matchingOwner || debugSimulationVersion != simulationVersion ||
-                snapshot.Status == CharacterAnimationDebugStatus.Paused ||
-                snapshot.Status == CharacterAnimationDebugStatus.AnimatorUnavailable)
-                return default;
-            return snapshot;
+            return debugTrace.Read(animator, modules.Player, stateVersion, currentStateVersion, simulationVersion, simulating);
         }
 #endif
     }

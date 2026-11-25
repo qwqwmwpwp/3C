@@ -7,103 +7,145 @@ using UnityEngine.Playables;
 namespace ThreeC.CharacterBehavior
 {
     /// <summary>直接片段播放端。剪辑以独立时钟混合，IK 和基础动画在同一次手动求值中输出到 Animator。</summary>
-    internal sealed class CharacterClipPlayback : ICharacterPlaybackBackend
+    internal sealed class CharacterClipPlayback
     {
         private readonly Animator animator;
         private readonly CharacterMotionDatabase database;
-        private readonly CharacterAnimationConfiguration config;
         private readonly Dictionary<int, CharacterClipState> states = new Dictionary<int, CharacterClipState>();
         private readonly Dictionary<AnimationClip, CharacterClipCurves> curves = new Dictionary<AnimationClip, CharacterClipCurves>();
-        private readonly Dictionary<int, float> nominalSpeeds = new Dictionary<int, float>();
-        private readonly HashSet<int> stops = new HashSet<int>();
+        private readonly Dictionary<int, GroundPlaybackPace> paces = new Dictionary<int, GroundPlaybackPace>();
+        private readonly Dictionary<int, CharacterMotionTrack> groundTracks = new Dictionary<int, CharacterMotionTrack>();
         private readonly CharacterClipLibrary library;
-        private readonly bool layoutReady;
-        private RuntimeAnimatorController detached;
+        private readonly string libraryError;
+        private bool reuseMixers;
         private PlayableGraph graph;
         private AnimationPlayableOutput output;
         private CharacterBodyPlaybackGraph body;
-        private readonly List<KeyValuePair<AnimationClip, AnimationClip>> overridePairs = new List<KeyValuePair<AnimationClip, AnimationClip>>();
-        private readonly Dictionary<AnimationClip, AnimationClip> replacements = new Dictionary<AnimationClip, AnimationClip>();
-        private AnimatorOverrideController boundOverrides;
-        private int lastOverrideCheck = -1;
-        private float delta;
+        private float delta, clockScale = 1f;
 
-        public RuntimeAnimatorController Controller => animator && animator.runtimeAnimatorController
-            ? animator.runtimeAnimatorController : detached ? detached :
-            ExpectsBodyLibrary && library?.FromGroups != true ? database.BakedController : null;
-        public bool ExpectsBodyLibrary { get; }
-        public bool Available => animator && database && library != null && library.Ready && layoutReady && CompatibleController();
-        internal bool ReuseMixers => config.ReuseActionMixers;
+        internal bool Available => ValidateBinding() == null;
+        internal bool ReuseMixers => reuseMixers;
         public PlayableGraph Graph => graph;
-        public bool ControllerReassigned => graph.IsValid() && animator && animator.runtimeAnimatorController;
-        public Vector3? InertiaAllowance => body?.InertiaAllowance();
+        public Vector3 InertiaAllowance => body?.InertiaAllowance() ?? Vector3.one;
 
-        private bool CompatibleController()
+        // 返回阻止 Animator 使用双层片段图的原因。
+        internal string ValidateBinding()
         {
-            var current = Controller;
-            if (library.FromGroups) return !current;
-            return database.BakedController && (current == database.BakedController || ExpectsBodyLibrary &&
-                current is AnimatorOverrideController overrides && overrides.runtimeAnimatorController == database.BakedController);
+            if (libraryError != null) return libraryError;
+            if (!database) return "动画配置的播放库已经丢失。";
+            if (!animator) return "缺少用于双层片段播放的 Animator。";
+            if (animator.runtimeAnimatorController) return "双层片段播放需要将 Animator 的 Controller 留空。";
+            if (animator.avatar != database.BakedAvatar) return "Animator 的 Avatar 与角色动画库的烘焙 Avatar 不一致。";
+            return null;
         }
 
+        // 建立烘焙状态和素材曲线的按键索引。
         public CharacterClipPlayback(Animator animator, CharacterAnimationConfiguration config)
         {
             this.animator = animator;
-            this.config = config;
             database = config.PlaybackLibrary;
             library = database ? database.Playback : null;
-            ExpectsBodyLibrary = database && database.UsesBodyOutputs;
-            layoutReady = !ExpectsBodyLibrary || library?.HasBodyMasks() == true;
-            if (library == null || !library.Ready) return;
+            libraryError = database ? database.ValidatePlayback() : "动画配置缺少由基础动画数据组烘焙的播放库。";
+            if (libraryError != null) return;
             foreach (var state in library.States)
-                if (state != null && state.Clip && !string.IsNullOrEmpty(state.Path))
-                    states[Animator.StringToHash(state.Path)] = state;
+            {
+                if (state == null || !state.Clip || string.IsNullOrWhiteSpace(state.Path))
+                {
+                    libraryError = "动画播放库包含缺少片段或状态路径的记录，请重新烘焙基础动画数据组。";
+                    states.Clear();
+                    return;
+                }
+                int hash = Animator.StringToHash(state.Path);
+                if (hash == 0 || states.ContainsKey(hash))
+                {
+                    libraryError = $"动画播放库包含无法区分的状态路径 {state.Path}，请检查基础动画数据组并重新烘焙。";
+                    states.Clear();
+                    return;
+                }
+                states.Add(hash, state);
+            }
             foreach (var clip in library.Clips)
                 if (clip != null && clip.Clip) curves[clip.Clip] = clip;
             ConfigurePaces(config);
         }
 
+        // 根据步态配置和烘焙采样确定用于步频和制动调速的状态。
         internal void ConfigurePaces(CharacterAnimationConfiguration config)
         {
-            nominalSpeeds.Clear();
-            stops.Clear();
-            SetPace(config.WalkState, config.WalkSpeed);
-            SetPace(config.WalkStartState, config.WalkSpeed);
-            SetPace(config.MoveState, config.RunSpeed);
-            SetPace(config.RunStartState, config.RunSpeed);
-            SetPace(config.SprintState, config.SprintSpeed);
-            SetPace(config.DashState, config.DashClipSpeed);
+            reuseMixers = config.ReuseActionMixers;
+            paces.Clear();
+            groundTracks.Clear();
+            foreach (var pair in states)
+                paces[pair.Key] = new GroundPlaybackPace(default, default, 0f, pair.Value.Speed, null);
+            SetPace(config.WalkState, GroundMotionUse.Cycle, GroundTrackGait.Walk, config.WalkSpeed);
+            SetPace(config.WalkStartState, GroundMotionUse.Start, GroundTrackGait.Walk, config.WalkSpeed);
+            SetPace(config.MoveState, GroundMotionUse.Cycle, GroundTrackGait.Run, config.RunSpeed);
+            SetPace(config.RunStartState, GroundMotionUse.Start, GroundTrackGait.Run, config.RunSpeed);
+            SetPace(config.SprintState, GroundMotionUse.Cycle, GroundTrackGait.Sprint, config.SprintSpeed);
+            SetPace(config.DashState, default, default, config.DashClipSpeed);
             foreach (var stop in new[] { config.WalkStop, config.RunStop, config.SprintStop })
-                if (stop != null) { AddStop(stop.LeftSupport); AddStop(stop.RightSupport); }
+                if (stop != null)
+                {
+                    SetPace(stop.LeftSupport, GroundMotionUse.Stop, default, 0f);
+                    SetPace(stop.RightSupport, GroundMotionUse.Stop, default, 0f);
+                }
             if (!database || database.BakedTracks == null) return;
             foreach (var track in database.BakedTracks)
             {
                 if (track == null || track.States == null) continue;
                 foreach (string path in track.States)
                 {
-                    if (track.IsStop) AddStop(path);
-                    else SetPace(path, track.IsLoop && track.ScalesWithSpeed ? track.ReferenceSpeed : 0f);
+                    if (string.IsNullOrWhiteSpace(path)) continue;
+                    int hash = Animator.StringToHash(path);
+                    if (!MatchesTrack(hash, track)) continue;
+                    float nominal = track.IsLoop && !track.FixedCycleSpeed && track.ScalesWithSpeed ? track.ReferenceSpeed : 0f;
+                    SetPace(path, track.Use, track.Gait, nominal);
+                    if (track.ReadyForSearch) groundTracks[hash] = track;
                 }
+            }
+
+            // 用实际播放状态的基础倍率建立可在规划线程只读的逻辑时钟规则。
+            void SetPace(string path, GroundMotionUse use, GroundTrackGait gait, float nominal)
+            {
+                if (string.IsNullOrWhiteSpace(path)) return;
+                int hash = Animator.StringToHash(path);
+                if (states.TryGetValue(hash, out var state))
+                    paces[hash] = new GroundPlaybackPace(use, gait, nominal, state.Speed, config.PaceLimits);
             }
         }
 
-        private void SetPace(string path, float speed)
+        // 读取与实际播放状态一致的逻辑倍率策略。
+        internal GroundPlaybackPace Pace(int hash) => paces.TryGetValue(hash, out var pace) ? pace : default;
+
+        // 根据实际基础声部和全身、下身覆盖读取可校正的参考方向。
+        internal Vector2 CycleDirection(float nearSeconds, out float coverage)
         {
-            if (!string.IsNullOrWhiteSpace(path)) nominalSpeeds[Animator.StringToHash(path)] = speed;
+            coverage = 0f;
+            if (body == null) return default;
+            var direction = body.Source(CharacterAnimationSource.Baseline).CycleDirection(groundTracks, delta, nearSeconds * clockScale, out coverage);
+            coverage *= (1f - body.Weight(CharacterAnimationSource.LowerBody)) * (1f - body.Weight(CharacterAnimationSource.FullBodyOverlay));
+            return direction;
         }
 
-        private void AddStop(string path)
+        // 依据基础步态实际剩余的双腿份额，对素材增量和可比较的真实运动使用同一权重。
+        internal GroundPathKey ReferenceStep(out float coverage, out GroundMotionUse use)
         {
-            if (!string.IsNullOrWhiteSpace(path)) stops.Add(Animator.StringToHash(path));
+            coverage = 0f;
+            use = default;
+            if (body == null) return default;
+            var step = body.Source(CharacterAnimationSource.Baseline).ReferenceStep(groundTracks, out coverage, out use);
+            float visible = (1f - body.Weight(CharacterAnimationSource.LowerBody)) * (1f - body.Weight(CharacterAnimationSource.FullBodyOverlay));
+            step.Position *= visible;
+            step.Yaw *= visible;
+            coverage *= visible;
+            return step;
         }
 
-        public bool HasState(CharacterAnimationBodyRegion source, int hash)
-        {
-            if (!Available || !states.TryGetValue(hash, out var state)) return false;
-            if (ExpectsBodyLibrary) return true; // 状态路径只寻址片段，部位由动作申请决定。
-            int layer = config.LegacyLayer(source);
-            return layer >= 0 && layer < library.Layers.Length && state.Layer == layer;
-        }
+        // 读取本次真实播放切换在各遮罩部位上的可见贡献。
+        internal CharacterTransitionSignal Transition => body?.Transition ?? default;
+
+        // 状态路径只寻址片段，身体范围由动作申请决定。
+        public bool HasState(int hash) => states.ContainsKey(hash);
 
         public bool CanPlayOnce(int hash)
         {
@@ -113,45 +155,15 @@ namespace ThreeC.CharacterBehavior
             return !(state.Blend.Second ? state.Blend.Loop : clip.isLooping) && StateSeconds(hash) > 0f && state.Speed > 0f;
         }
 
-        public void BindClips()
-        {
-            lastOverrideCheck = Time.frameCount;
-            replacements.Clear();
-            boundOverrides = ExpectsBodyLibrary && library?.FromGroups != true ? Controller as AnimatorOverrideController : null;
-            if (!boundOverrides) return;
-            boundOverrides.GetOverrides(overridePairs);
-            foreach (var pair in overridePairs)
-                if (pair.Value && pair.Value != pair.Key) replacements[pair.Key] = pair.Value;
-        }
-
-        public bool OverridesChanged()
-        {
-            if (!boundOverrides || lastOverrideCheck == Time.frameCount) return false;
-            lastOverrideCheck = Time.frameCount;
-            boundOverrides.GetOverrides(overridePairs);
-            int count = 0;
-            foreach (var pair in overridePairs)
-            {
-                if (!pair.Value || pair.Value == pair.Key) continue;
-                if (!replacements.TryGetValue(pair.Key, out var clip) || clip != pair.Value) return true;
-                count++;
-            }
-            return count != replacements.Count;
-        }
-
-        private CharacterClipLayer BodyLayer(int index) => index >= 0 && index < library.Layers.Length ? library.Layers[index] : null;
-
+        // 在 Animator 上连接下身、上身和共用的全身接管输出。
         public void Open()
         {
             if (graph.IsValid() || !Available) return;
-            detached = animator.runtimeAnimatorController;
             try
             {
-                if (detached) animator.runtimeAnimatorController = null; // 此角色仅由下面一个图输出姿态及片段事件。
                 graph = PlayableGraph.Create("角色片段播放");
                 graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
-                body = new CharacterBodyPlaybackGraph(graph, BodyLayer(ExpectsBodyLibrary ? 0 : config.LowerLayer),
-                    BodyLayer(ExpectsBodyLibrary ? 1 : config.UpperLayer));
+                body = new CharacterBodyPlaybackGraph(graph, library.Layers[0], library.Layers[1]);
                 output = AnimationPlayableOutput.Create(graph, "角色双层姿势", animator);
                 output.SetSourcePlayable(body.Root);
                 graph.Play();
@@ -163,6 +175,7 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 销毁本角色的播放节点并清除本帧动画时间。
         public void Close()
         {
             if (graph.IsValid())
@@ -171,10 +184,9 @@ namespace ThreeC.CharacterBehavior
             }
             body = null;
             delta = 0f;
-            if (detached && animator && !animator.runtimeAnimatorController) animator.runtimeAnimatorController = detached;
-            detached = null;
         }
 
+        // 将最终 IK 接入片段图，并接管 Animator 的姿态输出。
         public void ConnectIk(AnimationScriptPlayable job)
         {
             job.SetInputCount(1);
@@ -189,6 +201,7 @@ namespace ThreeC.CharacterBehavior
             output.SetSourcePlayable(job);
         }
 
+        // 移除 IK 节点并恢复由身体混合器直接输出姿势。
         public void DisconnectIk(AnimationScriptPlayable job)
         {
             if (!job.IsValid() || !graph.IsValid()) return;
@@ -200,22 +213,16 @@ namespace ThreeC.CharacterBehavior
         }
 
 #if UNITY_EDITOR
-        internal CharacterDebugClipMix DebugMix(CharacterAnimationBodyRegion source) =>
+        internal CharacterDebugClipMix DebugMix(CharacterAnimationSource source) =>
             body?.Source(source)?.ReadDebugMix() ?? default;
-
-        internal float DebugActionCoverage(CharacterIkLimb limb, string action) =>
-            string.IsNullOrEmpty(action) ? 0f : Permission(limb, null, action).Coverage;
 #endif
 
-        public AnimationClip BakedClip(int state) => states.TryGetValue(state, out var entry) ? entry.Clip : null;
+        // 核对播放状态和烘焙地面轨道是否引用相同素材和混合配方。
         public bool MatchesTrack(int state, CharacterMotionTrack track) =>
-            states.TryGetValue(state, out var entry) && entry.MatchesTrack(track, StateClip(state));
+            states.TryGetValue(state, out var entry) && entry.MatchesTrack(track, entry.Clip);
 
-        public AnimationClip StateClip(int state)
-        {
-            var original = BakedClip(state);
-            return original && replacements.TryGetValue(original, out var clip) ? clip : original;
-        }
+        // 读取状态的主片段，供姿态窗口定位正在播放的素材。
+        public AnimationClip StateClip(int state) => states.TryGetValue(state, out var entry) ? entry.Clip : null;
 
         public float? StateSeconds(int state)
         {
@@ -225,12 +232,13 @@ namespace ThreeC.CharacterBehavior
             return blend.Second ? blend.Seconds : clip.length;
         }
 
-        public float LayerWeight(CharacterAnimationBodyRegion source) => body?.Weight(source) ?? 0f;
-        public CharacterLayerObservation Observe(CharacterAnimationBodyRegion source, bool readLengths, bool readNext) =>
+        public float LayerWeight(CharacterAnimationSource source) => body?.Weight(source) ?? 0f;
+        // 采样部位混合器已经实际提交的播放状态。
+        public CharacterLayerObservation Observe(CharacterAnimationSource source) =>
             body?.Source(source)?.Observe() ?? default;
 
         internal CharacterFootPlantFrame ReadFootPlant(in CharacterAnimationLayerPlan layer) =>
-            body?.Source(layer.Demand.Region)?.ReadFootPlant(layer, delta) ?? new CharacterFootPlantFrame(layer, layer.Start.Phase, true);
+            body?.Source(layer.Demand.Source)?.ReadFootPlant(layer, delta) ?? new CharacterFootPlantFrame(layer, layer.Start.Phase, true);
 
         public float LayerBlendDelta(float dt)
         {
@@ -238,13 +246,16 @@ namespace ThreeC.CharacterBehavior
             return Mathf.Max(0f, step * animator.speed);
         }
 
+        // 推进各部位混合及全身动作的接管，记录实际创建的播放。
         public CharacterAnimationPlaybackEmission Apply(in CharacterAnimationPlaybackPlan plan, float dt)
         {
             Open();
             delta = LayerBlendDelta(dt);
-            return body.Apply(this, plan, delta);
+            clockScale = dt > 0f ? delta / dt : 0f;
+            return body?.Apply(this, plan, delta) ?? default;
         }
 
+        // 按入点、淡入、步频和制动计划推进一个片段混合源。
         internal bool Advance(CharacterClipMixer mixer, in CharacterAnimationLayerPlan plan,
             in CharacterAnimationPlaybackPlan frame, float dt, bool created = false)
         {
@@ -252,6 +263,7 @@ namespace ThreeC.CharacterBehavior
             bool played = false;
             if (plan.HasState)
             {
+                mixer.ExitProfile = plan.ExitProfile;
                 bool entered = plan.Demand.HasHandoff && plan.Demand.Timing.SamplePhase >= plan.Demand.Timing.Handoff.FullFrom;
                 if (plan.Command != CharacterAnimationPlaybackCommand.Keep || created || mixer.Empty)
                 {
@@ -259,18 +271,18 @@ namespace ThreeC.CharacterBehavior
                     var clip = StateClip(plan.StateHash);
                     float duration = !entered && plan.Command == CharacterAnimationPlaybackCommand.CrossFade ?
                         plan.Blend.InSeconds(mixer.BlendedLength()) : 0f;
-                    nominalSpeeds.TryGetValue(plan.StateHash, out float pace);
                     curves.TryGetValue(clip, out var permissions);
                     CharacterClipCurves secondary = null;
                     if (state.Blend.Second) curves.TryGetValue(state.Blend.Second, out secondary);
-                    mixer.Enter(state, clip, permissions, secondary, plan.StateHash, pace, stops.Contains(plan.StateHash),
+                    mixer.EntryProfile = plan.EntryProfile;
+                    mixer.Enter(state, clip, permissions, secondary, plan.StateHash,
                         plan.Start.InSeconds(state.Blend.Second ? state.Blend.Seconds : clip.length), duration, plan.ResumeLoop, plan.Demand.Timing.Resumed, plan.Demand);
                     played = true;
                 }
                 else if (entered) mixer.CompleteTransition();
                 mixer.SetInertiaSuppression(plan.Demand.Rule.InertiaSuppression);
             }
-            mixer.Advance(dt, frame.Rates.StrideSpeed, frame.StopRate);
+            mixer.Advance(dt, this, frame);
             return played;
         }
 

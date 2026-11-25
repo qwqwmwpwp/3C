@@ -2,42 +2,56 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    internal readonly struct GroundMotionCost
+    // 计算候选脚姿和预测轨迹的匹配代价。
+    internal static class GroundMotionCost
     {
-        public readonly float Feet, Velocity, Contact, Path, Facing, Pace;
-        public float Total => Feet + Velocity + Contact + Path + Facing + Pace;
-
-        public GroundMotionCost(CharacterMotionTrack track, int index, in CharacterFootObservation feet,
-            in CharacterMatchTrajectory goal, float speed)
+        // 汇总指定入点的脚位、脚速、接触、路径、朝向和步频代价。
+        public static GroundMatchCost Evaluate(CharacterMotionTrack track, float time, in CharacterFootPose sample, in CharacterFootObservation feet,
+            in CharacterMatchTrajectory goal, float speed, float rate, float excess, in GroundMatchCost profile, bool customFeatures,
+            GroundFeatureGroups groups, bool allowPast, bool legacyPelvis)
         {
-            var sample = track.Poses[index];
-            float rate = track.IsLoop && track.ScalesWithSpeed ? speed / Mathf.Max(0.01f, track.ReferenceSpeed) : 1f;
-            // 分开计算步频代价，防止快放走姿与自然跑姿在直线轨迹上得到相同评分。
-            float expectedPace = goal.Near.magnitude / CharacterMatchTrajectory.NearSeconds;
+            float expectedPace = goal.Near.magnitude / goal.Windows.x;
             float ratio = Mathf.Lerp(speed, expectedPace, 0.5f) / Mathf.Max(0.01f, track.ReferenceSpeed);
-            Pace = track.IsLoop ? Mathf.Pow(Mathf.Log(Mathf.Clamp(ratio, 0.20f, 5f)), 2f) * 2f : 0f;
-            Feet = ((sample.Left - feet.Pose.Left).sqrMagnitude + (sample.Right - feet.Pose.Right).sqrMagnitude) / 0.20f;
-            Velocity = ((sample.LeftVelocity * rate - feet.Pose.LeftVelocity).sqrMagnitude +
-                (sample.RightVelocity * rate - feet.Pose.RightVelocity).sqrMagnitude) / 40f;
-            Contact = feet.ContactCost(sample.Contact);
-            float t = track.TimeAt(index);
-            var near = GroundMotionPath.Relative(track, t, CharacterMatchTrajectory.NearSeconds * rate);
-            var far = GroundMotionPath.Relative(track, t, CharacterMatchTrajectory.FarSeconds * rate);
-            Path = ((near.Position - goal.Near).sqrMagnitude + (far.Position - goal.Far).sqrMagnitude) / 0.25f;
-            float a = Mathf.DeltaAngle(near.Yaw, goal.NearYaw) / 45f;
-            float b = Mathf.DeltaAngle(far.Yaw, goal.FarYaw) / 45f;
-            Facing = a * a + b * b;
+            float pace = track.IsLoop ? Mathf.Log(Mathf.Clamp(ratio, 0.20f, 5f)) : 0f;
+            if (customFeatures) return new GroundMatchCost { Contact = feet.ContactCost(sample.Contact) * profile.Contact,
+                Pace = (pace * pace + excess) * profile.Pace };
+            var near = GroundMotionPath.Relative(track, time, goal.Windows.x * rate);
+            var far = GroundMotionPath.Relative(track, time, goal.Windows.y * rate);
+            float a = Mathf.DeltaAngle(near.Yaw, goal.NearYaw), b = Mathf.DeltaAngle(far.Yaw, goal.FarYaw);
+            float position = (sample.Left - feet.Pose.Left).sqrMagnitude + (sample.Right - feet.Pose.Right).sqrMagnitude;
+            if (allowPast && feet.PastSeconds > 0f && profile.HistoryWeight > 0f && (groups & GroundFeatureGroups.Feet) != 0)
+            {
+                if (!track.TrySamplePose(time - feet.PastSeconds * rate, out var past))
+                    return new GroundMatchCost { Position = float.PositiveInfinity, MissingHistory = true };
+                float history = (past.Left - feet.Past.Left).sqrMagnitude + (past.Right - feet.Past.Right).sqrMagnitude;
+                position = Mathf.Lerp(position, history, profile.HistoryWeight);
+            }
+            var cost = new GroundMatchCost
+            {
+                Position = position * profile.Position,
+                Pelvis = legacyPelvis && feet.Pose.HasPelvis != 0 ?
+                    (sample.Pelvis - feet.Pose.Pelvis).sqrMagnitude * profile.Pelvis : 0f,
+                Velocity = ((sample.LeftVelocity * rate - feet.Pose.LeftVelocity).sqrMagnitude +
+                    (sample.RightVelocity * rate - feet.Pose.RightVelocity).sqrMagnitude) * profile.Velocity,
+                Contact = feet.ContactCost(sample.Contact) * profile.Contact,
+                Path = ((near.Position - goal.Near).sqrMagnitude + (far.Position - goal.Far).sqrMagnitude) * profile.Path,
+                Facing = (a * a + b * b) * profile.Facing,
+                Pace = (pace * pace + excess) * profile.Pace
+            };
+            if ((groups & GroundFeatureGroups.Feet) == 0) cost.Position = cost.Velocity = 0f;
+            if ((groups & GroundFeatureGroups.Body) == 0) cost.Pelvis = 0f;
+            if ((groups & GroundFeatureGroups.Trajectory) == 0) cost.Path = cost.Facing = 0f;
+            return cost;
         }
-
-#if UNITY_EDITOR
-        public override string ToString() => $"合计 {Total:F2}（脚位 {Feet:F2} 脚速 {Velocity:F2} 接触 {Contact:F2} 路径 {Path:F2} 朝向 {Facing:F2} 步频 {Pace:F2}）";
-#endif
     }
 
+    // 在素材逻辑时间轴上计算局部参考轨迹。
     internal static class GroundMotionPath
     {
+        // 计算素材时间段的相对根路径，非循环仅累计到实际末帧。
         public static GroundPathKey Relative(CharacterMotionTrack track, float time, float horizon)
         {
+            if (!track.IsLoop) horizon = Mathf.Clamp(horizon, 0f, Mathf.Max(0f, track.Seconds - time));
             if (track.PathSource == GroundPathSource.Straight)
                 return new GroundPathKey { Position = Vector2.up * track.Distance(time, horizon) };
             var keys = track.PathSource == GroundPathSource.RootMotion ? track.RootPath : track.ReferencePath;

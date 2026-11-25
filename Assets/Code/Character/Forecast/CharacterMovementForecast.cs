@@ -30,12 +30,16 @@ namespace ThreeC.CharacterBehavior
         public readonly CharacterBehaviorPhase AttackPhase;
         public readonly float AttackProgress;
         public readonly long AttackInstance;
+        internal readonly CharacterAttackMove BufferedMove;
+        internal readonly float LinkAtSeconds, Stamina;
+        internal readonly Vector2 DashDirection;
         public readonly CharacterMoveGait Gait;
         public readonly bool MoveApproved, ExternallyControlled;
         internal bool AnticipatesMovementReturn => !ExternallyControlled &&
             (Behaviors & (CharacterBehaviorId.Dash | CharacterBehaviorId.Attack)) != 0;
         public readonly CollisionFlags Contacts;
 
+        // 保存同一时刻的物理样本和动作假设，供动画查询及慢任务回验。
         internal CharacterForecastSample(Vector3 position, Vector3 velocity, Quaternion rotation,
             CharacterBehaviorFrameResult behavior, CollisionFlags contacts, CharacterMoveGait gait, bool externallyControlled = false)
         {
@@ -49,6 +53,10 @@ namespace ThreeC.CharacterBehavior
             AttackPhase = behavior.Attack.Phase;
             AttackProgress = behavior.Attack.Progress;
             AttackInstance = behavior.Attack.InstanceId;
+            BufferedMove = behavior.Attack.BufferedMove;
+            LinkAtSeconds = behavior.Attack.LinkAtSeconds;
+            Stamina = behavior.StaminaRemaining;
+            DashDirection = behavior.DashDirection;
             MoveApproved = behavior.MoveApproved;
             Contacts = contacts;
         }
@@ -131,6 +139,9 @@ namespace ThreeC.CharacterBehavior
         private float step;
         public long Version { get; private set; }
         public long SourceStep { get; private set; }
+        public double SourcePhysicsTime { get; private set; }
+        public long SourceFrameVersion { get; private set; }
+        public int SimulationVersion { get; private set; }
         public double StartTime { get; private set; }
         public float Horizon { get; private set; }
         public float ValidSeconds => Mathf.Max(0, count - 1) * step;
@@ -147,15 +158,19 @@ namespace ThreeC.CharacterBehavior
             if (notify) Notify(revision);
         }
 
-        internal void Begin(int capacity, double time, long source, float dt, float horizon, ForecastRefreshReason reason)
+        // 绑定完整帧版本、真实求解编号与两个时刻，后续计算只写本结果的样本。
+        internal void Begin(int capacity, double time, in CharacterForecastFrame frame, ForecastRefreshReason reason)
         {
             count = 0;
             if (samples.Length < capacity) Array.Resize(ref samples, capacity);
             Version++;
             StartTime = time;
-            SourceStep = source;
-            Horizon = horizon;
-            step = dt;
+            SourceStep = frame.Origin.Number;
+            SourcePhysicsTime = frame.Origin.Time;
+            SourceFrameVersion = frame.Version;
+            SimulationVersion = frame.Generation;
+            Horizon = frame.Window.Horizon;
+            step = frame.Window.Step;
             EnvironmentLimited = false;
             RefreshReason = reason.Label();
         }
@@ -232,10 +247,20 @@ namespace ThreeC.CharacterBehavior
         }
 
 #if UNITY_EDITOR
+        // 帧末采集完毕后，编辑器按这一帧已裁决的行为顺序核对轨迹打断。
+        internal event Action FrameSubmitted;
+        // 保留角色的正常调度，即使单个场景视图观察者抛出异常。
+        internal void NotifyFrameSubmitted()
+        {
+            try { FrameSubmitted?.Invoke(); }
+            catch (Exception error) { Debug.LogException(error); }
+        }
+
         // 发布后复制，避免编辑器读取下一次重算正在复用的缓冲。
         internal event Action<CharacterForecastRevision> Revised;
         internal float SampleInterval => step;
 #endif
+        // 将采样数组和对应的帧末版本、求解游标及有效窗口一起复制。
         internal void CopyPublishedFrom(CharacterMovementForecast source)
         {
             if (samples.Length < source.count) Array.Resize(ref samples, source.count);
@@ -244,6 +269,9 @@ namespace ThreeC.CharacterBehavior
             step = source.step;
             Version = source.Version;
             SourceStep = source.SourceStep;
+            SourcePhysicsTime = source.SourcePhysicsTime;
+            SourceFrameVersion = source.SourceFrameVersion;
+            SimulationVersion = source.SimulationVersion;
             StartTime = source.StartTime;
             Horizon = source.Horizon;
             EnvironmentLimited = source.EnvironmentLimited;

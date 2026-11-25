@@ -1,71 +1,38 @@
 using System;
-using UnityEngine;
 using UnityEngine.Profiling;
 
 namespace ThreeC.CharacterBehavior
 {
-    internal readonly struct CharacterForecastOrigin
-    {
-        internal readonly double Time;
-        internal readonly long Number;
-        internal readonly CharacterForecastSample Pose;
-        internal readonly CharacterMotorStep Motor;
-        internal readonly Vector3 Ground;
-        internal readonly CharacterSlopeContacts Steep;
-        internal readonly bool DynamicContact;
-
-        internal CharacterForecastOrigin(double time, long number, CharacterForecastSample pose, CharacterMotorStep motor,
-            Vector3 ground, CharacterSlopeContacts steep, bool dynamicContact)
-        {
-            Time = time;
-            Number = number;
-            Pose = pose;
-            Motor = motor;
-            Ground = ground;
-            Steep = steep;
-            DynamicContact = dynamicContact;
-        }
-    }
-
-    internal readonly struct CharacterForecastInputs
-    {
-        private readonly CharacterInputSnapshot locked, held;
-        internal readonly CharacterInputSnapshot Buffered;
-
-        internal CharacterForecastInputs(CharacterInputSnapshot locked, CharacterInputSnapshot buffered)
-        {
-            this.locked = locked;
-            Buffered = buffered;
-            held = new CharacterInputSnapshot(buffered.Direction, false, buffered.GuardHeld, CharacterBehaviorId.None, buffered.Gait);
-        }
-
-        internal CharacterInputSnapshot AtStep(int index) => index == 0 ? locked : index == 1 ? Buffered : held;
-    }
-
-    /// <summary>从真实步末状态重建时间序列，只向行为副本、移动值副本和样本缓冲写入。</summary>
+    // 主线程每帧提交一份完整的预测黑板，最多推进一个任务，并以最近提交的状态校验发布。
     internal sealed class CharacterMovementPredictor
     {
 #if UNITY_EDITOR
         internal readonly CharacterForecastDiagnostics Diagnostics = new CharacterForecastDiagnostics();
 #endif
         internal readonly CharacterMovementForecast Output = new CharacterMovementForecast();
-        private readonly CharacterBehaviorFlow simulation;
         private readonly CharacterForecastGeometry geometry;
+        private readonly Func<CharacterBehaviorFlow> createFrameCopy;
         private readonly Func<CharacterBehaviorFlow> createCopy;
-        private CharacterForecastWork pending;
-        private bool obsolete, readyToPublish, lastDynamicContact;
-        private float lastHorizon;
-        private CharacterInputSnapshot lastInput;
-        private float lastInterval, lastDt;
-        private CharacterGroundSteering lastSteering;
-        private double nextRefresh;
-        internal bool NeedsRefresh => dirty != ForecastRefreshReason.None && !suppressed && !invalidSampling;
-        private bool invalidSampling;
+        private CharacterBehaviorFlow latestBehavior;
+        private CharacterForecastFrame latest, publishedFrame;
+        private CharacterForecastWork active, retired;
+        private long nextVersion, publishedVersion;
+        private int revision;
+        private bool obsolete, completed, suppressed, invalidSampling;
         private ForecastRefreshReason dirty;
-        private bool suppressed;
-        private double controlReturnsAt;
+        private double controlReturnsAt = double.NegativeInfinity;
         private float forcedBraking;
 
+        // 分别绑定帧末行为副本和任务行为副本的创建策略。
+        internal CharacterMovementPredictor(Func<CharacterBehaviorFlow> createFrameCopy, CharacterForecastGeometry geometry,
+            Func<CharacterBehaviorFlow> createCopy)
+        {
+            this.createFrameCopy = createFrameCopy;
+            this.geometry = geometry;
+            this.createCopy = createCopy;
+        }
+
+        // 记录击退的控制归还时刻，并立即撤销受击前的预测。
         internal void ConfirmKnockback(double now, float seconds, float deceleration)
         {
             bool takingControl = now >= controlReturnsAt;
@@ -75,273 +42,303 @@ namespace ThreeC.CharacterBehavior
                 ? CharacterForecastRevision.Takeover : CharacterForecastRevision.Invalidated);
         }
 
-        internal void ClearControlLock() => controlReturnsAt = 0d;
+        // 重生后丢弃前一代的外部控制时段。
+        internal void ClearControlLock() => controlReturnsAt = double.NegativeInfinity;
 
-        internal CharacterMovementPredictor(CharacterBehaviorFlow simulation, CharacterForecastGeometry geometry,
-            Func<CharacterBehaviorFlow> createCopy = null)
-        {
-            this.simulation = simulation;
-            this.geometry = geometry;
-            this.createCopy = createCopy;
-        }
-
-        // 旧预测在输入假设变化后立即失效，先于动画读取。
+        // 记录本帧刷新原因。方向、按下、物理反馈均在帧末通过同一入口启动计算。
         internal void RequestRefresh(ForecastRefreshReason reason, bool clearPublished = true)
         {
+            revision++;
+            dirty = reason;
+            obsolete = active != null;
 #if UNITY_EDITOR
             Diagnostics.ChangeAssumption();
 #endif
-            dirty = reason;
-            obsolete = pending != null;
             if (clearPublished && Output.Available) Output.Clear(CharacterForecastRevision.Invalidated);
         }
 
-        internal void Invalidate(ForecastRefreshReason reason, CharacterForecastRevision revision = CharacterForecastRevision.Invalidated)
+        // 外部接管与连续性边界应立即通知轨迹观察者。
+        internal void Invalidate(ForecastRefreshReason reason, CharacterForecastRevision change = CharacterForecastRevision.Invalidated)
         {
             RequestRefresh(reason, false);
-            Output.Clear(revision);
+            Output.Clear(change);
         }
 
+        // 模拟的外部接管立即停止发布；交还后由下一次完整帧末提交恢复推演。
         internal void Suppress(bool value)
         {
             if (value == suppressed) return;
             suppressed = value;
-            if (value && pending != null)
-            {
-                var work = pending;
-                pending = null;
-                CharacterForecastRetirement.Retire(work);
-            }
-            Invalidate(value ? ForecastRefreshReason.Suppressed : ForecastRefreshReason.Resumed, value ? CharacterForecastRevision.Withdraw : CharacterForecastRevision.Reset);
+            RetireActive();
+            latest = default;
+            Invalidate(value ? ForecastRefreshReason.Suppressed : ForecastRefreshReason.Resumed,
+                value ? CharacterForecastRevision.Withdraw : CharacterForecastRevision.Reset);
         }
 
-        internal bool WaitingForValidWindow(double now, double originTime, CharacterForecastSettings config,
-            CharacterProfileOverrides overrides) =>
-            invalidSampling && !ReadWindow(now, originTime, config, overrides, out _, out _, out _, out _);
+        // 保留预测启用语义，空的已撤回结果由动画查询按各自样本回退。
+        internal CharacterMovementForecast PublishedForAnimation(bool simulating, CharacterForecastSettings settings) =>
+            simulating && settings.Enabled && settings.DriveAnimation ? Output : null;
 
-        private static bool ReadWindow(double now, double originTime, CharacterForecastSettings config,
-            CharacterProfileOverrides overrides, out float dt, out float interval, out float horizon, out int steps)
+        // 当帧行为与输入已经改变时，动画采集之前立即撤回不再成立的假设。
+        internal void CheckFrameAssumptions(double time, in CharacterBehaviorFrameResult behavior, in CharacterInputSnapshot held)
         {
-            dt = Time.fixedDeltaTime;
-            interval = InputMath.NonNegative(overrides.ForecastInterval.Resolve(config.Interval), 0.2f);
-            horizon = InputMath.NonNegative(overrides.ForecastHorizon.Resolve(config.Horizon), 2f);
-            // 加上发布间隔和渲染帧余量，保证从当前时刻能采到完整窗口。
-            double count = dt > 0f ? Math.Ceiling((horizon + (double)interval + Math.Max(0d, now - originTime)) / dt) + 1d : 0d;
-            steps = count > 0d && count <= 8192 ? (int)count : 0;
-            return steps > 0 && horizon > 0f;
+            ForecastRefreshReason reason = Output.Available
+                ? CharacterForecastValidity.ChangedInput(publishedFrame, held) : ForecastRefreshReason.None;
+            if (reason == ForecastRefreshReason.None && Output.Available)
+                reason = CharacterForecastValidity.CompareBehavior(Output, time, publishedFrame.Window.Step, behavior);
+            if (reason != ForecastRefreshReason.None)
+            {
+                dirty = reason;
+                Output.Clear(CharacterForecastRevision.Invalidated);
+            }
+            if (active != null && !obsolete)
+            {
+                reason = CharacterForecastValidity.ChangedInput(active.Frame, held);
+                if (reason != ForecastRefreshReason.None) RequestRefresh(reason, false);
+            }
         }
 
-        internal void Refresh(double now, in CharacterForecastOrigin origin, CharacterBehaviorFlow live,
-            in CharacterForecastInputs inputs, CharacterMovementSettings movement, in CharacterDriveParameters drive, CharacterForecastSettings config,
-            CharacterProfileOverrides overrides, bool threaded = true)
+        // 接受主线程已完整冻结的帧，为它分配版本并保留可独立推进的行为副本。
+        internal void SubmitFrame(in CharacterForecastFrame frame, CharacterBehaviorFlow live, bool threaded,
+            bool immediateAlignment = false, bool frameEnd = true)
         {
             if (suppressed) return;
-            if (!ReadWindow(now, origin.Time, config, overrides, out float dt, out float interval, out float horizon, out int steps))
+            if (frame.Window.Steps == 0)
             {
                 if (!invalidSampling)
                 {
                     invalidSampling = true;
-                    var work = pending;
-                    pending = null;
-                    obsolete = readyToPublish = false;
-                    dirty = ForecastRefreshReason.None;
-                    try { CharacterForecastRetirement.Retire(work); }
-                    finally { Output.Clear(CharacterForecastRevision.Reset); }
+                    Release();
                 }
                 return;
             }
-            if (!threaded && pending != null) Release();
             if (invalidSampling) dirty = ForecastRefreshReason.Settings;
             invalidSampling = false;
-            if (origin.DynamicContact) steps = 0;
-            if (origin.DynamicContact && pending != null)
+            try
             {
-                var previous = pending;
-                pending = null;
-                readyToPublish = obsolete = false;
-                CharacterForecastRetirement.Retire(previous);
+                latestBehavior ??= createFrameCopy();
+                live.CopyStateTo(latestBehavior);
             }
-            var steering = new CharacterGroundSteering(inputs.Buffered, drive);
-            ForecastRefreshReason reason = origin.DynamicContact != lastDynamicContact ? ForecastRefreshReason.DynamicContact :
-                Reason(now, origin.Time, origin.Pose, inputs.Buffered, config, dt, interval, horizon, steering);
-            if (pending != null)
+            catch
             {
-                if (now > pending.ExpiresAt) reason = ForecastRefreshReason.Expired;
-                if (reason != ForecastRefreshReason.None && reason != ForecastRefreshReason.Scheduled)
+                // 未完成的帧没有发布资格；下一帧以相同定义策略重建目标。
+                latestBehavior = null;
+                latest = default;
+                RetireActive();
+                dirty = ForecastRefreshReason.Retry;
+                throw;
+            }
+            latest = frame.ForSubmission(++nextVersion, controlReturnsAt, forcedBraking);
+#if UNITY_EDITOR
+            int before = revision;
+            if (frameEnd) Output.NotifyFrameSubmitted();
+            if (revision != before) return;
+#endif
+            // 跟随请求的同步推演只访问主线程几何；已退役任务持有独立的数值快照和查询缓冲。
+            if (immediateAlignment) RetireActive();
+            ScheduleLatest(threaded && !immediateAlignment, immediateAlignment);
+        }
+
+        // 每次通知都覆盖尚未启动的待办；旧任务若仍可信可先发布，再从最新版本补算窗口。
+        private void ScheduleLatest(bool threaded, bool immediateAlignment)
+        {
+            int before = revision;
+            if (Output.Available)
+            {
+                var change = CharacterForecastValidity.Changed(publishedFrame, latest);
+                if (change == ForecastRefreshReason.None) change = CharacterForecastValidity.ValidatePublished(Output, latest);
+                if (change != ForecastRefreshReason.None)
+                {
+                    dirty = change;
+                    Output.Clear(CharacterForecastRevision.Invalidated);
+                    if (revision != before) return;
+                }
+            }
+            if (active != null)
+            {
+                var change = CharacterForecastValidity.Changed(active.Frame, latest);
+                if (change == ForecastRefreshReason.None && latest.Time > active.Frame.Time + active.Frame.Window.Step * (double)active.Frame.Window.Steps)
+                    change = ForecastRefreshReason.Expired;
+                if (change != ForecastRefreshReason.None || !threaded)
                 {
                     obsolete = true;
-                    dirty = reason;
-                    if (Output.Available) Output.Clear(CharacterForecastRevision.Invalidated);
+                    if (change != ForecastRefreshReason.None) dirty = change;
                 }
-                if (!Collect(origin)) return;
-                reason = Reason(now, origin.Time, origin.Pose, inputs.Buffered, config, dt, interval, horizon, steering);
+                Pump();
+                if (!completed) return;
+                Collect();
+                if (revision != before) return;
             }
-            if (reason == ForecastRefreshReason.None) return;
+            if (retired != null)
+            {
+                if (retired.Released) retired = null;
+                else if (!immediateAlignment) return;
+            }
+            var reason = dirty;
+            if (reason == ForecastRefreshReason.None)
+            {
+                if (!Output.Available) reason = ForecastRefreshReason.Initial;
+                else if (immediateAlignment && latest.Time == publishedFrame.Time && latest.Origin.Number == publishedFrame.Origin.Number)
+                    return; // 同一时刻的提前补发已通过上方校验，零刷新间隔也不在帧末重复推演。
+                else if (latest.Time + 0.000001 >= publishedFrame.Time + latest.Window.Interval ||
+                    !Output.EnvironmentLimited && latest.Time + latest.Window.Horizon > Output.StartTime + Output.ValidSeconds)
+                    reason = ForecastRefreshReason.Scheduled;
+                else return;
+            }
+            dirty = ForecastRefreshReason.None;
+            StartLatest(threaded, reason);
+        }
+
+        // 调度后台任务时复制独立种子，同步模式也从相同的帧末黑板推演。
+        private void StartLatest(bool threaded, ForecastRefreshReason reason)
+        {
 #if UNITY_EDITOR
-            if (reason == ForecastRefreshReason.MovementInput || reason == ForecastRefreshReason.Settings) Diagnostics.ChangeAssumption();
             long ticks = System.Diagnostics.Stopwatch.GetTimestamp();
             long allocated = GC.GetAllocatedBytesForCurrentThread();
 #endif
-            lastHorizon = horizon;
-            lastDynamicContact = origin.DynamicContact;
-            if (threaded && createCopy != null && reason != ForecastRefreshReason.Scheduled && Output.Available)
-                Output.Clear(CharacterForecastRevision.Invalidated);
-            if (!origin.DynamicContact && threaded && createCopy != null)
+            geometry.Begin(latest.Drive.Settings);
+            if (threaded && !latest.Origin.DynamicContact)
             {
-                geometry.Begin(drive.Settings);
-                var seed = createCopy();
-                live.CopyStateTo(seed);
-                if (origin.Time < controlReturnsAt) seed.ReleasePredictionActions();
-                pending = new CharacterForecastWork(seed, createCopy(), geometry, origin, inputs, movement.Snapshot(),
-                    drive.Snapshot(), dt, steps, horizon, controlReturnsAt, forcedBraking, reason);
+                var seed = CopyTaskBehavior();
+                active = new CharacterForecastWork(seed, createCopy(), geometry, latest, reason);
+                obsolete = completed = false;
 #if UNITY_EDITOR
-                pending.RecordSchedule(ticks, allocated);
+                active.RecordSchedule(ticks, allocated);
 #endif
-                obsolete = readyToPublish = false;
-                lastDt = dt;
-                lastInterval = interval;
-                lastInput = inputs.Buffered;
-                lastSteering = steering;
-                nextRefresh = now + interval;
-                dirty = ForecastRefreshReason.None;
                 return;
             }
             Profiler.BeginSample("3C.MovementForecast");
             try
             {
-                Output.Begin(steps + 1, origin.Time, origin.Number, dt, horizon, reason);
-                Output.Append(origin.Time < controlReturnsAt ? origin.Pose.UnderExternalControl() : origin.Pose);
-                if (origin.DynamicContact) Output.EndAtContact();
-                else
-                {
-                    geometry.Begin(drive.Settings);
-                    live.CopyStateTo(simulation);
-                    if (origin.Time < controlReturnsAt) simulation.ReleasePredictionActions();
-                    CharacterForecastRollout.Simulate(simulation, geometry, Output, controlReturnsAt, forcedBraking,
-                        origin, inputs, movement, drive, dt, steps);
-                }
-                nextRefresh = now + interval;
-                lastInterval = interval;
-                lastDt = dt;
-                lastSteering = steering;
-                lastInput = inputs.Buffered;
-                dirty = ForecastRefreshReason.None;
+                // 同步副本使用当前配置构造，包含该帧已解析的招式资源和连招表。
+                int startRevision = revision;
+                var source = latest;
+                var synchronousBehavior = CopyTaskBehavior();
+                var result = new CharacterMovementForecast();
+                CharacterForecastRollout.Simulate(synchronousBehavior, geometry, result, source, reason);
+                if (startRevision != revision || !AcceptResult(result, source)) return;
             }
             finally { Profiler.EndSample(); }
 #if UNITY_EDITOR
-            Diagnostics.Published(Output, dt, System.Diagnostics.Stopwatch.GetTimestamp() - ticks,
-                GC.GetAllocatedBytesForCurrentThread() - allocated);
+            if (Output.Available && latest.Window.Step > 0f)
+                Diagnostics.Published(Output, latest.Window.Step, System.Diagnostics.Stopwatch.GetTimestamp() - ticks,
+                    GC.GetAllocatedBytesForCurrentThread() - allocated);
 #endif
-            Output.Notify(CharacterForecastRevision.Published);
         }
 
-        // 物理与 LateUpdate 间隙只推进就绪的查询批次。发布仍统一在采集新输入之后核对真实起点。
-        internal void Pump()
+        // 从完整的帧末副本建立任务种子，复制失败时直接废弃该目标。
+        private CharacterBehaviorFlow CopyTaskBehavior()
         {
-            if (pending == null || readyToPublish) return;
-            try { readyToPublish = pending.Poll(obsolete); }
-            catch
-            {
-                Release();
-                throw;
-            }
-        }
-
-        // 运行时只轮询预测。编辑器预演使用同一个数值内核同步求解。
-        private bool Collect(in CharacterForecastOrigin origin)
-        {
-            var work = pending;
             try
             {
-                if (!readyToPublish && !work.Poll(obsolete)) return false;
-                readyToPublish = false;
-                pending = null;
-                if (obsolete) return true;
-                var path = work.Result;
-                foreach (var check in work.Observed)
-                {
-                    if (!path.TrySample(check.time, 0f, out var predicted)) continue;
-                    ForecastRefreshReason change = Difference(check.pose, predicted);
-                    if (change != ForecastRefreshReason.None) { Invalidate(change); return true; }
-                }
-                if (path.TrySample(origin.Time, 0f, out var expected))
-                {
-                    ForecastRefreshReason difference = Difference(origin.Pose, expected);
-                    if (difference != ForecastRefreshReason.None) { Invalidate(difference); return true; }
-                }
-                else if (origin.Time > path.StartTime + path.ValidSeconds && !path.EnvironmentLimited)
-                {
-                    Invalidate(ForecastRefreshReason.Expired);
-                    return true;
-                }
-                Output.Publish(path);
-#if UNITY_EDITOR
-                Diagnostics.Published(Output, lastDt, work.MainTicks, work.MainAllocated, work.WorkerTicks, work.ElapsedTicks, work.Batches);
-#endif
-                return true;
+                var target = createCopy();
+                latestBehavior.CopyStateTo(target);
+                return target;
             }
             catch
             {
-                pending = null;
                 dirty = ForecastRefreshReason.Retry;
                 throw;
             }
-            finally { if (pending != work) work.Dispose(); }
         }
 
-        internal void Release()
+        // 主线程仅推进已就绪的批次；最终发布只能在完整的帧末黑板提交后发生。
+        private void Pump()
         {
-            invalidSampling = false;
-            if (pending == null && !Output.Available && dirty == ForecastRefreshReason.SimulationBoundary) return;
-            var work = pending;
-            pending = null;
-            try { CharacterForecastRetirement.Retire(work); }
-            finally { Invalidate(ForecastRefreshReason.SimulationBoundary, CharacterForecastRevision.Reset); }
-        }
-
-        private ForecastRefreshReason Reason(double now, double solvedTime, CharacterForecastSample start, CharacterInputSnapshot buffered,
-            CharacterForecastSettings config, float dt, float interval, float horizon, in CharacterGroundSteering steering)
-        {
-            if (dirty != ForecastRefreshReason.None) return dirty;
-            if (!Output.Available && pending == null) return ForecastRefreshReason.Initial;
-            if (dt != lastDt || interval != lastInterval || horizon != lastHorizon ||
-                !steering.SameTuning(lastSteering)) return ForecastRefreshReason.Settings;
-            float threshold = Mathf.Max(0.001f, InputMath.NonNegative(config.DirectionTolerance, 0.05f));
-            if (buffered.Gait != lastInput.Gait || buffered.GuardHeld != lastInput.GuardHeld ||
-                (buffered.Direction == Vector2.zero) != (lastInput.Direction == Vector2.zero) ||
-                (buffered.Direction - lastInput.Direction).sqrMagnitude >= threshold * threshold) return ForecastRefreshReason.MovementInput;
-            if (Output.TrySample(solvedTime, 0f, out var expected))
+            if (active == null || completed) return;
+            try { completed = active.Poll(obsolete); }
+            catch
             {
-                ForecastRefreshReason difference = Difference(start, expected);
-                if (difference != ForecastRefreshReason.None) return difference;
+                RetireActive();
+                dirty = ForecastRefreshReason.Retry;
+                throw;
             }
-            else if (Output.EnvironmentLimited && solvedTime > Output.StartTime + Output.ValidSeconds) return ForecastRefreshReason.RecheckContact;
-            return pending == null && now >= nextRefresh - 0.000001 ? ForecastRefreshReason.Scheduled : ForecastRefreshReason.None;
         }
 
-        internal void ObserveSolvedStep(long step, double time, in CharacterForecastSample actual)
+        // 将完工任务与最新提交和沿途实测核对，避免老版本倒盖已发布的新结果。
+        private void Collect()
+        {
+            var work = active;
+            active = null;
+            completed = false;
+            try
+            {
+                if (obsolete || !AcceptResult(work.Result, work.Frame, work)) return;
+#if UNITY_EDITOR
+                Diagnostics.Published(Output, work.Frame.Window.Step, work.MainTicks, work.MainAllocated, work.WorkerTicks, work.ElapsedTicks, work.Batches);
+#endif
+            }
+            finally { work.Dispose(); }
+        }
+
+        // 以最新提交验收同步或异步轨迹，异步任务还要比对计算期间的实测记录。
+        private bool AcceptResult(CharacterMovementForecast result, in CharacterForecastFrame source, CharacterForecastWork work = null)
+        {
+            if (source.Version <= publishedVersion || latest.Version == 0 || source.Generation != latest.Generation) return false;
+            var difference = work == null ? CharacterForecastValidity.ValidatePublished(result, latest)
+                : CharacterForecastValidity.ValidateCompleted(result, work.Observed, latest);
+            if (difference != ForecastRefreshReason.None)
+            {
+                if (work == null)
+                {
+                    if (Output.Available) Invalidate(difference);
+                }
+                else
+                {
+                    dirty = difference;
+                    if (result.EnvironmentLimited && Output.Available) Output.Clear(CharacterForecastRevision.Invalidated);
+                }
+                return false;
+            }
+            publishedFrame = source;
+            publishedVersion = source.Version;
+            Output.Publish(result);
+            return true;
+        }
+
+        // 记录沿途已解步进行回验，物理偏差会在动画读取前立即撤回旧输出。
+        internal void ObserveSolvedStep(in CharacterForecastOrigin origin)
         {
 #if UNITY_EDITOR
-            Diagnostics.Observe(step, actual);
+            Diagnostics.Observe(origin.Number, origin.Pose);
 #endif
-            if (!obsolete && pending != null) pending.Observed.Add((time, actual));
-            if (!Output.TrySample(time, 0f, out var expected)) return;
-            ForecastRefreshReason difference = Difference(actual, expected);
-            if (difference == ForecastRefreshReason.None) return;
-            RequestRefresh(difference, false);
-            Output.Clear(CharacterForecastRevision.Invalidated); // 固定步通知观察者之前，撤回与真实结果不符的预测。
+            if (!obsolete && active != null) active.Observed.Add((origin.Time, origin.Pose));
+            var difference = CharacterForecastValidity.CompareAt(Output, origin.Time, origin.Pose);
+            if (difference != ForecastRefreshReason.None)
+            {
+                // 正在重算的任务可能出自更晚的起点，由它自己的沿途实测决定发布资格。
+                dirty = difference;
+                Output.Clear(CharacterForecastRevision.Invalidated);
+            }
         }
 
-        private static ForecastRefreshReason Difference(in CharacterForecastSample start, in CharacterForecastSample expected)
+        // 将被撤销的任务交给主线程回收器，在其真正释放缓冲之前不启动本角色的下一任务。
+        private void RetireActive()
         {
-            if (!expected.ExternallyControlled && (start.Behaviors != expected.Behaviors || start.MoveApproved != expected.MoveApproved ||
-                    start.Attack != expected.Attack || start.AttackPhase != expected.AttackPhase)) return ForecastRefreshReason.Behavior;
-            if (start.Contacts != expected.Contacts) return ForecastRefreshReason.Contact;
-            if ((start.Position - expected.Position).sqrMagnitude > 0.0064f ||
-                    (start.Velocity - expected.Velocity).sqrMagnitude > 0.36f ||
-                    Quaternion.Angle(start.Rotation, expected.Rotation) > 6f) return ForecastRefreshReason.Deviation;
-            return ForecastRefreshReason.None;
+            if (active == null) return;
+            retired = active;
+            active = null;
+            completed = obsolete = false;
+            CharacterForecastRetirement.Retire(retired);
         }
 
+        // 模拟边界立即清除待办和发布资格；已经启动的工作安全退役。
+        internal void Release()
+        {
+            RetireActive();
+            latest = publishedFrame = default;
+            if (dirty != ForecastRefreshReason.SimulationBoundary || Output.Available)
+                Invalidate(ForecastRefreshReason.SimulationBoundary, CharacterForecastRevision.Reset);
+            else revision++;
+        }
+
+        // 在暂停、重置或角色离场边界清理运行中的预测和上一代诊断。
+        internal void EndContinuity()
+        {
+            Release();
+#if UNITY_EDITOR
+            Diagnostics.Reset();
+#endif
+        }
     }
 }

@@ -27,6 +27,7 @@ namespace ThreeC.CharacterBehavior
             public bool TimedActive, ResumeTimed, ResumedEntry;
             public long AttackInstance, EntryAttackInstance;
             public float AttackPhase;
+            public float AttackEntryPhase;
 
             public void RememberAttackCursor()
             {
@@ -53,8 +54,9 @@ namespace ThreeC.CharacterBehavior
             AddMappings(mappings, default, false);
         }
 
+        // 用当前行为相位为新增映射续播，并保留仍在使用的绑定。
         internal void Reconfigure(CharacterBehaviorAnimationMapping[] mappings, CharacterAnimationResourceCatalog catalog,
-            CharacterControllerFrameResult frame, HashSet<string> replacedKeys)
+            CharacterBehaviorObservation frame, HashSet<string> replacedKeys)
         {
             resources = catalog;
             var retained = new Dictionary<CharacterBehaviorAnimationMapping, Binding>();
@@ -75,7 +77,8 @@ namespace ThreeC.CharacterBehavior
             AddMappings(mappings, frame, true, retained);
         }
 
-        private void AddMappings(CharacterBehaviorAnimationMapping[] mappings, CharacterControllerFrameResult frame, bool seed,
+        // 绑定动作规则并从已获准的行为恢复新加入的映射。
+        private void AddMappings(CharacterBehaviorAnimationMapping[] mappings, CharacterBehaviorObservation frame, bool seed,
             Dictionary<CharacterBehaviorAnimationMapping, Binding> retained = null)
         {
             if (mappings == null) return;
@@ -108,7 +111,7 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 独立调用同一动作键时复用招式阶段；行为驱动的实例仍以固定步提供的时间窗为准。
+        // 独立调用同一动作键时复用招式阶段；行为驱动的实例采用行为时间。
         internal static CharacterActionHandoffSettings ResolveHandoff(CharacterAnimationActionSettings action,
             CharacterAnimationConfiguration config)
         {
@@ -130,7 +133,13 @@ namespace ThreeC.CharacterBehavior
             return null;
         }
 
-        public bool PreserveEntryGait { get; private set; }
+        // 按该物理步实际执行的行为判断前摇步态，后到的渲染帧不会改写步态历史。
+        internal bool PreservesEntryGait(in CharacterControllerFrameResult frame)
+        {
+            foreach (var binding in bindings)
+                if (binding.Rule.PreservesEntryGait(frame, binding.HandoffSettings)) return true;
+            return false;
+        }
 
         internal bool IsReturningToMovement(in CharacterAnimationDemand overlay, in CharacterBehaviorFrameResult step)
         {
@@ -143,16 +152,17 @@ namespace ThreeC.CharacterBehavior
             return false;
         }
 
-        public void Observe(CharacterControllerFrameResult frame, bool seed = false)
+        // 按行为序列收集本帧全部转换，动画采集时提交最终许可及有序边沿。
+        public void Observe(CharacterBehaviorObservation frame, bool seed = false)
             => Observe(frame, seed, null);
 
-        private void Observe(CharacterControllerFrameResult frame, bool seed, Binding added)
+        // 处理一次裁决，或仅为新绑定恢复已有状态。
+        private void Observe(CharacterBehaviorObservation frame, bool seed, Binding added)
         {
             bool reconnect = seed || version != frame.SimulationVersion;
             if (version.HasValue && version != frame.SimulationVersion) Reset();
             version = frame.SimulationVersion;
             var step = frame.Behavior;
-            if (added == null) PreserveEntryGait = false;
             foreach (var binding in bindings)
             {
                 if (added != null && binding != added) continue;
@@ -197,13 +207,17 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 招式的起止相位来自行为固定步，位移权限和动画淡入都不会重置这份时钟。
+        // 招式起止相位来自当帧行为时间，位移权限和动画淡入都不会重置时钟。
         private void ObserveAttack(Binding binding, CharacterBehaviorFrameResult step, bool active, bool reconnect, bool seed)
         {
             bool matches = step.Attack.Move == binding.Rule.AttackMove;
             long instance = matches && active ? step.Attack.InstanceId : 0;
             bool newInstance = instance != 0 && binding.AttackInstance != instance;
-            if (newInstance) binding.AttackPhase = 0f;
+            if (newInstance)
+            {
+                binding.AttackPhase = 0f;
+                binding.AttackEntryPhase = step.Attack.StartProgress;
+            }
             binding.AttackInstance = instance;
             binding.TimedActive = instance != 0;
             if (!matches)
@@ -236,7 +250,8 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        private void ObserveConfigured(Binding binding, CharacterControllerFrameResult frame, bool active,
+        // 用当帧行为时钟或配置的时长推进单次动作。
+        private void ObserveConfigured(Binding binding, CharacterBehaviorObservation frame, bool active,
             bool began, bool reconnect, bool seed)
         {
             var step = frame.Behavior;
@@ -268,6 +283,7 @@ namespace ThreeC.CharacterBehavior
                 edges.Enqueue((binding, CharacterActionPlaybackStatus.Completed));
         }
 
+        // 将本次行为相位和移动许可转换成动作交还权重。
         private void SetHandoff(Binding binding, CharacterActionHandoff source, bool moveApproved, bool entering)
         {
             var settings = binding.HandoffSettings;
@@ -280,8 +296,6 @@ namespace ThreeC.CharacterBehavior
                 source = settings.Resolve(binding.Duration, source, binding.MoveStart);
             }
             binding.Handoff = source;
-            if (binding.TimedActive && source.Valid && binding.LastPose < source.FullFrom && settings?.FollowSpeedOnEntry != true)
-                PreserveEntryGait = true;
         }
 
         public void UpdateGrants(bool valid, long guardGrant)
@@ -316,7 +330,8 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        public void SubmitGranted(float fraction)
+        // 按行为结束相位提交本帧许可及播放请求。
+        public void SubmitGranted()
         {
             while (edges.Count > 0)
             {
@@ -337,9 +352,10 @@ namespace ThreeC.CharacterBehavior
                     binding.ResumeTimed = false;
                     if (binding.Entry != null && binding.FirstPose.HasValue && binding.Duration > 0f)
                     {
-                        float phase = Mathf.Clamp01(binding.LastPose + fraction / binding.Duration);
+                        float phase = Mathf.Clamp01(binding.LastPose);
                         if (binding.AttackInstance != 0) binding.AttackPhase = Mathf.Max(binding.AttackPhase, phase);
-                        float? start = binding.ResumedEntry ? binding.AttackPhase : binding.FirstPose;
+                        float? start = binding.ResumedEntry ? binding.AttackPhase :
+                            binding.AttackInstance != 0 ? binding.AttackEntryPhase : binding.FirstPose;
                         composer.Sample(binding.Entry, start, phase, binding.Handoff,
                             !binding.Handoff.UsesRouteBlend && binding.HandoffSettings?.StartAtZero == true, binding.ResumedEntry);
                     }
@@ -455,7 +471,6 @@ namespace ThreeC.CharacterBehavior
         {
             UpdateGrants(false, 0);
             version = null;
-            PreserveEntryGait = false;
             foreach (var binding in bindings)
             {
                 binding.ObservedGrant = 0;

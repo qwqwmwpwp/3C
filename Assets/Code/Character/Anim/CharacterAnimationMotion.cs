@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>单个已提交固定步的平面运动观测，以及来自同一刚体步的只读预测。</summary>
+    /// <summary>提供单个已提交固定步的平面运动观测及其动画表现轨迹。</summary>
     public readonly struct CharacterAnimationMotion
     {
         /// <summary>是否来自当前模拟连续性内的有效已提交固定步；默认值与暂停观测无效。</summary>
@@ -32,7 +32,8 @@ namespace ThreeC.CharacterBehavior
         public CollisionFlags CollisionFlags { get; }
         public CharacterGroundTrajectory Trajectory { get; }
 
-        internal CharacterAnimationMotion(CharacterControllerFrameResult frame,
+        // 将固定步位移换算为平面速度、加速度和受阻程度，并关联同一步的表现轨迹。
+        internal CharacterAnimationMotion(in CharacterControllerFrameResult frame, in CharacterGroundTrajectory trajectory,
             Vector3 previousVelocity = default, float velocitySampleInterval = 0f)
         {
             RetainedStrideSpeed = null;
@@ -57,19 +58,22 @@ namespace ThreeC.CharacterBehavior
             Obstruction = expectedSpeed > 0.000001f
                 ? 1f - Mathf.Clamp01(Vector3.Dot(ActualVelocity, ExpectedVelocity / expectedSpeed) / expectedSpeed) : 0f;
             CollisionFlags = frame.CollisionFlags;
-            Trajectory = frame.Trajectory;
+            Trajectory = trajectory;
         }
 
-        internal CharacterAnimationMotion(in CharacterAnimationMotion source, CharacterGroundTrajectory trajectory)
+        // 保留步号、速度和受阻事实，只替换本次表现采样的轨迹。
+        internal CharacterAnimationMotion(in CharacterAnimationMotion source, in CharacterGroundTrajectory trajectory)
         {
             this = source;
             Trajectory = trajectory;
         }
 
-        internal CharacterAnimationMotion(float? retainedSpeed)
+        // 清除差分采样，只保留最近可信步频及对应固定步的表现轨迹。
+        internal CharacterAnimationMotion(float? retainedSpeed, in CharacterGroundTrajectory trajectory)
         {
             this = default;
             RetainedStrideSpeed = retainedSpeed;
+            Trajectory = trajectory;
         }
     }
 
@@ -91,26 +95,32 @@ namespace ThreeC.CharacterBehavior
             teleportDistanceSquared = teleportDistance > 0f ? teleportDistance * teleportDistance : 0f;
         }
 
-        public void Reset(CharacterControllerFrameResult latestFrame, int currentSimulationVersion)
+        // 重建时恢复同代次最近固定步的地面投影或外部轨迹，下一步开始采样速度。
+        public void Reset(CharacterControllerFrameResult latestFrame, int currentSimulationVersion,
+            CharacterGroundTrajectory externalTrajectory = default)
         {
             lastFrameNumber = latestFrame.FrameNumber; // 重建后从下一次提交开始取速度。
             simulationVersion = currentSimulationVersion;
             ClearSamples();
+            if (latestFrame.FrameNumber > 0 && latestFrame.SimulationVersion == currentSimulationVersion)
+                motion = new CharacterAnimationMotion(null, StepTrajectory(latestFrame, externalTrajectory));
             lastPosition = owner.position;
             discardNextStep = jumpAwaitingCommit = false;
         }
 
+        // 显式瞬移时舍弃当前及下一步的速度差分，并等待新的固定步位置。
         public void InvalidatePosition()
         {
             lastPosition = owner.position;
-            DropMotion();
+            DropMotion(motion.Trajectory);
             discardNextStep = true; // 外部可显式通知小于自动检测距离的瞬移。
             jumpAwaitingCommit = true;
         }
 
-        private void DropMotion()
+        // 瞬移打断速度差分，同时维持指定固定步的独立表现轨迹。
+        private void DropMotion(in CharacterGroundTrajectory trajectory)
         {
-            motion = new CharacterAnimationMotion(motion.IsValid ? motion.ActualSpeed : motion.RetainedStrideSpeed);
+            motion = new CharacterAnimationMotion(motion.IsValid ? motion.ActualSpeed : motion.RetainedStrideSpeed, trajectory);
             previousStepDuration = 0f;
         }
 
@@ -120,7 +130,9 @@ namespace ThreeC.CharacterBehavior
             previousStepDuration = 0f;
         }
 
-        public bool Receive(CharacterControllerFrameResult frame, int currentSimulationVersion, bool simulating, out bool resetPose)
+        // 对每个新固定步取一次地面投影或外部轨迹，并按连续性更新速度采样。
+        public bool Receive(CharacterControllerFrameResult frame, int currentSimulationVersion, bool simulating, out bool resetPose,
+            CharacterGroundTrajectory externalTrajectory = default)
         {
             SynchronizeVersion(currentSimulationVersion);
             Vector3 position = owner.position;
@@ -135,7 +147,7 @@ namespace ThreeC.CharacterBehavior
             {
                 if (resetPose)
                 {
-                    DropMotion();
+                    DropMotion(motion.Trajectory);
                     jumpAwaitingCommit = true;
                 }
                 return false;
@@ -144,29 +156,34 @@ namespace ThreeC.CharacterBehavior
             bool jumped = teleportDistanceSquared > 0f && frame.ActualDisplacement.sqrMagnitude > teleportDistanceSquared;
             bool consecutive = frame.FrameNumber == lastFrameNumber + 1;
             lastFrameNumber = frame.FrameNumber;
+            var trajectory = StepTrajectory(frame, externalTrajectory);
             bool skip = resetPose || jumped || discardNextStep;
             resetPose |= jumped && !jumpAwaitingCommit;
             discardNextStep = jumpAwaitingCommit = false;
             if (skip)
             {
-                DropMotion();
+                DropMotion(trajectory);
                 return frame.FrameNumber > 0; // 继续交付本步行为边沿，位移交给下一次正常采样。
             }
             float interval = consecutive && previousStepDuration > 0f ? (previousStepDuration + frame.DeltaTime) * 0.5f : 0f;
-            motion = frame.FrameNumber > 0 ? new CharacterAnimationMotion(frame, motion.ActualVelocity, interval) : default;
+            motion = frame.FrameNumber > 0 ? new CharacterAnimationMotion(frame, trajectory, motion.ActualVelocity, interval) : default;
             previousStepDuration = motion.IsValid ? frame.DeltaTime : 0f;
             return motion.IsValid;
         }
 
+        // 只交付当前代次和步号对应的采样，重复读取沿用该步原始表现轨迹。
         public CharacterAnimationMotion Read(CharacterControllerFrameResult latestFrame,
             int currentSimulationVersion, bool simulating)
         {
             SynchronizeVersion(currentSimulationVersion);
             if (!simulating || latestFrame.SimulationVersion != simulationVersion)
                 ClearSamples();
-            return latestFrame.FrameNumber == lastFrameNumber
-                ? new CharacterAnimationMotion(motion, latestFrame.Trajectory) : default;
+            return latestFrame.FrameNumber == lastFrameNumber ? motion : default;
         }
+
+        // 从同一已提交固定步取出内置驱动的地面投影或外部驱动附带的轨迹。
+        private static CharacterGroundTrajectory StepTrajectory(in CharacterControllerFrameResult frame, in CharacterGroundTrajectory externalTrajectory) =>
+            frame.Ground.IsValid ? CharacterGroundTrajectory.FromGround(frame.Ground) : externalTrajectory;
 
         private void SynchronizeVersion(int currentSimulationVersion)
         {

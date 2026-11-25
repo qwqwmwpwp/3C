@@ -6,6 +6,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 用现有数据组作为模板，保存换用新素材的组和对应的播放库。
     internal sealed class CharacterMotionGroupCreationWindow : EditorWindow
     {
         private const string AssetMenu = "Assets/3C/用基础片段创建地面动作库";
@@ -97,6 +98,7 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 替换模板片段并校验采样，保存数据组和对应动作库。
         private void CreateAssets()
         {
             string requestedPath = EditorUtility.SaveFilePanelInProject(
@@ -114,8 +116,6 @@ namespace ThreeC.CharacterBehavior
                 db.name = Path.GetFileNameWithoutExtension(dbPath);
                 db.Avatar = avatar;
                 db.Groups = groups;
-                db.GroundLayer = 0;
-                db.PlaybackMode = CharacterPlaybackBakeMode.BodyParts;
                 var result = CharacterMotionGroupBaker.Compile(db);
                 result.Apply(db);
 
@@ -128,6 +128,7 @@ namespace ThreeC.CharacterBehavior
                 Selection.activeObject = db;
                 EditorGUIUtility.PingObject(db);
                 Debug.Log($"{db.name}：已创建数据组并烘焙 {result.Tracks.Length} 条轨道。", db);
+                result.ReportQuality(db);
                 Close();
             }
             catch (Exception failure)

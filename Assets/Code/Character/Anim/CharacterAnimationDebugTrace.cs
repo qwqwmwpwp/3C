@@ -1,6 +1,6 @@
 #if UNITY_EDITOR
-using System;
 using System.Runtime.CompilerServices;
+using UnityEngine;
 
 [assembly: InternalsVisibleTo("Assembly-CSharp-Editor")]
 
@@ -16,13 +16,16 @@ namespace ThreeC.CharacterBehavior
         ResourceUnavailable
     }
 
+    // 描述一个片段源当前播放和淡出的片段。
     internal readonly struct CharacterDebugClipMix
     {
         public readonly string Target, Outgoing;
         public readonly float TargetWeight, OutgoingWeight, Phase;
         public readonly int OtherCount;
 
-        public CharacterDebugClipMix(string target, float targetWeight, string outgoing, float outgoingWeight, int otherCount, float phase)
+        // 保存片段源的实际时间和混合权重。
+        public CharacterDebugClipMix(string target, float targetWeight, string outgoing, float outgoingWeight,
+            int otherCount, float phase)
         {
             Target = target;
             TargetWeight = targetWeight;
@@ -33,95 +36,49 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    internal readonly struct CharacterDebugHandoff
+    // 描述当前默认姿势、局部动作和共享动作的贡献。
+    internal readonly struct CharacterDebugBodyMix
     {
-        public readonly int RenderFrame;
-        public readonly bool MoveApproved;
-        public readonly CharacterAttackState Attack;
         public readonly CharacterDebugClipMix Base, Action, Upper, Lower;
         public readonly float Coverage, UpperWeight, LowerWeight;
-        public readonly bool Direct;
 
-        public CharacterDebugHandoff(CharacterBehaviorFrameResult step, CharacterAnimationPlayer player)
+        // 读取双层混合与全身动作的覆盖量，供调试窗口显示接管进度。
+        public CharacterDebugBodyMix(CharacterClipPlayback clips)
         {
-            RenderFrame = UnityEngine.Time.frameCount;
-            MoveApproved = step.MoveApproved;
-            Attack = step.Attack;
-            var clips = player.Direct;
-            Direct = clips != null;
-            Base = clips?.DebugMix(CharacterAnimationBodyRegion.FullBody) ?? default;
-            Action = clips?.DebugMix(CharacterAnimationBodyRegion.FullBodyOverlay) ?? default;
-            Coverage = player.Active.LayerWeight(CharacterAnimationBodyRegion.FullBodyOverlay);
-            Upper = clips?.DebugMix(CharacterAnimationBodyRegion.UpperBody) ?? default;
-            Lower = clips?.DebugMix(CharacterAnimationBodyRegion.LowerBody) ?? default;
-            UpperWeight = (1f - Coverage) * player.Active.LayerWeight(CharacterAnimationBodyRegion.UpperBody);
-            LowerWeight = (1f - Coverage) * player.Active.LayerWeight(CharacterAnimationBodyRegion.LowerBody);
+            Base = clips.DebugMix(CharacterAnimationSource.Baseline);
+            Action = clips.DebugMix(CharacterAnimationSource.FullBodyOverlay);
+            Coverage = clips.LayerWeight(CharacterAnimationSource.FullBodyOverlay);
+            Upper = clips.DebugMix(CharacterAnimationSource.UpperBody);
+            Lower = clips.DebugMix(CharacterAnimationSource.LowerBody);
+            UpperWeight = (1f - Coverage) * clips.LayerWeight(CharacterAnimationSource.UpperBody);
+            LowerWeight = (1f - Coverage) * clips.LayerWeight(CharacterAnimationSource.LowerBody);
         }
-
-        public bool SameStage(in CharacterDebugHandoff other) =>
-            MoveApproved == other.MoveApproved && Attack.InstanceId == other.Attack.InstanceId &&
-            Attack.Move == other.Attack.Move && Attack.Phase == other.Attack.Phase &&
-            (Coverage >= 0.9999f) == (other.Coverage >= 0.9999f) &&
-            (Action.TargetWeight >= 0.9999f) == (other.Action.TargetWeight >= 0.9999f);
     }
 
-    /// <summary>单层获选语义、已解析素材与本次实际下发的 Animator 起点。</summary>
+    /// <summary>保存一个部位当前获选的动作及本帧实际下发指令的起点。</summary>
     internal readonly struct CharacterAnimationDebugLayer
     {
-        public string Key { get; }
-        public long InstanceId { get; }
-        public string StateName { get; }
-        public float Weight { get; }
-        public CharacterAnimationPlaybackReason Reason { get; }
-        public CharacterAnimationPlaybackCommand Command { get; }
-        public float? SentStart { get; }
-        public float? SamplePhase { get; }
-        public CharacterBehaviorPhase CoveragePhase { get; }
-        public bool UsedResourceFallback { get; }
-        public bool IsBasePose { get; }
+        public readonly string Key;
+        public readonly float? SentStart;
 
-        public CharacterAnimationDebugLayer(in CharacterAnimationDemand demand, in CharacterAnimationLayerPlan plan,
-            bool emitted)
+        // 只有实际下发播放指令时才记录起点。
+        public CharacterAnimationDebugLayer(in CharacterAnimationLayerPlan plan, in CharacterAnimationPlaybackEmission emission)
         {
-            Key = demand.Key;
-            IsBasePose = demand.IsLocomotion || demand.Key == CharacterAnimationIntentConverter.IdleKey;
-            InstanceId = demand.InstanceId;
-            StateName = plan.StateName;
-            Weight = plan.Weight;
-            var timing = plan.Demand.Timing;
-            SamplePhase = timing.Handoff.Valid ? timing.SamplePhase : null;
-            CoveragePhase = SamplePhase.HasValue ? timing.Handoff.PhaseAt(SamplePhase.Value) : default;
-            Reason = plan.Reason;
-            Command = emitted ? plan.Command : CharacterAnimationPlaybackCommand.Keep;
-            SentStart = emitted ? plan.Start.Phase : (float?)null;
-            UsedResourceFallback = plan.UsedResourceFallback;
+            Key = plan.Demand.Key;
+            SentStart = plan.HasState && emission.For(plan.Demand.Source) ? plan.Start.Phase : (float?)null;
         }
-
-        public bool MatchesSelection(in CharacterAnimationDebugLayer other) =>
-            Key == other.Key && InstanceId == other.InstanceId && StateName == other.StateName &&
-            CoveragePhase == other.CoveragePhase && UsedResourceFallback == other.UsedResourceFallback;
     }
 
-    /// <summary>同一次动画更新发布的只读快照；无有效运动观测时不显示固定步、速度与阶段。</summary>
+    /// <summary>保存当前动画运行状态和同一帧的两个部位播放结果。</summary>
     internal readonly struct CharacterAnimationDebugSnapshot
     {
-        public CharacterAnimationDebugStatus Status { get; }
-        public string Error { get; }
-        public CharacterDebugHandoff Handoff { get; }
-        public CharacterAnimationMotion Motion { get; }
-        public CharacterLocomotionPhase Phase { get; }
-        public CharacterLocomotionPhaseReason PhaseReason { get; }
-        public CharacterGroundTrajectory Braking { get; }
-        public float? StopClipTime { get; }
-        public float StopBrakeMarker { get; }
-        public CharacterStopPoseSample StopPose { get; }
-        public CharacterReleaseDecision ReleaseDecision { get; }
-        public bool? ObservedLeftSupport { get; }
-        public float ReleaseSpeed { get; }
-        public CharacterAnimationDebugLayer LowerBody { get; }
-        public CharacterAnimationDebugLayer UpperBody { get; }
-        public CharacterBodyConflict Conflict { get; }
+        public readonly CharacterAnimationDebugStatus Status;
+        public readonly string Error;
+        public readonly CharacterAnimationDebugLayer UpperBody, LowerBody;
+        public readonly CharacterDebugBodyMix Mix;
+        internal readonly VisualRootDebug Root;
 
+        // 构造暂停、资源缺失或等待等播放状态。
         public CharacterAnimationDebugSnapshot(CharacterAnimationDebugStatus status, string error = null)
         {
             this = default;
@@ -129,115 +86,57 @@ namespace ThreeC.CharacterBehavior
             Error = error;
         }
 
-        public CharacterAnimationDebugSnapshot(CharacterAnimationMotion motion, CharacterLocomotionPhase phase,
-            CharacterLocomotionPhaseReason phaseReason, CharacterAnimationDebugLayer lowerBody, CharacterAnimationDebugLayer upperBody,
-            CharacterGroundTrajectory braking, in CharacterAnimationPlaybackPlan plan,
-            bool? observedLeft, float releaseSpeed, in CharacterDebugHandoff handoff, CharacterBodyConflict conflict)
+        // 从已提交的播放计划和实际混合构造当前播放状态。
+        public CharacterAnimationDebugSnapshot(in CharacterAnimationPlaybackPlan plan,
+            in CharacterAnimationPlaybackEmission emission, in CharacterDebugBodyMix mix, in VisualRootDebug root)
             : this(CharacterAnimationDebugStatus.Running)
         {
-            Handoff = handoff;
-            Motion = motion;
-            Phase = phase;
-            PhaseReason = phaseReason;
-            Braking = braking;
-            StopClipTime = plan.StopClipTime;
-            StopBrakeMarker = plan.FullBody.Binding.BrakingClipSeconds;
-            StopPose = plan.StopPose;
-            ReleaseDecision = plan.ReleaseDecision;
-            ObservedLeftSupport = observedLeft;
-            ReleaseSpeed = releaseSpeed;
-            LowerBody = lowerBody;
-            UpperBody = upperBody;
-            Conflict = conflict;
+            UpperBody = new CharacterAnimationDebugLayer(plan.UpperOwner, emission);
+            LowerBody = new CharacterAnimationDebugLayer(plan.LowerOwner, emission);
+            Mix = mix;
+            Root = root;
         }
-
-        public bool StartsPlayback => LowerBody.SentStart.HasValue || UpperBody.SentStart.HasValue;
-
-        public bool MatchesSelection(in CharacterAnimationDebugSnapshot other) =>
-            (!Motion.IsValid || (other.Motion.IsValid && Phase == other.Phase)) &&
-            Conflict.Rejected == other.Conflict.Rejected && Conflict.Holder == other.Conflict.Holder && Conflict.Reason == other.Conflict.Reason &&
-            Handoff.SameStage(other.Handoff) && ReleaseDecision == other.ReleaseDecision &&
-            Braking.IsBraking == other.Braking.IsBraking &&
-            Braking.IsBrakeLeadIn == other.Braking.IsBrakeLeadIn &&
-            (Braking.RemainingStopSeconds > 0f) == (other.Braking.RemainingStopSeconds > 0f) &&
-            (StopClipTime >= StopBrakeMarker) == (other.StopClipTime >= other.StopBrakeMarker) &&
-            LowerBody.MatchesSelection(other.LowerBody) && UpperBody.MatchesSelection(other.UpperBody);
     }
 
-    internal interface ICharacterAnimationDebugHistory
+    /// <summary>发布供编辑器读取的当前播放状态，并在读取时验证实例与模拟版本。</summary>
+    internal sealed class CharacterAnimationDebugTrace
     {
-        long FirstTransition { get; }
-        long LatestTransition { get; }
-        bool TryReadTransition(long sequence, out CharacterAnimationDebugSnapshot snapshot);
-    }
+        private CharacterAnimationDebugSnapshot current;
+        private int sampledSimulationVersion;
 
-    /// <summary>只在编辑器中保留当前快照和最近的阶段、获选或实际播放变化；正常帧不追加历史。</summary>
-    internal sealed class CharacterAnimationDebugTrace : ICharacterAnimationDebugHistory
-    {
-        private const int Capacity = 24;
-        private readonly CharacterAnimationDebugSnapshot[] entries = new CharacterAnimationDebugSnapshot[Capacity];
-        private long lastSequence;
-        private int count;
-        private CharacterGroundTrajectory lastBraking;
-        private int lastVersion;
+        // 记录当前动画更新所采样的模拟版本。
+        public void CaptureSimulation(int simulationVersion) => sampledSimulationVersion = simulationVersion;
 
-        public void ObserveGroundStep(CharacterControllerFrameResult frame)
+        // 根据当前动画归属与模拟状态返回可用的播放状态。
+        public CharacterAnimationDebugSnapshot Read(Animator animator, CharacterAnimationPlayer player, int stateVersion,
+            int currentStateVersion, int simulationVersion, bool simulating)
         {
-            if (frame.SimulationVersion != lastVersion || frame.Behavior.DisplacementProvider != CharacterBehaviorId.None)
-                lastBraking = default;
-            if (frame.Trajectory.IsBraking)
-                lastBraking = frame.Trajectory;
-            lastVersion = frame.SimulationVersion;
+            if (animator == null || !animator.isActiveAndEnabled)
+                return new CharacterAnimationDebugSnapshot(CharacterAnimationDebugStatus.AnimatorUnavailable);
+            if (!simulating)
+                return new CharacterAnimationDebugSnapshot(CharacterAnimationDebugStatus.Paused);
+            if (stateVersion != currentStateVersion || player.NeedsRebind || sampledSimulationVersion != simulationVersion ||
+                current.Status == CharacterAnimationDebugStatus.Paused ||
+                current.Status == CharacterAnimationDebugStatus.AnimatorUnavailable)
+                return default;
+            return current;
         }
 
-        public CharacterAnimationDebugSnapshot Current { get; private set; }
-        public long FirstTransition => count > 0 ? lastSequence - count + 1 : 0;
-        public long LatestTransition => count > 0 ? lastSequence : 0;
-
-        public void Record(CharacterAnimationMotion motion, CharacterLocomotionPhase phase,
-            CharacterLocomotionPhaseReason phaseReason, in CharacterAnimationComposition selection,
-            in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission,
-            bool? observedLeft, UnityEngine.Vector3 entryVelocity, in CharacterDebugHandoff handoff)
+        // 发布提交动画图后观测到的动作和片段混合结果。
+        public void Publish(in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission,
+            in CharacterDebugBodyMix mix, in VisualRootDebug root)
         {
-            float speed = plan.ReleaseDecision == CharacterReleaseDecision.Interrupted ? Current.ReleaseSpeed : entryVelocity.magnitude;
-            var snapshot = new CharacterAnimationDebugSnapshot(motion, phase, phaseReason,
-                new CharacterAnimationDebugLayer(plan.LowerOwner.Demand, plan.LowerOwner, emission.For(plan.LowerOwner.Demand.Region)),
-                new CharacterAnimationDebugLayer(plan.UpperOwner.Demand, plan.UpperOwner, emission.For(plan.UpperOwner.Demand.Region)),
-                lastBraking, plan, observedLeft, speed, handoff, selection.Conflict);
-            Current = snapshot;
-            if (!snapshot.StartsPlayback && count > 0 && snapshot.MatchesSelection(entries[Slot(lastSequence)]))
-                return;
-
-            entries[Slot(++lastSequence)] = snapshot;
-            if (count < Capacity)
-                count++;
+            current = new CharacterAnimationDebugSnapshot(plan, emission, mix, root);
         }
 
+        // 更新当前动画的暂停、停用或资源状态。
         public void SetStatus(CharacterAnimationDebugStatus status, string error = null)
         {
-            Current = new CharacterAnimationDebugSnapshot(status, error);
+            current = new CharacterAnimationDebugSnapshot(status, error);
         }
 
-        public void Clear()
-        {
-            Current = default;
-            lastBraking = default;
-            Array.Clear(entries, 0, entries.Length);
-            count = 0;
-        }
-
-        public bool TryReadTransition(long sequence, out CharacterAnimationDebugSnapshot snapshot)
-        {
-            if (count == 0 || sequence < FirstTransition || sequence > LatestTransition)
-            {
-                snapshot = default;
-                return false;
-            }
-            snapshot = entries[Slot(sequence)];
-            return true;
-        }
-
-        private static int Slot(long sequence) => (int)((sequence - 1) % Capacity);
+        // 丢弃上一个播放绑定发布的状态。
+        public void Clear() => current = default;
     }
 }
 #endif

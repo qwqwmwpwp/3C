@@ -32,16 +32,36 @@ namespace ThreeC.CharacterBehavior
             return blending ? 0f : -1f; // 老资源缺少接触数据时，过渡结束后再使用动画流的许可。
         }
 
-        public static CharacterFootPlantFrame Read(CharacterAnimationPlayer player, in CharacterAnimationPlaybackPlan plan)
+        // 按双腿的实际归属读取直接混合器中本次求值使用的脚姿。
+        public static CharacterFootPlantFrame Read(CharacterClipPlayback clips, in CharacterAnimationPlaybackPlan plan)
         {
             var layer = plan.LowerOwner.Weight > 0f ? plan.LowerOwner : plan.FullBody;
             if (!layer.HasState) return default;
-            if (player.Direct != null) return player.Direct.ReadFootPlant(layer);
-            var seen = player.Active.Observe(layer.Demand.Region);
-            bool entering = layer.Command != CharacterAnimationPlaybackCommand.Keep;
-            bool observed = seen.Destination.fullPathHash == layer.StateHash;
-            float phase = !entering && observed ? seen.Destination.normalizedTime : layer.Start.Phase;
-            return new CharacterFootPlantFrame(layer, phase, entering || !observed || seen.InTransition);
+            return clips.ReadFootPlant(layer);
+        }
+    }
+
+    // 用真实骨链长度及允许的竖直降模判断世界目标是否可达。
+    internal readonly struct CharacterFootReach
+    {
+        private readonly Vector3 hip;
+        private readonly float length, remainingDrop;
+
+        // 剩余降模以世界米计，平地和未启用降模时传零。
+        internal CharacterFootReach(Vector3 hip, float length, float remainingDrop)
+        {
+            this.hip = hip;
+            this.length = length;
+            this.remainingDrop = remainingDrop;
+        }
+
+        // 在可用竖直行程中取距离最近的髋位置，水平伸展始终受实际腿长约束。
+        internal bool Contains(Vector3 target)
+        {
+            float down = Mathf.Clamp(hip.y - target.y, 0f, remainingDrop);
+            Vector3 gap = hip - Vector3.up * down - target;
+            float radius = length + 0.0001f; // 仅吸收浮点舍入，单位米。
+            return gap.sqrMagnitude <= radius * radius;
         }
     }
 
@@ -59,8 +79,9 @@ namespace ThreeC.CharacterBehavior
         private long lastInstance;
         private byte sampled, waitForLanding;
 
+        // 在平台局部坐标中建立足底锁点，跨台阶或水平锚点超出腿长时受控释放。
         public static void Place(ref CharacterIkState state, in CharacterFootPlantFrame frame, CharacterIkLimb limb,
-            in CharacterGroundFootHit ground, Vector3 ankle, float gate, float positionWeight, float dt, ref Pose target)
+            in CharacterGroundFootHit ground, Vector3 ankle, float gate, float positionWeight, float dt, in CharacterFootReach reach, ref Pose target)
         {
             ref var history = ref state.FootPlant;
             Vector3 normal = ground.Normal;
@@ -90,7 +111,7 @@ namespace ThreeC.CharacterBehavior
                 Vector3 tangent = Vector3.ProjectOnPlane(toAnchor, normal);
                 float limit = changed || frame.Handoff != 0 ? HandoffDistance : StanceDistance;
                 bool otherSurface = Mathf.Abs(Vector3.Dot(toAnchor, normal)) > SurfaceTolerance;
-                bool fits = !crossedStep && !otherSurface && tangent.sqrMagnitude <= limit * limit;
+                bool fits = reach.Contains(point + tangent) && !crossedStep && !otherSurface && tangent.sqrMagnitude <= limit * limit;
                 if (contact < PlantContact || gate <= UnloadedContact || !nearGround || !fits)
                 {
                     state.Locked = false;
@@ -107,7 +128,8 @@ namespace ThreeC.CharacterBehavior
                 if (positionWeight > history.lastPositionWeight)
                     offset *= history.lastPositionWeight / positionWeight; // 淡入许可上升也不能放大旧修正。
                 bool landed = history.waitForLanding == 0 || history.settled >= SettleSeconds;
-                if (nearGround && landed && contact >= PlantContact && gate >= PlantContact && offset.sqrMagnitude < 0.000001f)
+                if (nearGround && landed && contact >= PlantContact && gate >= PlantContact &&
+                    offset.sqrMagnitude < 0.000001f && reach.Contains(point))
                 {
                     state.LocalAnchor.position = local;
                     state.Locked = true;

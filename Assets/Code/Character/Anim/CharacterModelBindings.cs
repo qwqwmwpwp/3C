@@ -5,6 +5,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 保存肢体 IK 的素材许可、探测范围和目标权重。
     [Serializable]
     public class CharacterIkTuning
     {
@@ -15,7 +16,7 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("握持动作键"), Tooltip("全身或上身实际选中此动作时，将动画手目标作为握持约束。")]
         public string GripActionKey;
         [InspectorName("默认探测地面")] public bool ProbeGround;
-        [InspectorName("贴合最大坡角（度）"), Range(-1f, 89f), Tooltip("负值沿用绑定时的移动坡角。独立配置按角色上方向测量，旧通道默认约 84.26°。")]
+        [InspectorName("贴合最大坡角（度）"), Range(-1f, 89f), Tooltip("非负值按角色上方向测量。-1 按世界上方向测量，使用角色移动配置的可行走坡角，独立宿主使用 45°。")]
         public float ProbeSlopeLimit = 84.26f;
         [InspectorName("探测起点"), Tooltip("角色局部空间，单位米。脚姿有效后使用脚踝水平位置，保留此高度。")] public Vector3 ProbeOrigin;
         [InspectorName("探测长度"), Min(0f)] public float ProbeLength = 1f;
@@ -49,7 +50,8 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("右上臂")] public Transform RightUpperArm;
         [InspectorName("右前臂")] public Transform RightForearm;
 
-        internal CharacterPoseBoneBinding[] Bind(Animator animator)
+        // 绑定胸臂骨骼并在实际重合的骨上由独立切换模块接管片段交接。
+        internal CharacterPoseBoneBinding[] Bind(Animator animator, HashSet<Transform> transitionBones)
         {
             var result = new List<CharacterPoseBoneBinding>(6);
             var assigned = new HashSet<Transform>();
@@ -69,11 +71,12 @@ namespace ThreeC.CharacterBehavior
             bool Valid(Transform bone) => bone && bone != animator.transform &&
                 bone.IsChildOf(animator.transform) && !assigned.Contains(bone);
 
+            // 将胸臂份额写入作业绑定，按实际骨骼重合标记通用切换惯性的所有权。
             void Add(Transform bone, CharacterPoseRegion region, float share)
             {
                 assigned.Add(bone);
                 result.Add(new CharacterPoseBoneBinding
-                    { Handle = animator.BindStreamTransform(bone), Region = region, Share = share });
+                    { Handle = animator.BindStreamTransform(bone), Region = region, Share = share, SharedTransition = (byte)(transitionBones.Contains(bone) ? 1 : 0) });
             }
         }
     }

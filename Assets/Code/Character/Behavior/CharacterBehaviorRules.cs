@@ -103,29 +103,25 @@ namespace ThreeC.CharacterBehavior
             HasExplicitConflictWith(movement) || (ProvidesDisplacement && !Behavior.SharesMovementOnStart);
     }
 
-    /// <summary>在角色创建时校验并排列规则。固定步只读取这些数据。</summary>
+    /// <summary>维护行为的优先级、准入门控、互斥和有向打断规则。</summary>
     internal sealed class CharacterBehaviorRules
     {
         private readonly Dictionary<(CharacterBehaviorId, CharacterBehaviorId), CharacterBehaviorPhase> interrupts =
             new Dictionary<(CharacterBehaviorId, CharacterBehaviorId), CharacterBehaviorPhase>();
+        private readonly Dictionary<CharacterBehaviorId, CharacterBehaviorRule> rulesById;
 
         public CharacterBehaviorRule Movement { get; }
         public CharacterBehaviorRule[] Actions { get; }
+        internal CharacterBehaviorRule[] Participants { get; }
 
-        public CharacterBehaviorRules(CharacterMoveBehavior movement, CharacterDashBehavior dash,
-            CharacterBehaviorRule[] additionalRules, CharacterBehaviorInterrupt[] interruptRules)
+        // 校验装配提供的默认行为、优先队列与打断关系，再绑定各自的行为实例。
+        internal CharacterBehaviorRules(CharacterBehaviorRule movement,
+            CharacterBehaviorRule[] actions, CharacterBehaviorInterrupt[] interruptRules)
         {
-            Movement = new CharacterBehaviorRule(CharacterBehaviorId.Move, movement, providesDisplacement: true);
-            int additionalCount = additionalRules?.Length ?? 0;
-            if (additionalCount > 62)
-                throw new ArgumentException("Too many behavior identifiers.", nameof(additionalRules));
+            Movement = movement;
+            Actions = actions;
 
-            Actions = new CharacterBehaviorRule[additionalCount + 1];
-            Actions[0] = new CharacterBehaviorRule(CharacterBehaviorId.Dash, dash, 100, providesDisplacement: true);
-            if (additionalCount > 0)
-                Array.Copy(additionalRules, 0, Actions, 1, additionalCount);
-
-            var rulesById = new Dictionary<CharacterBehaviorId, CharacterBehaviorRule>(Actions.Length + 1)
+            rulesById = new Dictionary<CharacterBehaviorId, CharacterBehaviorRule>(Actions.Length + 1)
             {
                 [Movement.Id] = Movement
             };
@@ -134,18 +130,16 @@ namespace ThreeC.CharacterBehavior
             {
                 CharacterBehaviorRule rule = Actions[i];
                 if (!IsSingleId(rule.Id) || (registered & rule.Id) != CharacterBehaviorId.None)
-                    throw new ArgumentException($"Invalid or duplicate behavior identifier: {rule.Id}.", nameof(additionalRules));
+                    throw new ArgumentException($"Invalid or duplicate behavior identifier: {rule.Id}.", nameof(actions));
                 if (rule.Behavior == null || rule.Behavior.IsActive || rule.Behavior.IsBound
-                    || ReferenceEquals(rule.Behavior, movement) || SharesInstance(rule.Behavior, i))
-                    throw new ArgumentException($"Behavior {rule.Id} needs its own inactive instance.", nameof(additionalRules));
+                    || ReferenceEquals(rule.Behavior, movement.Behavior) || SharesInstance(rule.Behavior, i))
+                    throw new ArgumentException($"Behavior {rule.Id} needs its own inactive instance.", nameof(actions));
 
                 registered |= rule.Id;
                 rulesById.Add(rule.Id, rule);
             }
 
             ValidateRules(registered);
-            // 冲刺显式拥有从基础移动接管位移的权限。
-            interrupts.Add((CharacterBehaviorId.Dash, CharacterBehaviorId.Move), CharacterBehaviorPhase.Any);
             if (interruptRules != null)
             {
                 foreach (CharacterBehaviorInterrupt interrupt in interruptRules)
@@ -167,9 +161,63 @@ namespace ThreeC.CharacterBehavior
             }
 
             Array.Sort(Actions, ComparePriority);
-            movement.IsBound = true;
-            foreach (CharacterBehaviorRule rule in Actions)
+            Participants = new CharacterBehaviorRule[Actions.Length + 1];
+            Participants[0] = Movement;
+            Array.Copy(Actions, 0, Participants, 1, Actions.Length);
+            foreach (CharacterBehaviorRule rule in Participants)
                 rule.Behavior.IsBound = true;
+        }
+
+        // 核对两个流程的完整编号集合、实际类型和运行状态隔离，验证期间不修改目标。
+        internal void ValidateCopyTarget(CharacterBehaviorRules target)
+        {
+            if (Participants.Length != target.Participants.Length)
+                throw new InvalidOperationException("预测副本的行为数量不匹配。");
+
+            foreach (var rule in Participants)
+            {
+                if (!target.rulesById.TryGetValue(rule.Id, out var matching))
+                    throw new InvalidOperationException($"预测副本缺少行为 {rule.Id}。");
+                if (rule.Behavior.GetType() != matching.Behavior.GetType())
+                    throw new InvalidOperationException($"预测副本的行为 {rule.Id} 类型不匹配。");
+                if (ReferenceEquals(rule.Behavior, matching.Behavior))
+                    throw new InvalidOperationException($"预测副本共享了行为 {rule.Id} 的实例。");
+            }
+
+            ValidateStorageIsolation(target);
+            target.ValidateStorageIsolation(this);
+        }
+
+        // 检查已声明的可变容器在流程内外均由单一动作独占。
+        private void ValidateStorageIsolation(CharacterBehaviorRules other)
+        {
+            for (int i = 0; i < Participants.Length; i++)
+            {
+                var owner = Participants[i];
+                object storage = owner.Behavior.RuntimeStorageForCopy;
+                if (storage == null) continue;
+
+                for (int j = 0; j < i; j++)
+                    if (ReferenceEquals(storage, Participants[j].Behavior.RuntimeStorageForCopy))
+                        throw new InvalidOperationException($"行为 {owner.Id} 与 {Participants[j].Id} 共享可变运行容器。");
+                foreach (var rule in other.Participants)
+                    if (ReferenceEquals(storage, rule.Behavior.RuntimeStorageForCopy))
+                        throw new InvalidOperationException($"行为 {owner.Id} 与另一流程的 {rule.Id} 共享可变运行容器。");
+            }
+        }
+
+        // 预检通过后按注册编号将各参与者的状态复制到对应目标。
+        internal void CopyParticipantStatesTo(CharacterBehaviorRules target)
+        {
+            foreach (var rule in Participants)
+                rule.Behavior.ApplyRuntimeCopyTo(target.rulesById[rule.Id].Behavior);
+        }
+
+        // 将目标的全部运行状态与其预测定义绑定。
+        internal void BindPredictionDefinitions()
+        {
+            foreach (var rule in Participants)
+                rule.Behavior.RebindPredictionDefinition();
         }
 
         private void ValidateRules(CharacterBehaviorId registered)
@@ -220,14 +268,45 @@ namespace ThreeC.CharacterBehavior
             return priority != 0 ? priority : ((ulong)left.Id).CompareTo((ulong)right.Id);
         }
 
-        public CharacterBehaviorRejection CheckInterrupt(CharacterBehaviorId requester, CharacterBehaviorRule holder)
+        // 检查活动行为的门控是否接受新许可。
+        internal bool Admits(CharacterBehaviorId request, CharacterBehaviorId active)
         {
-            if (!interrupts.TryGetValue((requester, holder.Id), out CharacterBehaviorPhase allowed))
-                return CharacterBehaviorRejection.Conflict;
-
-            return (holder.Behavior.Phase & allowed) != 0
-                ? CharacterBehaviorRejection.None
-                : CharacterBehaviorRejection.InterruptPhaseDenied;
+            foreach (CharacterBehaviorRule holder in Actions)
+                if ((active & holder.Id) != CharacterBehaviorId.None && !holder.Gate.Admits(request))
+                    return false;
+            return true;
         }
+
+        // 收集本次请求可打断的全部冲突许可，未全部通过时不修改任何行为。
+        internal bool TryApprove(CharacterBehaviorRule request, bool fallbackPermit,
+            in CharacterBehaviorStep step, out CharacterBehaviorId interrupted)
+        {
+            interrupted = CharacterBehaviorId.None;
+            if (!Admits(request.Id, step.Active))
+                return false;
+
+            if (fallbackPermit && request.InterruptsMovementOnStart(Movement))
+            {
+                if (!CheckInterrupt(request.Id, Movement))
+                    return false;
+                interrupted |= Movement.Id;
+            }
+
+            foreach (CharacterBehaviorRule holder in Actions)
+            {
+                if (!step.IsActive(holder.Id) || !request.ConflictsWith(holder))
+                    continue;
+                // 本步刚获准的行为不会被后续请求打断。
+                if ((step.Started & holder.Id) != CharacterBehaviorId.None || !CheckInterrupt(request.Id, holder))
+                    return false;
+                interrupted |= holder.Id;
+            }
+            return true;
+        }
+
+        // 检查打断关系及持有者所处阶段。
+        private bool CheckInterrupt(CharacterBehaviorId requester, CharacterBehaviorRule holder) =>
+            interrupts.TryGetValue((requester, holder.Id), out CharacterBehaviorPhase allowed) &&
+            (holder.Behavior.Phase & allowed) != 0;
     }
 }

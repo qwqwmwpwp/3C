@@ -3,51 +3,51 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>定向冲刺行为，获准时锁定方向、速度和时长，由流程扣除体力并在本固定步开始执行。</summary>
-    public sealed class CharacterDashBehavior : CharacterBehavior
+    /// <summary>维护定向冲刺的方向、速度、持续时间和跨步冷却。</summary>
+    public sealed class CharacterDashBehavior : CharacterBehavior, ICharacterIntervalMotion
     {
-        private float _speed;
+        private CharacterDashRuntimeState state;
 
-        public float RemainingDuration { get; private set; }
-        public Vector2 Direction { get; private set; }
-        public float Cooldown { get; private set; }
+        public float RemainingDuration => state.RemainingDuration;
+        public Vector2 Direction => state.Direction;
+        public float Cooldown => state.Cooldown;
         public override bool IsComplete => RemainingDuration == 0f;
+        public override double NextBoundaryDelay => IsActive ? RemainingDuration : double.PositiveInfinity;
 
-        internal override void CopyStateTo(CharacterBehavior target)
+        // 将冲刺执行状态和冷却复制到独立行为实例。
+        protected override void CopyRuntimeStateTo(CharacterBehavior target) =>
+            ((CharacterDashBehavior)target).state = state;
+
+        // 冻结本次冲刺的方向、速度、存续区间和起步实例。
+        public CharacterFrozenMotion FreezeMotion(in CharacterMotionCapture capture) =>
+            new CharacterFrozenDashMotion(state);
+
+        /// <summary>只读判断冲刺请求和体力是否满足启动条件。</summary>
+        public override bool Evaluate(CharacterBehaviorContext context) =>
+            CanStart(context, context.DashCooldownRemaining) && CharacterStaminaBlackboard.CanAfford(context.StaminaRemaining, GetStaminaCost(context));
+
+        // 按本步输入、冷却和配置检查冲刺自身的请求条件。
+        internal override bool EvaluateRequest(CharacterBehaviorContext context) => CanStart(context, Cooldown);
+
+        // 用指定来源的冷却判断公开查询或本实例的启动请求。
+        private bool CanStart(CharacterBehaviorContext context, float cooldown)
         {
-            base.CopyStateTo(target);
-            var copy = (CharacterDashBehavior)target;
-            copy._speed = _speed;
-            copy.RemainingDuration = RemainingDuration;
-            copy.Direction = Direction;
-            copy.Cooldown = Cooldown;
-        }
-
-        /// <summary>活动冲刺可继续执行，未活动时按新冲刺的条件判定。</summary>
-        public override bool Evaluate(CharacterBehaviorContext context)
-        {
-            return IsActive || (RequestsStart(context) && GetStartRejection(context) == CharacterBehaviorRejection.None
-                && context.StaminaRemaining >= GetStaminaCost(context));
-        }
-
-        public override bool RequestsStart(CharacterBehaviorContext context) => context.Input.DashPressed;
-
-        public override float GetStaminaCost(CharacterBehaviorContext context) =>
-            InputMath.NonNegative(context.Settings.DashStaminaCost, CharacterMovementSettings.DefaultDashStaminaCost);
-
-        public override CharacterBehaviorRejection GetStartRejection(CharacterBehaviorContext context)
-        {
-            if (context.DashCooldownRemaining > 0f)
-                return CharacterBehaviorRejection.Cooldown;
+            if (IsActive || !context.Input.DashPressed || cooldown > 0f)
+                return false;
 
             CharacterMovementSettings settings = context.Settings;
             float duration = InputMath.NonNegative(settings.DashDuration, CharacterMovementSettings.DefaultDashDuration);
             float speed = InputMath.NonNegative(settings.DashSpeed, CharacterMovementSettings.DefaultDashSpeed);
 
-            return duration > 0f && speed > 0f
-                ? CharacterBehaviorRejection.None
-                : CharacterBehaviorRejection.InvalidSettings;
+            return duration > 0f && speed > 0f;
         }
+
+        // 读取本次冲刺的配置体力消耗。
+        public override float GetStaminaCost(CharacterBehaviorContext context) =>
+            InputMath.NonNegative(context.Settings.DashStaminaCost, CharacterMovementSettings.DefaultDashStaminaCost);
+
+        // 当前区间的准入完成后才流逝冷却，禁止长帧起点的按下提前借用帧末时间。
+        public override void AfterStep(float seconds) => state.Cooldown = InputMath.Elapsed(Cooldown, seconds);
 
         /// <summary>由流程在批准后调用，锁定本次冲刺参数，依次使用输入方向、朝向和世界正 Z 作为方向来源。</summary>
         public override void Start(CharacterBehaviorContext context)
@@ -57,10 +57,11 @@ namespace ThreeC.CharacterBehavior
                 !InputMath.TryNormalizeDirection(context.Facing, out direction))
                 direction = Vector2.up;
 
-            Direction = direction;
-            RemainingDuration = InputMath.NonNegative(settings.DashDuration, CharacterMovementSettings.DefaultDashDuration);
-            _speed = InputMath.NonNegative(settings.DashSpeed, CharacterMovementSettings.DefaultDashSpeed);
-            Cooldown = InputMath.NonNegative(settings.DashCooldown, CharacterMovementSettings.DefaultDashCooldown);
+            state.InstanceId++;
+            state.Direction = direction;
+            state.RemainingDuration = InputMath.NonNegative(settings.DashDuration, CharacterMovementSettings.DefaultDashDuration);
+            state.Speed = InputMath.NonNegative(settings.DashSpeed, CharacterMovementSettings.DefaultDashSpeed);
+            state.Cooldown = InputMath.NonNegative(settings.DashCooldown, CharacterMovementSettings.DefaultDashCooldown);
             IsActive = true;
         }
 
@@ -68,28 +69,82 @@ namespace ThreeC.CharacterBehavior
         public override void End()
         {
             IsActive = false;
-            RemainingDuration = 0f;
+            state.RemainingDuration = 0f;
         }
 
         /// <summary>重新初始化角色时清除全部冲刺状态，包括上一次保留的方向。</summary>
         internal override void Reset()
         {
             End();
-            Direction = Vector2.zero;
-            _speed = 0f;
-            Cooldown = 0f;
+            state = default;
         }
 
-        /// <summary>按本步与剩余时长的较小值输出世界 X/Z 位移，并消耗剩余时长，由流程在耗尽后结束行为。</summary>
-        public override Vector2 Update(CharacterBehaviorContext context)
+        /// <summary>推进冲刺时长并返回本步的世界 X/Z 位移。</summary>
+        public override Vector2 Update(CharacterBehaviorContext context) => Advance(context, out _);
+
+        /// <summary>推进本步冲刺，并把提前结束后剩余的时间交还普通移动。</summary>
+        public override CharacterBehaviorMotion AdvanceStep(CharacterBehaviorContext context)
         {
+            Vector2 displacement = Advance(context, out float seconds);
+            float remaining = seconds > 0f ? InputMath.Elapsed(context.DeltaTime, seconds) : 0f;
+            return new CharacterBehaviorMotion(displacement, remaining, motion: state.ActionMotion);
+        }
+
+        // 按步长与冲刺余量的较小值计算位移和实际占用时间。
+        private Vector2 Advance(CharacterBehaviorContext context, out float seconds)
+        {
+            seconds = 0f;
             if (!IsActive)
                 return Vector2.zero;
 
-            float activeTime = Math.Min(context.DeltaTime, RemainingDuration);
-            Vector2 displacement = Direction * (_speed * activeTime);
-            RemainingDuration = InputMath.Elapsed(RemainingDuration, context.DeltaTime);
+            seconds = Math.Min(context.DeltaTime, RemainingDuration);
+            Vector2 displacement = state.Displacement(seconds);
+            state.RemainingDuration = InputMath.Elapsed(RemainingDuration, context.DeltaTime);
             return displacement;
+        }
+    }
+
+    /// <summary>保存冲刺实例执行期间锁定的数值及跨活动期冷却。</summary>
+    internal struct CharacterDashRuntimeState
+    {
+        internal long InstanceId;
+        internal Vector2 Direction;
+        internal float Speed, RemainingDuration, Cooldown;
+        internal readonly CharacterActionMotion ActionMotion => new CharacterActionMotion
+        {
+            UsesBurstVelocity = true,
+            SnapsFacingOnStart = true,
+            Facing = Direction
+        };
+
+        // 对有限冲刺占用时长积分得到世界 X/Z 位移。
+        internal readonly Vector2 Displacement(float seconds) => Direction * (Speed * seconds);
+    }
+
+    /// <summary>在捕获的冲刺结束前积分恒速位移，结束后交还普通移动。</summary>
+    internal sealed class CharacterFrozenDashMotion : CharacterFrozenMotion
+    {
+        private readonly CharacterDashRuntimeState state;
+
+        // 保存由冲刺实例按值传递的运动数据。
+        internal CharacterFrozenDashMotion(CharacterDashRuntimeState state) => this.state = state;
+
+        // 返回仍落在查询范围内的冲刺结束时刻。
+        public override double NextBoundary(double after, double limit) =>
+            state.RemainingDuration > after ? Math.Min(limit, state.RemainingDuration) : limit;
+
+        // 按有效冲刺和普通移动的交集分别积分，正时长冲刺始终附带同一实例序号。
+        public override CharacterMotionSample Sample(double start, double end)
+        {
+            if (end <= start) return default;
+
+            double activeSeconds = Math.Max(0d, Math.Min(end, state.RemainingDuration) - Math.Max(start, 0d));
+            float ordinarySeconds = (float)(end - start - activeSeconds);
+            if (activeSeconds == 0d)
+                return new CharacterMotionSample(new CharacterBehaviorMotion(Vector2.zero, ordinarySeconds, controlsDisplacement: false));
+
+            var motion = new CharacterBehaviorMotion(state.Displacement((float)activeSeconds), ordinarySeconds, motion: state.ActionMotion);
+            return new CharacterMotionSample(motion, state.InstanceId);
         }
     }
 }

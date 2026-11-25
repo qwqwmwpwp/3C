@@ -2,106 +2,53 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    /// <summary>提供角色模块组合、播放库与适用于整套播放的设置。</summary>
     [CreateAssetMenu(menuName = "3C/角色数据/04 动画表现", fileName = "04 动画表现")]
     public sealed class CharacterAnimationConfig : ScriptableObject
     {
-        [SerializeField, InspectorName("动画模块组合"), Tooltip("指定后由组合提供步态、动作、动作匹配和姿态修正。未指定的旧配置沿用内嵌数据。")]
-        internal AnimationModule Modules;
-        [Header("行为映射与身体表现")]
-        [SerializeField, InspectorName("表现参数")] internal CharacterPresentationSettings Presentation = new CharacterPresentationSettings();
-        [Header("步态与动作选择")]
-        [SerializeField, InspectorName("步态参数")] internal CharacterGaitSettings Gaits = new CharacterGaitSettings();
-        [Header("动作资源")]
-        [SerializeField, InspectorName("地面动作数据库")] internal CharacterMotionDatabase MotionDatabase;
-        [SerializeField, InspectorName("播放库"), Tooltip("留空时使用地面动作数据库。")] internal CharacterMotionDatabase PlaybackLibrary;
+        internal const float DefaultTeleportDistance = 2f;
 
+        [SerializeField, InspectorName("动画模块组合"), Tooltip("留空时只播放默认待机，也可以在运行时为单个角色装配模块。")]
+        internal AnimationModule Modules;
+        [SerializeField, InspectorName("播放库")] internal CharacterMotionDatabase PlaybackLibrary;
+        [SerializeField, InspectorName("默认待机状态"), Tooltip("没有模块提供待机状态时使用。留空时采用播放库的下身默认状态。")]
+        internal string DefaultIdleState;
+        [SerializeField, InspectorName("瞬移重置距离（米）"), Min(0f), Tooltip("单次表现更新移动超过此距离时清空姿态历史。零表示关闭自动检测。")]
+        internal float IkTeleportDistance = DefaultTeleportDistance;
+        [SerializeField, InspectorName("复用空闲动作混合器"), Tooltip("每个部位和共享接管各保留至多一个空混合器，片段及事件时钟在退出时释放。")]
+        internal bool ReuseActionMixers;
+
+        // 使用角色的模块集合与骨骼绑定创建独立的运行时配置。
         internal CharacterAnimationConfiguration Bind(CharacterModelBindings model, CharacterProfileOverrides overrides,
             CharacterLightAttackSettings attack, AnimationModuleAssembly modules)
         {
-            if (modules == null && Modules) modules = AnimationModuleAssembly.Resolve(Modules);
-            return Bind(Presentation, Gaits, MotionDatabase, PlaybackLibrary ? PlaybackLibrary : MotionDatabase,
-                attack, model, overrides, modules);
-        }
-
-        internal static CharacterAnimationConfiguration Bind(CharacterPresentationSettings presentation, CharacterGaitSettings gaits,
-            CharacterMotionDatabase database, CharacterMotionDatabase library, CharacterLightAttackSettings attack,
-            CharacterModelBindings model, CharacterProfileOverrides overrides, AnimationModuleAssembly modules)
-        {
-            var config = new CharacterAnimationConfiguration
+            modules ??= ResolveModules();
+            var config = new CharacterAnimationConfiguration(modules)
             {
-                PlaybackLibrary = library,
+                PlaybackLibrary = PlaybackLibrary,
                 AttackSettings = attack,
-                ReuseActionMixers = presentation.ReuseActionMixers,
-                FullLayer = presentation.layerIndex,
-                LowerLayer = presentation.lowerBodyLayerIndex,
-                OverlayLayer = presentation.overlayLayerIndex,
-                UpperLayer = presentation.upperBodyLayerIndex,
-                IkTeleportDistance = presentation.ikTeleportDistance
+                IdleState = ResolveIdleState(),
+                Transition = overrides.Transition.Resolve(0.12f),
+                ReuseActionMixers = ReuseActionMixers,
+                IkTeleportDistance = IkTeleportDistance
             };
-            if (!modules?.Gait)
-            {
-                config.IdleState = presentation.idleStateName;
-                config.MoveState = presentation.moveStateName;
-                config.WalkState = presentation.walkStateName;
-                config.SprintState = presentation.sprintStateName;
-                config.DashState = presentation.dashStateName;
-                config.LocomotionPriority = presentation.locomotionPriority;
-                config.DashPriority = presentation.dashPriority;
-                config.Transition = overrides.Transition.Resolve(presentation.behaviorTransitionDuration);
-                config.DashTransition = presentation.dashTransitionDuration;
-                config.IdleEnterSpeed = gaits.Idle.Down;
-                config.IdleExitSpeed = gaits.Idle.Up;
-                config.RunEnterSpeed = gaits.Run.Up;
-                config.RunExitSpeed = gaits.Run.Down;
-                config.SprintEnterSpeed = gaits.Sprint.Up;
-                config.SprintExitSpeed = gaits.Sprint.Down;
-                config.WalkSpeed = ReferenceSpeed(library, presentation.walkStateName, presentation.walkAnimationSpeed);
-                config.RunSpeed = ReferenceSpeed(library, presentation.moveStateName, presentation.runAnimationSpeed);
-                config.SprintSpeed = ReferenceSpeed(library, presentation.sprintStateName, presentation.sprintAnimationSpeed);
-                config.DashClipSpeed = presentation.dashAnimationSpeed;
-                config.LocomotionGaitPhases = presentation.locomotionGaitPhases;
-            }
-            if (!modules?.StartTurn)
-            {
-                config.LocomotionReverseAngle = gaits.locomotionReverseAngle;
-                config.WalkStartNormalizedTime = presentation.walkStartNormalizedTime;
-                config.RunStartNormalizedTime = presentation.runStartNormalizedTime;
-                config.WalkToRunBlendSeconds = presentation.walkToRunBlendSeconds;
-            }
-            if (!modules?.Stop)
-            {
-                config.MinimumStopTravel = gaits.minimumStopTravel;
-            }
-            if (!modules?.Match)
-            {
-                config.MatchTurnAngle = gaits.matchTurnAngle;
-                config.MatchMargin = gaits.matchSwitchMargin;
-                config.MatchReverseHold = gaits.matchReverseHold;
-            }
-            if (modules == null)
-            {
-                config.MatchMode = gaits.motionMatching;
-                config.MatchDatabase = database;
-                config.LocomotionStartSeconds = overrides.StartSeconds.Resolve(gaits.locomotionStartSeconds);
-                config.LocomotionTurnSeconds = gaits.locomotionTurnSeconds;
-                config.WalkStartState = presentation.walkStartStateName;
-                config.RunStartState = presentation.runStartStateName;
-                config.RunStartClip = presentation.runStartClip;
-                config.TurnLeftState = presentation.turnLeftStateName;
-                config.TurnRightState = presentation.turnRightStateName;
-                config.WalkStop = presentation.walkStop;
-                config.RunStop = presentation.runStop;
-                config.SprintStop = presentation.sprintStop;
-                config.Actions = presentation.actions;
-                config.BehaviorAnimations = presentation.behaviorAnimations;
-                config.PoseInertia = presentation.Inertia;
-                config.InertiaBones = model.Inertia;
-                config.IkChannels = model.BindChannels(presentation.IkChannels);
-            }
-            else modules.Apply(config, model, overrides);
+            modules.Apply(config, model, overrides);
             return config;
         }
 
+        // 展开资源声明的模块组合，留空时得到可用的空装配。
+        internal AnimationModuleAssembly ResolveModules() =>
+            Modules ? AnimationModuleAssembly.Resolve(Modules) : AnimationModuleAssembly.Resolve();
+
+        // 读取显式待机路径，留空时继承双层播放库的下身默认状态。
+        private string ResolveIdleState()
+        {
+            if (!string.IsNullOrWhiteSpace(DefaultIdleState)) return DefaultIdleState;
+            var layers = PlaybackLibrary ? PlaybackLibrary.Playback?.Layers : null;
+            return layers is { Length: > 0 } ? layers[0]?.DefaultState : null;
+        }
+
+        // 读取当前播放库中匹配循环状态的烘焙参考速度。
         internal static float ReferenceSpeed(CharacterMotionDatabase library, string state, float fallback)
         {
             if (!library || library.Playback?.States == null) return fallback;

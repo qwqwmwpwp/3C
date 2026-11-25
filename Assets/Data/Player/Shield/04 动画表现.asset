@@ -13,11 +13,7 @@ MonoBehaviour:
   m_Name: 04 动画表现
   m_EditorClassIdentifier:
   Modules: {fileID: 11400000, guid: 409b6098513c4be3bca6e0b3dc5100cf, type: 2}
-  Presentation:
-    layerIndex: 0
-    idleStateName: Lower Body.idle
-    lowerBodyLayerIndex: 0
-    overlayLayerIndex: -1
-    upperBodyLayerIndex: 1
-    ikTeleportDistance: 2
   PlaybackLibrary: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+  DefaultIdleState: Lower Body.idle
+  IkTeleportDistance: 2
+  ReuseActionMixers: 0

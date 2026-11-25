@@ -7,6 +7,7 @@ using UnityEngine.SceneManagement;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 显示当前角色的移动预测与位置历史。
     [InitializeOnLoad]
     internal static class CharacterForecastSceneView
     {
@@ -104,6 +105,7 @@ namespace ThreeC.CharacterBehavior
             SelectOwner();
         }
 
+        // 在场景或动画资源修改后刷新预测和姿势预览。
         private static UndoPropertyModification[] OnModified(UndoPropertyModification[] changes)
         {
             if (!Application.isPlaying && driver)
@@ -114,7 +116,8 @@ namespace ThreeC.CharacterBehavior
                     var target = change.currentValue?.target;
                     if (target is CharacterProfile || target is CharacterAnimationConfig || target is AnimationModule ||
                         target is CharacterBehaviorAnimator || target is CharacterBehaviorDriver ||
-                        target is Renderer || target is Animator || target is RuntimeAnimatorController) { RefreshSetup(); break; }
+                        target is CharacterMotionDatabase || target is CharacterMotionGroups ||
+                        target is Renderer || target is Animator) { RefreshSetup(); break; }
                 }
             }
             return changes;
@@ -152,16 +155,23 @@ namespace ThreeC.CharacterBehavior
                 if (view && view.drawGizmos) view.Repaint();
         }
 
-        private static float TeleportDistance() => binding ? binding.PreviewTeleportDistance(driver) :
-            driver.Profile ? driver.Profile.Presentation.ikTeleportDistance : 2f;
+        // 使用角色当前动画配置的瞬移距离判断预测历史是否连续。
+        private static float TeleportDistance()
+        {
+            if (binding) return binding.PreviewTeleportDistance(driver);
+            var profile = driver.Profile;
+            return profile && profile.AnimationConfig ? profile.AnimationConfig.IkTeleportDistance
+                : CharacterAnimationConfig.DefaultTeleportDistance;
+        }
 
+        // 实走轨迹使用角色时钟，编辑器预演使用从帧末零点起的预览时钟。
         private static void Draw(SceneView view)
         {
             if (Event.current.type != EventType.Repaint || !view.drawGizmos || transitioning || !driver ||
                 !driver.isActiveAndEnabled || !driver.ForecastSettings.Enabled ||
                 !StageUtility.GetCurrentStageHandle().Contains(driver.gameObject)) return;
             bool live = Application.isPlaying;
-            double clock = live ? Time.timeAsDouble : EditorApplication.timeSinceStartup;
+            double clock = live ? driver.CharacterTime : EditorApplication.timeSinceStartup;
             double now = live ? clock : 0d;
             CharacterMovementForecast path;
             if (live)

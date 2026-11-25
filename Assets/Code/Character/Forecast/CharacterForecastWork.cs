@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Unity.Profiling;
+using UnityEngine.LowLevel;
 
 namespace ThreeC.CharacterBehavior
 {
@@ -14,18 +15,12 @@ namespace ThreeC.CharacterBehavior
         // 只在主线程记录并核对，工作线程仅读取起点副本。
         internal readonly List<(double time, CharacterForecastSample pose)> Observed =
             new List<(double, CharacterForecastSample)>();
-        internal double ExpiresAt => origin.Time + steps * (double)dt;
+        internal readonly CharacterForecastFrame Frame;
+        internal bool Released { get; private set; }
         private readonly CharacterBehaviorFlow seed, simulation;
         private readonly CharacterForecastGeometry geometry;
         private readonly CharacterForecastProbePass pass;
         private readonly CharacterForecastCastBatch casts = new CharacterForecastCastBatch();
-        private readonly CharacterForecastOrigin origin;
-        private readonly CharacterForecastInputs inputs;
-        private readonly CharacterMovementSettings movement;
-        private readonly CharacterDriveParameters drive;
-        private readonly float dt, horizon, braking;
-        private readonly double controlReturnsAt;
-        private readonly int steps;
         private readonly ForecastRefreshReason reason;
         private readonly Action compute;
         private Task worker;
@@ -46,31 +41,23 @@ namespace ThreeC.CharacterBehavior
         internal long MainAllocated => mainAllocated;
 #endif
 
+        // 在主线程捕获角色附近的几何和物理查询形状，再让后台使用独立的行为副本和结果缓冲。
         internal CharacterForecastWork(CharacterBehaviorFlow seed, CharacterBehaviorFlow simulation,
-            CharacterForecastGeometry geometry, CharacterForecastOrigin origin, CharacterForecastInputs inputs,
-            CharacterMovementSettings movement, CharacterDriveParameters drive, float dt, int steps, float horizon,
-            double controlReturnsAt, float braking, ForecastRefreshReason reason)
+            CharacterForecastGeometry geometry, in CharacterForecastFrame frame, ForecastRefreshReason reason)
         {
             this.seed = seed;
             this.simulation = simulation;
             this.geometry = geometry;
-            this.origin = origin;
-            this.inputs = inputs;
-            this.movement = movement;
-            this.drive = drive;
-            this.dt = dt;
-            this.steps = steps;
-            this.horizon = horizon;
-            this.controlReturnsAt = controlReturnsAt;
-            this.braking = braking;
+            Frame = frame;
             this.reason = reason;
-            float speed = UnityEngine.Mathf.Max(origin.Pose.Velocity.magnitude, movement.DashSpeed);
-            float reach = UnityEngine.Mathf.Clamp(2f + speed * dt * steps, 3f, 48f);
-            pass = new CharacterForecastProbePass(geometry.CaptureShape(), new CharacterForecastWorld(geometry, origin.Pose.Position, reach));
+            float speed = UnityEngine.Mathf.Max(frame.Origin.Pose.Velocity.magnitude, frame.Movement.DashSpeed);
+            float reach = UnityEngine.Mathf.Clamp(2f + speed * frame.Window.Step * frame.Window.Steps, 3f, 48f);
+            pass = new CharacterForecastProbePass(geometry.CaptureShape(), new CharacterForecastWorld(geometry, frame.Origin.Pose.Position, reach));
             compute = Compute;
             worker = Task.Run(compute);
         }
 
+        // 每轮查询校正均从同一帧末行为副本和同一已求解起点重新推演。
         private void Compute()
         {
             using var sample = rollout.Auto();
@@ -79,10 +66,7 @@ namespace ThreeC.CharacterBehavior
 #endif
             pass.BeginPass();
             seed.CopyStateTo(simulation);
-            Result.Begin(steps + 1, origin.Time, origin.Number, dt, horizon, reason);
-            Result.Append(origin.Time < controlReturnsAt ? origin.Pose.UnderExternalControl() : origin.Pose);
-            CharacterForecastRollout.Simulate(simulation, pass, Result, controlReturnsAt, braking,
-                origin, inputs, movement, drive, dt, steps);
+            CharacterForecastRollout.Simulate(simulation, pass, Result, Frame, reason);
 #if UNITY_EDITOR
             WorkerTicks += Stopwatch.GetTimestamp() - begin;
 #endif
@@ -125,10 +109,11 @@ namespace ThreeC.CharacterBehavior
             return false;
         }
 
+        // 等待后台读取和物理作业结束后归还缓冲，通知调度器可启动下一项工作。
         public void Dispose()
         {
             try { worker?.GetAwaiter().GetResult(); }
-            finally { casts.Dispose(); }
+            finally { casts.Dispose(); Released = true; }
         }
     }
 
@@ -151,14 +136,41 @@ namespace ThreeC.CharacterBehavior
 #endif
         }
 
+        // 在主循环末尾安装预测回收，无需场景角色或动画批处理参与。
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.BeforeSceneLoad)]
+        private static void InstallCollector()
+        {
+            var loop = PlayerLoop.GetCurrentPlayerLoop();
+            if (AppendCollector(ref loop)) PlayerLoop.SetPlayerLoop(loop);
+        }
+
+        // 保留当前主循环的阶段顺序；关闭域重载时也只登记一个回收入口。
+        private static bool AppendCollector(ref PlayerLoopSystem loop)
+        {
+            var systems = loop.subSystemList ?? Array.Empty<PlayerLoopSystem>();
+            foreach (var system in systems)
+                if (system.type == typeof(CharacterForecastRetirement)) return false;
+
+            Array.Resize(ref systems, systems.Length + 1);
+            systems[systems.Length - 1] = new PlayerLoopSystem { type = typeof(CharacterForecastRetirement), updateDelegate = Collect };
+            loop.subSystemList = systems;
+            return true;
+        }
+
+        // 已完成的任务立即归还缓冲，其余任务留给全局主线程回收。
         internal static void Retire(CharacterForecastWork work)
         {
             if (work == null) return;
-            if (closing || work.FinishedUsingBuffers) work.Dispose();
+            if (closing || work.FinishedUsingBuffers)
+            {
+                try { work.Dispose(); }
+                catch (Exception error) { UnityEngine.Debug.LogException(error); }
+            }
             else retired.Add(work);
         }
 
-        internal static void Collect()
+        // 仅在工作线程或物理查询已完成时，由主线程释放退役任务的缓冲。
+        private static void Collect()
         {
             for (int i = retired.Count - 1; i >= 0; i--)
                 if (retired[i].FinishedUsingBuffers) DisposeAt(i);

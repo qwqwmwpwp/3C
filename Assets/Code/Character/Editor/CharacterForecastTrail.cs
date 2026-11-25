@@ -31,12 +31,13 @@ namespace ThreeC.CharacterBehavior
             if (source == null) return;
             previous.CopyPublishedFrom(source);
             source.Revised += Changed;
-            driver.FrameCommitted += Committed;
+            source.FrameSubmitted += ObserveBehaviorFrame;
         }
 
+        // 以角色可暂停时钟同步预测变更与可见轨迹。
         private void Changed(CharacterForecastRevision revision)
         {
-            double now = Time.timeAsDouble;
+            double now = driver.CharacterTime;
             switch (revision)
             {
                 case CharacterForecastRevision.Reset:
@@ -56,7 +57,7 @@ namespace ThreeC.CharacterBehavior
                     Published(now);
                     return;
                 default:
-                    // 输入和物理纠偏只更新青线。普通失效期间保留对照样本，等待真实固定步。
+                    // 输入和物理纠偏只更新青线。普通失效期间保留对照样本，等待真实行为裁决。
                     return;
             }
         }
@@ -74,7 +75,7 @@ namespace ThreeC.CharacterBehavior
             }
             else
             {
-                // 输入可能先于裁决数帧到达。只暂存会改变行为的旧预测，不在发布时显示打断。
+                // 新预测可能先于下一次动作边界发布。只暂存会改变行为的旧预测，不在发布时显示打断。
                 if (beforeChange.Available && !FirstBehaviorChange(beforeChange, source, t, out _)) beforeChange.Clear();
                 if (!beforeChange.Available && FirstBehaviorChange(previous, source, t, out _))
                     beforeChange.CopyPublishedFrom(previous);
@@ -82,19 +83,32 @@ namespace ThreeC.CharacterBehavior
             previous.CopyPublishedFrom(source);
         }
 
-        private void Committed(CharacterControllerFrameResult frame)
+        // 帧末依序核对本渲染帧的所有许可变更，包括没有物理步的帧和同帧的接续与打断。
+        private void ObserveBehaviorFrame()
         {
-            var behavior = frame.Behavior;
-            if (!behavior.HasTransitions) return;
-            double t = driver.LastSolvedTime;
+            var updates = driver.BehaviorUpdates;
+            double time = driver.CharacterTime;
+            for (int i = 0; i < updates.Count; i++) time -= updates[i].DeltaTime;
+            for (int i = 0; i < updates.Count; i++)
+            {
+                var frame = updates[i];
+                time += frame.DeltaTime;
+                if (frame.SimulationVersion == driver.SimulationVersion && frame.Behavior.HasTransitions)
+                    ObserveTransition(frame.Behavior, time);
+            }
+        }
+
+        // 只有已发生且偏离旧预测的真实转换才替换轨迹尾段。
+        private void ObserveTransition(in CharacterBehaviorFrameResult behavior, double t)
+        {
             var old = beforeChange.TrySample(t, 0f, out var expected) ? beforeChange : previous;
             if (!old.TrySample(t, 0f, out expected)) return;
             if (Teleported(expected.Position, driver.transform.position)) { Reset(); return; }
             var actual = new CharacterForecastSample(driver.transform.position, Vector3.zero, Quaternion.identity,
-                behavior, frame.CollisionFlags, frame.Input.Gait);
+                behavior, driver.LatestFrame.CollisionFlags, driver.FrameInput.Gait);
             bool interrupted = behavior.InterruptedBehaviors != CharacterBehaviorId.None;
             if (!interrupted && SameBehavior(expected, actual)) return; // 已经预期的自然结束或恢复移动。
-            if (!Mark(old, t, Time.timeAsDouble)) return;
+            if (!Mark(old, t, driver.CharacterTime)) return;
             beforeChange.Clear();
             waitingForPath = !source.TrySample(t, 0f, out var projected) || !SameBehavior(actual, projected);
             if (!waitingForPath) FindTail(source);
@@ -253,7 +267,7 @@ namespace ThreeC.CharacterBehavior
             if (source != null)
             {
                 source.Revised -= Changed;
-                if (driver) driver.FrameCommitted -= Committed;
+                source.FrameSubmitted -= ObserveBehaviorFrame;
             }
             driver = null;
             source = null;

@@ -10,10 +10,33 @@ namespace ThreeC.CharacterBehavior
         public Vector3 Velocity;
     }
 
+    // 保存求解后的刚体位姿、速度和接触面，供步末结算与后续推演共享。
+    internal readonly struct CharacterMotorObservation
+    {
+        internal readonly Vector3 Position, Velocity, Ground;
+        internal readonly Quaternion Rotation;
+        internal readonly CollisionFlags Contacts;
+        internal readonly CharacterSlopeContacts Steep;
+        internal readonly bool HasDynamicContact;
+
+        // 记录同一次读取的刚体与接触信息，位置和速度均使用世界坐标。
+        internal CharacterMotorObservation(Vector3 position, Vector3 velocity, Quaternion rotation,
+            CollisionFlags contacts, Vector3 ground, CharacterSlopeContacts steep, bool hasDynamicContact)
+        {
+            Position = position;
+            Velocity = velocity;
+            Rotation = rotation;
+            Contacts = contacts;
+            Ground = ground;
+            Steep = steep;
+            HasDynamicContact = hasDynamicContact;
+        }
+    }
+
     /// <summary>用动态刚体执行水平移动，保存求解器的支撑面与碰撞方向。由角色驱动器推进。</summary>
     internal sealed class CharacterRigidbodyMotor
     {
-        private CharacterMotorSettings settings;
+        private float submittedGroundDot; // 本次求解判为可行走表面的法线 Y 下限。
         private float bakedFootfallDistance;
 
         internal struct Surface
@@ -29,30 +52,60 @@ namespace ThreeC.CharacterBehavior
         private CapsuleCollider capsule;
         internal CharacterStepProbe Steps { get; private set; }
         private CharacterMotorStep step;
-        internal CharacterDriveParameters Parameters(float acceleration, float turnSpeed) =>
-            new CharacterDriveParameters(settings, acceleration, turnSpeed, bakedFootfallDistance, body.useGravity, Physics.gravity, body.drag);
-        private float GroundDot => Mathf.Cos(settings.slopeLimit * Mathf.Deg2Rad);
+        internal CharacterMotorStep DriveState => step;
+        // 用当前角色物理配置和已绑定的刚体读取本次驱动参数，预测读取也不会改写实走状态。
+        internal CharacterDriveParameters Parameters(in CharacterRuntimeConfiguration config) =>
+            config.DriveParameters(body, config.Motor, bakedFootfallDistance);
+        internal bool Available => body != null && capsule != null && capsule.enabled;
 
+        internal readonly struct StepState
+        {
+            internal readonly Vector3 Start;
+            internal readonly Vector2 Facing;
+            internal readonly Vector2 GroundVelocity;
+            internal readonly Surface Contacts;
+
+            internal StepState(Rigidbody body, Surface contacts)
+            {
+                Start = body.position;
+                Vector3 forward = body.rotation * Vector3.forward;
+                Facing = new Vector2(forward.x, forward.z);
+                GroundVelocity = CharacterMotorStep.GroundVelocity(body.velocity, contacts.Ground);
+                Contacts = contacts;
+            }
+        }
+
+        internal StepState ReadStepState() => new StepState(body, ReadContacts());
+
+        // 读取实际求解后的刚体运动和接触面。
+        internal CharacterMotorObservation ReadSolvedPose()
+        {
+            var contacts = ReadContacts(out bool moving);
+            return new CharacterMotorObservation(body.position, body.velocity, body.rotation, contacts.Flags,
+                contacts.Ground, contacts.Steep, moving);
+        }
+
+        // 绑定物理组件并为首个物理步到来以前的碰撞提供初始坡度限制。
         public void Initialize(Rigidbody rigidbody, CapsuleCollider collider, CharacterMotorSettings tuning, float footfallDistance)
         {
-            settings = tuning;
+            submittedGroundDot = Mathf.Cos(tuning.slopeLimit * Mathf.Deg2Rad);
             bakedFootfallDistance = footfallDistance;
             body = rigidbody;
             capsule = collider;
             Steps = new CharacterStepProbe(body, collider);
         }
 
+        // 按实走提交时锁定的坡度阈值记录本次求解的接触面。
         public void Record(Collision collision)
         {
             var surface = new Surface();
-            float minimumY = GroundDot;
             for (int i = 0; i < collision.contactCount; i++)
             {
                 ContactPoint contact = collision.GetContact(i);
                 if (contact.thisCollider != capsule)
                     continue;
                 Vector3 normal = contact.normal;
-                if (normal.y >= minimumY)
+                if (normal.y >= submittedGroundDot)
                 {
                     surface.Flags |= CollisionFlags.Below;
                     if (normal.y > surface.Ground.y)
@@ -71,7 +124,7 @@ namespace ThreeC.CharacterBehavior
 
         public void Forget(Collider other) => surfaces.Remove(other);
 
-        internal Surface ReadContacts() => ReadContacts(out _);
+        private Surface ReadContacts() => ReadContacts(out _);
 
         private Surface ReadContacts(out bool moving)
         {
@@ -92,33 +145,84 @@ namespace ThreeC.CharacterBehavior
             return result;
         }
 
-        internal CharacterForecastOrigin CaptureForecast(double time, CharacterBehaviorFrameResult behavior, CharacterMoveGait gait)
+        private CharacterMotorStep beforePending;
+        private float previousGroundDot;
+        private Vector3 pendingVelocity, pendingPosition, requestedVelocity, liftedPosition;
+        private Quaternion initialRotation, requestedRotation;
+        private readonly List<CharacterMotionSlice> stepSlices = new List<CharacterMotionSlice>();
+
+        // 从刚刚求解的那一组实际马达切片结算对齐实例，回调之前仍保留此次提交的起点。
+        internal long ObserveAlignment(ref CharacterActionAlignmentRuntime alignment, in CharacterMotorObservation actual)
         {
-            var contacts = ReadContacts(out bool moving);
-            var sample = new CharacterForecastSample(body.position, body.velocity, body.rotation, behavior, contacts.Flags, gait);
-            return new CharacterForecastOrigin(time, behavior.FrameNumber, sample, step, contacts.Ground, contacts.Steep, moving);
+            Vector3 forward = actual.Rotation * Vector3.forward;
+            return alignment.Observe(stepSlices, pendingPosition, actual.Position, new Vector2(forward.x, forward.z), actual.Contacts);
         }
 
-        public CharacterGroundDrive Drive(CharacterBehaviorFrameResult frame, CharacterInputSnapshot input, float dt,
-            in CharacterDriveParameters driveParameters, in Surface contacts)
+        // 逐段计算速度和转向，将整步积分得到的平均速度只交给求解器一次。
+        internal CharacterPendingPhysicsStep DriveStep(CharacterRigidbodyBlackboard board, float dt, double end,
+            long number, in CharacterDriveParameters parameters)
         {
-            var ground = contacts.Ground;
-            Vector3 target = CharacterMotorStep.Target(frame, dt);
-            Vector3 velocity = body.velocity;
-            bool supported = ground.y > 0f && Vector3.Dot(velocity, ground) < 0.5f;
-            bool stepped = supported && target.sqrMagnitude > 0f && TryLiftOntoStep(target, dt);
-            if (!stepped) target = contacts.Steep.Limit(target);
-            Quaternion rotation = body.rotation;
-            var drive = step.Advance(frame, input, dt, body.position, ref velocity, target, ground, contacts.Flags,
-                supported, stepped, driveParameters, ref rotation);
-            if (velocity != body.velocity) body.velocity = velocity;
+            float groundDot = Mathf.Cos(parameters.Settings.slopeLimit * Mathf.Deg2Rad);
+            float stepHeight = parameters.Settings.stepHeight;
+            var startCursor = board.ReadStep(end, stepSlices);
+            beforePending = step;
+            pendingVelocity = body.velocity;
+            pendingPosition = body.position;
+            initialRotation = body.rotation;
+            Vector3 start = body.position;
+            var contacts = ReadContacts();
+            var rotation = body.rotation;
+            var velocity = step.ResumeVelocity(body.velocity);
+            Vector2 request = default, action = default;
+            foreach (var slice in stepSlices) request += slice.Behavior.Displacement;
+            Vector3 requested = new Vector3(request.x, 0f, request.y);
+            bool stepped = CharacterMotorStep.IsGroundSupported(velocity, contacts.Ground) && requested.sqrMagnitude > 0f &&
+                TryLiftOntoStep(requested / dt, dt, stepHeight, groundDot);
+            Vector3 integrated = Vector3.zero;
+            CharacterGroundDrive drive = default;
+            foreach (var slice in stepSlices)
+            {
+                float seconds = (float)(slice.End - slice.Start);
+                bool supported = CharacterMotorStep.IsGroundSupported(velocity, contacts.Ground);
+                drive = step.Advance(slice.Behavior, slice.Input, seconds, body.position + integrated,
+                    ref velocity, contacts.Steep, contacts.Ground, contacts.Flags, supported, stepped, parameters, ref rotation);
+                integrated += velocity * seconds;
+                action += slice.Behavior.ActionDisplacement;
+            }
+            Vector3 mean = integrated / dt;
+            step.RecordSubmittedVelocity(mean, velocity, stepSlices.Count > 1);
+            if (mean != body.velocity) body.velocity = mean;
             if (!rotation.Equals(body.rotation)) body.MoveRotation(rotation);
-            return drive;
+            var last = stepSlices[stepSlices.Count - 1];
+            requestedRotation = rotation;
+            requestedVelocity = mean;
+            liftedPosition = body.position;
+            var behavior = last.Behavior;
+            var total = behavior.WithMotion(request, action, behavior.ActionMotion, behavior.DisplacementProvider,
+                behavior.OrdinaryMovementSeconds, behavior.MoveApproved, behavior.ActionMotionStarted);
+            previousGroundDot = submittedGroundDot;
+            submittedGroundDot = groundDot;
+            board.MarkSubmitted(end, startCursor);
+            return new CharacterPendingPhysicsStep(total, drive, last.Input, start, dt, end, number,
+                Time.fixedTimeAsDouble, parameters.TurnSpeed);
         }
 
-        private bool TryLiftOntoStep(Vector3 target, float dt)
+        // 物理求解前撤销提交，恢复被本次步进写入的马达状态、速度、转向和跨阶高度。
+        internal void CancelPending(CharacterRigidbodyBlackboard board)
         {
-            if (!Steps.TryRise(body.position, body.rotation, target * dt, settings.stepHeight, GroundDot, out float lift, out _)
+            board.CancelSubmission();
+            step = beforePending;
+            submittedGroundDot = previousGroundDot;
+            if (liftedPosition != pendingPosition && body.position == liftedPosition) body.position = pendingPosition;
+            if (requestedRotation != initialRotation)
+                body.MoveRotation(body.rotation == requestedRotation ? initialRotation : body.rotation);
+            if (!body.isKinematic && body.velocity == requestedVelocity) body.velocity = pendingVelocity;
+        }
+
+        // 使用该固定步的高度、坡度和目标位移探测可通行台阶。
+        private bool TryLiftOntoStep(Vector3 target, float dt, float stepHeight, float groundDot)
+        {
+            if (!Steps.TryRise(body.position, body.rotation, target * dt, stepHeight, groundDot, out float lift, out _)
                 || body.SweepTest(Vector3.up, out _, lift, QueryTriggerInteraction.Ignore)) return false;
             body.position += Vector3.up * lift;
             return true;

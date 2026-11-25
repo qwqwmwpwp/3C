@@ -14,24 +14,9 @@ namespace ThreeC.CharacterBehavior
         BrakeLeadIn
     }
 
-    /// <summary>当前基础移动意图的判定依据，供表现诊断读取。</summary>
-    public enum CharacterLocomotionPhaseReason
-    {
-        AwaitingMotion,
-        BelowMovementThreshold,
-        StartedMoving,
-        SustainedMovement,
-        ReversedDirection,
-        Obstructed,
-        MovementNotApproved,
-        DashApproved,
-        GroundBraking,
-        GroundBrakeLeadIn
-    }
-
     internal enum CharacterLocomotionVariant { None, Start, TurnLeft, TurnRight, Stop, StopLeft, StopRight }
 
-    /// <summary>从已提交的运动观测与批准行为选择基础步态和阶段，不查询或写入动画资源。</summary>
+    /// <summary>按运动观测和行为许可维护基础步态、阶段及动作移动变体。</summary>
     internal sealed class CharacterAnimationIntentConverter
     {
         public const string IdleKey = "$behavior.idle";
@@ -41,6 +26,7 @@ namespace ThreeC.CharacterBehavior
         public const string DashKey = "$behavior.dash";
         private float idleEnterSpeed;
         private float idleExitSpeed;
+        internal bool UsesMovingActionVariant { get; private set; }
         private float runEnterSpeed;
         private float runExitSpeed;
         private float sprintEnterSpeed;
@@ -65,11 +51,13 @@ namespace ThreeC.CharacterBehavior
         private float groundedTravel;
         private Vector3 stopEntryVelocity;
         private CharacterLocomotionPhase phaseBeforeRelease;
-        private CharacterLocomotionPhaseReason reasonBeforeRelease;
 
-        public CharacterAnimationRequest Current { get; private set; }
-        public CharacterLocomotionPhase Phase { get; private set; }
-        public CharacterLocomotionPhaseReason PhaseReason { get; private set; }
+        private CharacterAnimationRequest groundRequest;
+        private CharacterLocomotionPhase groundPhase;
+        private CharacterAnimationRequest dashRequest;
+        private bool lastStepWasDash;
+        public CharacterAnimationRequest Current => dashRequest.InstanceId > 0 ? dashRequest : groundRequest;
+        public CharacterLocomotionPhase Phase => dashRequest.InstanceId > 0 ? CharacterLocomotionPhase.Dash : groundPhase;
         public Vector3 StopEntryVelocity => IsReleasing ? stopEntryVelocity : Vector3.zero; // 跨固定步保留松键时的实速。
         public bool MainBrakeDue { get; private set; }
         public string StopGait
@@ -78,7 +66,7 @@ namespace ThreeC.CharacterBehavior
             {
                 float speed = stopEntryVelocity.magnitude;
                 if (speed <= runEnterSpeed) return WalkKey;
-                return speed >= sprintExitSpeed && (locomotionKey == SprintKey || Current.SemanticKey == SprintKey)
+                return speed >= sprintExitSpeed && (locomotionKey == SprintKey || groundRequest.SemanticKey == SprintKey)
                     ? SprintKey : MoveKey;
             }
         }
@@ -93,12 +81,13 @@ namespace ThreeC.CharacterBehavior
         private float directWindow;
         private float reverseWindow;
         private float reverseWindowSeconds;
-        private bool IsReleasing => Phase == CharacterLocomotionPhase.BrakeLeadIn || Phase == CharacterLocomotionPhase.Stopping;
+        private bool IsReleasing => groundPhase == CharacterLocomotionPhase.BrakeLeadIn || groundPhase == CharacterLocomotionPhase.Stopping;
 
         private bool hasGait, hasStartTurn, hasStop;
 
         public CharacterAnimationIntentConverter(CharacterAnimationConfiguration config) => Configure(config);
 
+        // 应用步态模块配置，并取消被禁用模块仍在维持的短暂阶段。
         internal void Configure(CharacterAnimationConfiguration config)
         {
             if (hasStop && !config.HasStop && IsReleasing)
@@ -106,8 +95,8 @@ namespace ThreeC.CharacterBehavior
             if (hasStartTurn && !config.HasStartTurn)
             {
                 DirectTurnStep = ReverseReleaseStep = 0;
-                if (Phase == CharacterLocomotionPhase.Starting || Phase == CharacterLocomotionPhase.Turning)
-                    SetBase(locomotionKey, CharacterLocomotionPhaseReason.SustainedMovement);
+                if (groundPhase == CharacterLocomotionPhase.Starting || groundPhase == CharacterLocomotionPhase.Turning)
+                    SetBase(locomotionKey);
             }
             hasGait = config.HasGait;
             hasStartTurn = config.HasStartTurn;
@@ -126,6 +115,20 @@ namespace ThreeC.CharacterBehavior
             reverseWindowSeconds = Mathf.Max(0.15f, InputMath.NonNegative(config.MatchReverseHold, 0.08f) + 0.1f);
             minimumStopTravel = InputMath.NonNegative(config.MinimumStopTravel, 0.09f);
         }
+
+        // 按固定步实速推进动作变体迟滞，瞬移暂存速度时沿用已有选择。
+        internal void ObserveActionVariantMotion(in CharacterAnimationMotion motion)
+        {
+            if (motion.IsValid)
+                UsesMovingActionVariant = motion.ActualSpeed > (UsesMovingActionVariant ? idleEnterSpeed : idleExitSpeed);
+            else if (!motion.RetainedStrideSpeed.HasValue)
+                UsesMovingActionVariant = false;
+        }
+
+        // 识别反向跨零时可能用预测保留步态的低速固定步。
+        internal bool MayUsePredictedGait(in CharacterAnimationMotion motion, in CharacterBehaviorFrameResult behavior) =>
+            hasGait && turnSeconds > 0f && motion.IsValid && motion.Trajectory.IsValid && !motion.IsBlocked &&
+            motion.ActualSpeed <= idleEnterSpeed && (behavior.MoveApproved || behavior.ActionMotion.RecoversMovement);
 
         /// <summary>每个有效固定步提交后更新；同一模拟连续性内保留相邻实际与期望方向。</summary>
         public void Receive(CharacterAnimationMotion motion, CharacterBehaviorFrameResult behavior,
@@ -161,12 +164,13 @@ namespace ThreeC.CharacterBehavior
                 if (!IsReleasing || behavior.MoveApproved) releaseDirection = default;
             }
 
-            bool followsDash = Phase == CharacterLocomotionPhase.Dash;
+            bool followsDash = lastStepWasDash;
+            lastStepWasDash = behavior.DisplacementSource == CharacterDisplacementSource.Dash;
             // 已获准的冲刺即使受阻仍有效，普通移动从新方向开始。
-            if (behavior.DisplacementSource == CharacterDisplacementSource.Dash)
+            if (lastStepWasDash)
             {
                 ClearDirections();
-                SetBase(DashKey, CharacterLocomotionPhaseReason.DashApproved, behavior.DashStarted);
+                SetBase(locomotionKey);
                 return;
             }
 
@@ -205,14 +209,13 @@ namespace ThreeC.CharacterBehavior
                 ClearDirections();
                 locomotionKey = IdleKey;
             }
-            if (Phase == CharacterLocomotionPhase.BrakeLeadIn)
+            if (groundPhase == CharacterLocomotionPhase.BrakeLeadIn)
             {
                 // 轻制动尚未换播，同向恢复时沿用原实例，再按实速换档。
-                Phase = phaseBeforeRelease;
-                PhaseReason = reasonBeforeRelease;
+                groundPhase = phaseBeforeRelease;
             }
-            else if (Phase == CharacterLocomotionPhase.Stopping && resuming)
-                locomotionKey = Current.SemanticKey;
+            else if (groundPhase == CharacterLocomotionPhase.Stopping && resuming)
+                locomotionKey = groundRequest.SemanticKey;
             stopEntryVelocity = Vector3.zero;
             MainBrakeDue = false;
             bool wasIdle = locomotionKey == IdleKey;
@@ -221,13 +224,13 @@ namespace ThreeC.CharacterBehavior
             if (motion.IsBlocked)
             {
                 ClearDirections();
-                SetBase(locomotionKey, CharacterLocomotionPhaseReason.Obstructed);
+                SetBase(locomotionKey);
                 return;
             }
             // 保留反向跨零时的步态，再处理初次获准但刚体尚未提速的起步。
             float forwardSpeed = Vector3.Dot(motion.Trajectory.FutureVelocity, expectedDirection);
             bool reversing = IsReversal(expectedDirection);
-            if (locomotionKey == IdleKey && (Phase == CharacterLocomotionPhase.Turning || resuming && reversing) &&
+            if (locomotionKey == IdleKey && (groundPhase == CharacterLocomotionPhase.Turning || resuming && reversing) &&
                 motion.Trajectory.IsValid && forwardSpeed > idleExitSpeed)
                 locomotionKey = lastGait;
             if (canStartMoving)
@@ -244,7 +247,7 @@ namespace ThreeC.CharacterBehavior
             if (locomotionKey == IdleKey)
             {
                 ClearDirections();
-                SetBase(locomotionKey, CharacterLocomotionPhaseReason.BelowMovementThreshold);
+                SetBase(locomotionKey);
                 return;
             }
 
@@ -258,26 +261,25 @@ namespace ThreeC.CharacterBehavior
             if (reversing)
             {
                 var turn = ResolveTurnVariant(motion.FacingDeltaDegrees, expectedDirection);
-                BeginTransient(CharacterLocomotionPhase.Turning, CharacterLocomotionPhaseReason.ReversedDirection,
-                    turn, turnSeconds);
+                BeginTransient(CharacterLocomotionPhase.Turning, turn, turnSeconds);
             }
             else if (startsFromIdle)
             {
-                BeginTransient(CharacterLocomotionPhase.Starting, CharacterLocomotionPhaseReason.StartedMoving,
-                    CharacterLocomotionVariant.Start, startSeconds);
+                BeginTransient(CharacterLocomotionPhase.Starting, CharacterLocomotionVariant.Start, startSeconds);
             }
             else if (remainingSeconds > 0f && !runDuringAction)
             {
-                SetIntent(locomotionKey, Phase, PhaseReason, Current.LocomotionVariant); // 切换步态时保留当前转身实例。
+                SetIntent(locomotionKey, groundPhase, groundRequest.LocomotionVariant); // 切换步态时保留当前转身实例。
             }
             else
             {
-                SetBase(locomotionKey, CharacterLocomotionPhaseReason.SustainedMovement);
+                SetBase(locomotionKey);
             }
             previousExpectedDirection = expectedDirection;
             previousActualVelocity = motion.ActualVelocity;
         }
 
+        // 在移动输入解除时延续制动、进入收步等待或回到待机。
         private void ReceiveRelease(CharacterAnimationMotion motion, CharacterBehaviorFrameResult behavior,
             CharacterInputSnapshot input, bool grounded)
         {
@@ -287,7 +289,7 @@ namespace ThreeC.CharacterBehavior
             if (released && IsReleasing)
             {
                 previousActualVelocity = motion.ActualVelocity;
-                if (Phase == CharacterLocomotionPhase.Stopping || MainBrakeDue)
+                if (groundPhase == CharacterLocomotionPhase.Stopping || MainBrakeDue)
                     return; // 双脚落稳之前，刚体速度可以先归零。
                 if (motion.Trajectory.IsBraking)
                 {
@@ -303,16 +305,13 @@ namespace ThreeC.CharacterBehavior
                 groundedTravel = 0f;
                 // 固定步记录松键，渲染帧取得分层归属和播放状态后再选收步实例。
                 MainBrakeDue = !motion.Trajectory.IsBrakeLeadIn;
-                phaseBeforeRelease = Phase;
-                reasonBeforeRelease = PhaseReason;
-                Phase = CharacterLocomotionPhase.BrakeLeadIn;
-                PhaseReason = CharacterLocomotionPhaseReason.GroundBrakeLeadIn;
+                phaseBeforeRelease = groundPhase;
+                groundPhase = CharacterLocomotionPhase.BrakeLeadIn;
                 return;
             }
             ClearDirections();
             locomotionKey = IdleKey;
-            SetBase(IdleKey, obstructed ? CharacterLocomotionPhaseReason.Obstructed :
-                CharacterLocomotionPhaseReason.MovementNotApproved);
+            SetBase(IdleKey);
         }
 
         /// <summary>根据脚步、制动和部位归属的决策提交一次收步阶段转换。</summary>
@@ -326,12 +325,12 @@ namespace ThreeC.CharacterBehavior
                     if (!IsReleasing) return false;
                     locomotionKey = IdleKey;
                     ClearDirections();
-                    SetBase(IdleKey, CharacterLocomotionPhaseReason.BelowMovementThreshold);
+                    SetBase(IdleKey);
                     return true;
                 case CharacterReleaseDecision.EnterOnContact:
                 case CharacterReleaseDecision.EnterOnBraking:
                 case CharacterReleaseDecision.EnterOnMatch:
-                    if (Phase != CharacterLocomotionPhase.BrakeLeadIn) return false;
+                    if (groundPhase != CharacterLocomotionPhase.BrakeLeadIn) return false;
                     BeginStop();
                     return true;
                 default:
@@ -339,13 +338,13 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 按松键时的来源步态启动收步实例。
         private void BeginStop()
         {
             string sourceGait = StopGait; // 已预混跑姿但实速仍低时，按步行制动。
             locomotionKey = IdleKey;
             remainingSeconds = 0f;
-            SetIntent(sourceGait, CharacterLocomotionPhase.Stopping,
-                CharacterLocomotionPhaseReason.GroundBraking, CharacterLocomotionVariant.Stop, true);
+            SetIntent(sourceGait, CharacterLocomotionPhase.Stopping, CharacterLocomotionVariant.Stop, true);
         }
 
         /// <summary>每次可呈现的渲染帧在仲裁前推进，首个呈现帧忽略当前帧耗时。</summary>
@@ -359,9 +358,9 @@ namespace ThreeC.CharacterBehavior
                 return;
             }
             remainingSeconds = InputMath.Elapsed(remainingSeconds, InputMath.NonNegative(deltaTime, 0f));
-            if (remainingSeconds <= 0f && Phase != CharacterLocomotionPhase.BrakeLeadIn)
+            if (remainingSeconds <= 0f && groundPhase != CharacterLocomotionPhase.BrakeLeadIn)
             {
-                SetBase(locomotionKey, CharacterLocomotionPhaseReason.SustainedMovement);
+                SetBase(locomotionKey);
             }
         }
 
@@ -373,20 +372,31 @@ namespace ThreeC.CharacterBehavior
             releaseDirection = default;
             if (IsReleasing) locomotionKey = IdleKey;
             ClearDirections();
-            string key = Current.SemanticKey == DashKey ? DashKey : locomotionKey;
-            SetBase(key, CharacterLocomotionPhaseReason.AwaitingMotion);
+            lastStepWasDash = false;
+            SetBase(locomotionKey);
         }
 
-        /// <summary>按角色重置或动画入口重建后重新建立基线；保留已批准的冲刺。</summary>
-        public void Reset(CharacterBehaviorFrameResult behavior)
+        /// <summary>重建步态基线及已批准的冲刺，保留独立的动作移动变体。</summary>
+        public void ResetGait(CharacterBehaviorFrameResult behavior)
         {
             simulationVersion = null;
             ReverseReleaseStep = 0;
             releaseDirection = default;
             locomotionKey = IdleKey;
             ClearDirections();
-            string key = hasGait && behavior.DisplacementSource == CharacterDisplacementSource.Dash ? DashKey : IdleKey;
-            SetBase(key, CharacterLocomotionPhaseReason.AwaitingMotion, true);
+            lastStepWasDash = false;
+            dashRequest = default;
+            SetBase(IdleKey, true);
+            ObserveDash(behavior);
+        }
+
+        // 由本帧获准的冲刺实例立即接管基础动作；地面步态继续以实际求解步维护。
+        internal void ObserveDash(in CharacterBehaviorFrameResult behavior)
+        {
+            if (!hasGait || !behavior.DashActive)
+                dashRequest = default;
+            else if (behavior.DashStarted || dashRequest.InstanceId == 0)
+                dashRequest = new CharacterAnimationRequest(DashKey, ++generation);
         }
 
         private string ResolveGait(float speed, CharacterMoveGait gait)
@@ -432,34 +442,33 @@ namespace ThreeC.CharacterBehavior
             previousExpectedDirection = Vector3.zero;
         }
 
-        private void BeginTransient(CharacterLocomotionPhase phase, CharacterLocomotionPhaseReason reason,
-            CharacterLocomotionVariant variant, float seconds)
+        // 启动给定时长的起步或转身阶段。
+        private void BeginTransient(CharacterLocomotionPhase phase, CharacterLocomotionVariant variant, float seconds)
         {
             remainingSeconds = seconds;
             presentationStarted = false;
-            SetIntent(locomotionKey, phase, reason, variant, true);
+            SetIntent(locomotionKey, phase, variant, true);
         }
 
-        private void SetBase(string key, CharacterLocomotionPhaseReason reason, bool restart = false)
+        // 结束短暂阶段并切换到指定的基础动作。
+        private void SetBase(string key, bool restart = false)
         {
             remainingSeconds = 0f;
             presentationStarted = false;
-            CharacterLocomotionPhase phase = key == DashKey ? CharacterLocomotionPhase.Dash :
-                key == IdleKey ? CharacterLocomotionPhase.Idle : CharacterLocomotionPhase.Steady;
-            SetIntent(key, phase, reason, CharacterLocomotionVariant.None, restart);
+            CharacterLocomotionPhase phase = key == IdleKey ? CharacterLocomotionPhase.Idle : CharacterLocomotionPhase.Steady;
+            SetIntent(key, phase, CharacterLocomotionVariant.None, restart);
         }
 
-        private void SetIntent(string key, CharacterLocomotionPhase phase, CharacterLocomotionPhaseReason reason,
-            CharacterLocomotionVariant variant, bool restart = false)
+        // 更新基础动作，只有动作实例变化时才生成新编号。
+        private void SetIntent(string key, CharacterLocomotionPhase phase, CharacterLocomotionVariant variant, bool restart = false)
         {
-            Phase = phase;
-            PhaseReason = reason;
-            if (!restart && Current.SemanticKey == key && Current.LocomotionVariant == variant)
+            groundPhase = phase;
+            if (!restart && groundRequest.SemanticKey == key && groundRequest.LocomotionVariant == variant)
                 return;
             bool sameTransient = !restart && variant != CharacterLocomotionVariant.None &&
-                Current.LocomotionVariant == variant;
-            long instance = sameTransient ? Current.InstanceId : ++generation;
-            Current = new CharacterAnimationRequest(key, instance, variant);
+                groundRequest.LocomotionVariant == variant;
+            long instance = sameTransient ? groundRequest.InstanceId : ++generation;
+            groundRequest = new CharacterAnimationRequest(key, instance, variant);
         }
     }
 }

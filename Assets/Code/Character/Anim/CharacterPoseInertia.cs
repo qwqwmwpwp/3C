@@ -4,6 +4,18 @@ using UnityEngine.Animations;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 区分胸部和双臂使用的惯性响应区域。
+    internal enum CharacterPoseRegion { Chest, LeftArm, RightArm }
+
+    // 保存惯性作业使用的骨骼句柄、部位和区域权重。
+    internal struct CharacterPoseBoneBinding
+    {
+        public TransformStreamHandle Handle;
+        public CharacterPoseRegion Region;
+        public float Share;
+        public byte SharedTransition; // 同一骨骼的片段交接由通用切换模块执行。
+    }
+
     internal struct CharacterPoseInertiaFrame
     {
         public int Revision;
@@ -15,6 +27,7 @@ namespace ThreeC.CharacterBehavior
         public Vector3 StopLeftArm, StopRightArm;
     }
 
+    // 保存每根惯性骨骼的上一帧姿态、角速度和衰减状态。
     internal struct CharacterPoseBoneHistory
     {
         public byte Initialized, AwaitIncomingVelocity, RebaseVelocity;
@@ -26,13 +39,48 @@ namespace ThreeC.CharacterBehavior
         public float PeakLoad, LastStopAngle, ExitAllowance;
         public float LastInfluence;
         public Vector3 Velocity, Offset, OffsetVelocity, Lean, LeanVelocity;
-#if UNITY_EDITOR
-        public float AppliedDegrees;
-#endif
+        public CharacterStopSwingCarry StopSwing;
     }
 
+    // 保存程序性收步摆臂相对当帧基础输出的余量，只在收步中断时单独衰减。
+    internal struct CharacterStopSwingCarry
+    {
+        private Vector3 previousSwing, swingVelocity, carry, carryVelocity;
+        private float previousInfluence;
+
+        // 限制骤降的握持自由度，仅交接上一帧显示的摆臂差及其角速度。
+        internal Quaternion Apply(Quaternion baseOutput, Quaternion current, bool interrupted,
+            bool rebase, float influence, float seconds, float dt)
+        {
+            float ratio = previousInfluence > 0f ? Mathf.Clamp01(influence / previousInfluence) : 0f;
+            previousSwing *= ratio;
+            swingVelocity *= ratio;
+            carry *= ratio;
+            carryVelocity *= ratio;
+            if (rebase) swingVelocity = carryVelocity = Vector3.zero;
+
+            if (interrupted)
+            {
+                Quaternion outgoing = CharacterPoseInertia.Rotation(previousSwing) * baseOutput;
+                carry = CharacterPoseInertia.Difference(outgoing, current);
+                carryVelocity = swingVelocity;
+            }
+            else CharacterPoseInertia.Spring(ref carry, ref carryVelocity, Vector3.zero, seconds, dt);
+
+            Quaternion output = CharacterPoseInertia.Rotation(carry) * current;
+            Vector3 shown = CharacterPoseInertia.Difference(output, baseOutput);
+            if (!interrupted && !rebase)
+                swingVelocity = Vector3.ClampMagnitude((shown - previousSwing) / dt, 360f * influence);
+            previousSwing = shown;
+            previousInfluence = influence;
+            return output;
+        }
+    }
+
+    // 求解胸部和双臂骨骼的姿态惯性。
     internal static class CharacterPoseInertia
     {
+        // 根据当帧姿态和历史角速度计算并写入骨骼的局部旋转。
         public static void Apply(AnimationStream stream, NativeArray<CharacterPoseBoneBinding> bindings,
             NativeArray<CharacterPoseBoneHistory> history, in CharacterPoseInertiaFrame frame,
             float leftGrip, float rightGrip, bool frozen)
@@ -114,7 +162,7 @@ namespace ThreeC.CharacterBehavior
                     Spring(ref state.Lean, ref state.LeanVelocity, leanTarget, seconds, dt);
                 }
                 Quaternion target = Rotation(state.Lean) * reference;
-                bool handoff = frame.Revision != state.Revision || stopChanged;
+                bool handoff = binding.SharedTransition == 0 && (frame.Revision != state.Revision || stopChanged);
                 if (stopChanged && state.StopInstance != 0)
                     state.ExitAllowance = Mathf.Max(state.ExitAllowance, state.LastStopAngle);
                 else
@@ -154,19 +202,18 @@ namespace ThreeC.CharacterBehavior
                 }
                 Vector3 baseDelta = Vector3.ClampMagnitude(Difference(Rotation(state.Offset) * target, reference), carryLimit);
                 Quaternion baseRotation = Rotation(baseDelta);
-                Vector3 correction = baseDelta;
                 Quaternion baseOutput = influence > 0f ? baseRotation * reference : reference;
                 Quaternion output = baseOutput;
                 if (load > 0f)
                 {
                     Quaternion applied = Rotation(stopPeak * load) * baseRotation;
                     float totalLimit = Mathf.Max(carryLimit, stopPeak.magnitude);
-                    correction = Vector3.ClampMagnitude(Difference(applied, Quaternion.identity), totalLimit);
+                    Vector3 correction = Vector3.ClampMagnitude(Difference(applied, Quaternion.identity), totalLimit);
                     output = Rotation(correction) * reference;
                 }
-#if UNITY_EDITOR
-                state.AppliedDegrees = correction.magnitude;
-#endif
+                if (binding.SharedTransition != 0 && !chest)
+                    output = state.StopSwing.Apply(baseOutput, output, stopChanged && state.StopInstance != 0,
+                        state.RebaseVelocity != 0, influence, seconds, dt);
                 if (influence > 0f)
                     handle.SetLocalRotation(stream, output);
                 if (!handoff && state.RebaseVelocity == 0) // 忽略限幅截断的姿态跳变，避免误算挥臂速度。
@@ -185,7 +232,7 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 临界阻尼解析解，约在响应时间内消除 91% 的静止偏差。
-        private static void Spring(ref Vector3 value, ref Vector3 velocity, Vector3 goal, float seconds, float dt)
+        internal static void Spring(ref Vector3 value, ref Vector3 velocity, Vector3 goal, float seconds, float dt)
         {
             float rate = 4f / Mathf.Max(0.01f, seconds);
             float decay = Mathf.Exp(-rate * dt);
@@ -196,7 +243,7 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 对四元数使用最短弧，避免 q 与 -q 的等价表示制造整圈的伪角速度。
-        private static Vector3 Difference(Quaternion to, Quaternion from)
+        internal static Vector3 Difference(Quaternion to, Quaternion from)
         {
             Quaternion delta = (to * Quaternion.Inverse(from)).normalized;
             Vector3 axis = new Vector3(delta.x, delta.y, delta.z);
@@ -206,7 +253,8 @@ namespace ThreeC.CharacterBehavior
                 axis * (2f * Mathf.Rad2Deg * Mathf.Atan2(length, Mathf.Abs(delta.w)) / length);
         }
 
-        private static Quaternion Rotation(Vector3 degrees)
+        // 将父空间角位移还原为最短弧旋转。
+        internal static Quaternion Rotation(Vector3 degrees)
         {
             float angle = degrees.magnitude;
             return angle < 0.000001f ? Quaternion.identity : Quaternion.AngleAxis(angle, degrees / angle);

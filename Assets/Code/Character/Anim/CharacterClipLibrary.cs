@@ -3,6 +3,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 保存单条按归一化相位或秒读取的素材曲线。
     [Serializable]
     internal sealed class CharacterClipCurve
     {
@@ -14,6 +15,7 @@ namespace ThreeC.CharacterBehavior
             Mathf.Clamp01(Curve.Evaluate(InSeconds ? phase * clipSeconds : phase));
     }
 
+    // 保存同一片段的命名曲线，并按其时间基准读取。
     [Serializable]
     internal sealed class CharacterClipCurves
     {
@@ -28,17 +30,11 @@ namespace ThreeC.CharacterBehavior
             return null;
         }
 
-        public CharacterClipCurve FindPlaybackCurve(string name) => Find(name) ?? (name switch
-        {
-            CharacterFootSampler.LeftContactCurve => Find(CharacterFootSampler.LeftCurve),
-            CharacterFootSampler.RightContactCurve => Find(CharacterFootSampler.RightCurve),
-            _ => null
-        });
-
+        // 按片段的循环设置换算相位，并只读取请求的曲线。
         public bool TryRead(string name, double time, out float value)
         {
             value = 0f;
-            var curve = FindPlaybackCurve(name);
+            var curve = Find(name);
             if (curve == null || !Clip || Clip.length <= 0f) return false;
             float phase = (float)(time / Clip.length);
             phase = Clip.isLooping ? Mathf.Repeat(phase, 1f) : Mathf.Clamp01(phase);
@@ -85,12 +81,10 @@ namespace ThreeC.CharacterBehavior
         public string DefaultState;
     }
 
-    /// <summary>数据组或旧控制器提供编辑时绑定。烘焙后的路径、分层遮罩和素材曲线可供 Player 直接使用。</summary>
+    // 保存数据组烘焙后的播放状态、上下身遮罩和命名曲线。
     [Serializable]
     internal sealed class CharacterClipLibrary
     {
-        public bool FromGroups;
-        public bool BodyOutputs; // 烘焙时记录，修改下一次烘焙方式不会改变已发布库的布局。
         public CharacterClipLayer[] Layers;
         public CharacterClipState[] States;
         public CharacterClipCurves[] Clips;
@@ -106,6 +100,6 @@ namespace ThreeC.CharacterBehavior
                 if (legs.GetHumanoidBodyPartActive(part) == arms.GetHumanoidBodyPartActive(part)) return false;
             return true;
         }
-        public bool Ready => Layers != null && Layers.Length > 0 && States != null && States.Length > 0 && Clips != null;
+        public bool Ready => Layers?.Length == 2 && States?.Length > 0 && Clips?.Length > 0;
     }
 }

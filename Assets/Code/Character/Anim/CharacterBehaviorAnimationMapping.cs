@@ -34,6 +34,27 @@ namespace ThreeC.CharacterBehavior
             (!string.IsNullOrWhiteSpace(EntryAction) ||
              Trigger != CharacterAnimationTrigger.OnStart && !string.IsNullOrWhiteSpace(HoldAction));
 
+        // 判断提供本物理步运动的招式是否仍在保留原步态的前摇阶段。
+        internal bool PreservesEntryGait(in CharacterControllerFrameResult frame, CharacterActionHandoffSettings settings)
+        {
+            var step = frame.Behavior;
+            if (Trigger != CharacterAnimationTrigger.OnStart || settings?.FollowSpeedOnEntry == true ||
+                (step.ActiveBehaviors & BehaviorId) == 0) return false;
+            if (BehaviorId == CharacterBehaviorId.Attack && AttackMove != CharacterAttackMove.None)
+            {
+                var attack = step.Attack;
+                if (attack.Move != AttackMove) return false;
+                var handoff = attack.Handoff;
+                if (!handoff.UsesRouteBlend && settings?.OverridePhases == true)
+                    handoff = settings.Resolve(attack.Duration, handoff);
+                return handoff.Valid && attack.Progress < handoff.FullFrom;
+            }
+            if (settings?.OverridePhases != true) return false;
+            float phase = step.DisplacementProvider == BehaviorId && step.ActionMotion.StartPhase.HasValue
+                ? step.ActionMotion.EndPhase : (step.GrantAgeAtStepStart(BehaviorId) + frame.DeltaTime) / settings.Duration;
+            return phase < settings.FullFrom;
+        }
+
         [InspectorName("触发方式")] public CharacterAnimationTrigger Trigger;
         [InspectorName("单次攻击招式"), Tooltip("用于攻击行为的单次映射，None 表示跟随整次行为许可。")]
         public CharacterAttackMove AttackMove = CharacterAttackMove.LightOne;

@@ -12,6 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 26ed6494d5154152ad6e2151831258ef, type: 3}
   m_Name: 盾牌基础动画组
   m_EditorClassIdentifier:
+  Schema: {fileID: 11400000, guid: 04796e8c8bb74eeabc8f655623e95f86, type: 2}
   Layers:
   - Mask: {fileID: 31900000, guid: 0da4119d6955e5f488cf931257435553, type: 2}
     Additive: 0
