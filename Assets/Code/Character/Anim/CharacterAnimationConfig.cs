@@ -10,7 +10,7 @@ namespace ThreeC.CharacterBehavior
 
         [SerializeField, InspectorName("动画模块组合"), Tooltip("留空时只播放默认待机，也可以在运行时为单个角色装配模块。")]
         internal AnimationModule Modules;
-        [SerializeField, InspectorName("播放库")] internal CharacterMotionDatabase PlaybackLibrary;
+        [SerializeField, InspectorName("播放库"), Tooltip("播放、地面匹配与收步采样共用此库。更换库或重新烘焙播放索引、遮罩后，重新启用角色行为动画组件。")] internal CharacterMotionDatabase PlaybackLibrary;
         [SerializeField, InspectorName("默认待机状态"), Tooltip("没有模块提供待机状态时使用。留空时采用播放库的下身默认状态。")]
         internal string DefaultIdleState;
         [SerializeField, InspectorName("瞬移重置距离（米）"), Min(0f), Tooltip("单次表现更新移动超过此距离时清空姿态历史。零表示关闭自动检测。")]
@@ -23,9 +23,8 @@ namespace ThreeC.CharacterBehavior
             CharacterLightAttackSettings attack, AnimationModuleAssembly modules)
         {
             modules ??= ResolveModules();
-            var config = new CharacterAnimationConfiguration(modules)
+            var config = new CharacterAnimationConfiguration(modules, PlaybackLibrary)
             {
-                PlaybackLibrary = PlaybackLibrary,
                 AttackSettings = attack,
                 IdleState = ResolveIdleState(),
                 Transition = overrides.Transition.Resolve(0.12f),

@@ -94,15 +94,19 @@ namespace ThreeC.CharacterBehavior
             if (status == CharacterActionPlaybackStatus.Started) return false;
             if (layer.Destination.fullPathHash == previous.StateHash && layer.Destination.loop)
                 oneShotWarning = $"单次动作 {playback.Key} 绑定了循环状态 {previous.StateName}，已中止。";
-            return composer.End(playback.Key, playback.InstanceId, status);
+            var source = status == CharacterActionPlaybackStatus.Completed ? CharacterPlaybackEndSource.ClipFinished :
+                layer.Destination.loop && layer.Destination.fullPathHash == previous.StateHash
+                    ? CharacterPlaybackEndSource.ResourceUnavailable : CharacterPlaybackEndSource.ArbitrationLost;
+            return composer.End(playback.Key, playback.InstanceId, status, source);
         }
 
         // 仅给实际下发播放指令的部位发布单次动作开始回执。
-        internal void PublishOneShotStarts(in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission)
+        internal void PublishOneShotStarts(in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission,
+            CharacterAnimationComposer composer)
         {
-            if (emission.Overlay) plan.Overlay.Demand.Playback?.Start();
-            if (emission.LowerBody) plan.LowerBody.Demand.Playback?.Start();
-            if (emission.UpperBody) plan.UpperBody.Demand.Playback?.Start();
+            if (emission.Overlay) composer.Start(plan.Overlay.Demand.Playback);
+            if (emission.LowerBody) composer.Start(plan.LowerBody.Demand.Playback);
+            if (emission.UpperBody) composer.Start(plan.UpperBody.Demand.Playback);
         }
 
         // 在播放提交结束后报告本次观测到的循环绑定错误。
@@ -116,6 +120,9 @@ namespace ThreeC.CharacterBehavior
         // 推进各层到计划指定的状态并返回本帧实际开始的播放。
         internal CharacterAnimationPlaybackEmission ApplyPlan(in CharacterAnimationPlaybackPlan plan, float deltaTime) =>
             clips.Apply(plan, deltaTime);
+
+        // 通知片段图释放旧动作声部，但保留已装配资源和图本身。
+        internal void ClearMotionSources() => clips.ClearMotionSources();
 
         // 在各层权重和 IK 输入均就绪后求值本帧姿态。
         internal void EvaluatePose() => clips.Evaluate();

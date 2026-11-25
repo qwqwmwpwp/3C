@@ -19,7 +19,7 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterModelHeight modelHeight;
         private readonly OrientationWarpTuning orientationTuning;
         private readonly CharacterOrientationWarp orientation;
-        private readonly CharacterInertiaTuning poseInertia;
+        private readonly CharacterInertiaTuning poseInertia, inertiaSource;
         private readonly CharacterInertiaBones inertiaBones;
         private PlayableGraph graph;
         private AnimationScriptPlayable playable;
@@ -32,7 +32,7 @@ namespace ThreeC.CharacterBehavior
         private readonly GroundMatchTuning matchTuning;
         private readonly GroundFeatureHistory featureHistory;
         private readonly CharacterVisualRoot visualRoot;
-        private readonly TransitionInertiaModule transitionTuning;
+        private readonly CharacterTransitionProfiles transitionTuning;
         private NativeArray<CharacterFootObservation> rawHistory;
         private NativeArray<CharacterTransitionBone> transitionBones;
         private readonly bool hasFootChannels;
@@ -62,23 +62,28 @@ namespace ThreeC.CharacterBehavior
             hasFootChannels = IndexOf(CharacterIkLimb.LeftFoot) >= 0 || IndexOf(CharacterIkLimb.RightFoot) >= 0;
             if (hasFootChannels)
                 modelHeight = CharacterModelHeight.Bind(animator, owner, modelDropLimit);
-            this.orientationTuning = orientationTuning;
-            orientation = orientationTuning == null ? null : new CharacterOrientationWarp(orientationTuning);
-            this.poseInertia = poseInertia;
+            this.orientationTuning = orientationTuning?.Snapshot();
+            orientation = this.orientationTuning == null ? null : new CharacterOrientationWarp(this.orientationTuning);
+            inertiaSource = poseInertia;
+            this.poseInertia = poseInertia?.Snapshot();
             this.inertiaBones = inertiaBones;
             sampleFeet = config.SamplesFeet || config.Modules.TransitionInertia;
             matchTuning = config.MatchCosts;
             featureHistory = new GroundFeatureHistory(config.FeatureLayout);
             visualRoot = config.Modules.VisualRoot ? new CharacterVisualRoot(config.Modules.VisualRoot) : null;
-            transitionTuning = config.Modules.TransitionInertia;
+            transitionTuning = config.Modules.TransitionInertia ? config.Transitions : null;
             sources = new CharacterIkInputSource[this.channels.Length];
             for (int i = 0; i < sources.Length; i++)
                 if (this.channels[i].Tuning != null && IndexOf(this.channels[i].Tuning.Limb) == i)
                 {
                     var tuning = this.channels[i].Tuning;
                     int old = previous?.IndexOf(tuning.Limb) ?? -1;
-                    sources[i] = old >= 0 && ReferenceEquals(previous.channels[old].Tuning, tuning)
-                        ? previous.sources[old] : new CharacterIkInputSource(this.channels[i], owner, animator ? animator.transform : null, walkableSlope);
+                    if (old >= 0 && ReferenceEquals(previous.channels[old].Source, this.channels[i].Source))
+                    {
+                        sources[i] = previous.sources[old];
+                        sources[i].Rebind(this.channels[i], walkableSlope);
+                    }
+                    else sources[i] = new CharacterIkInputSource(this.channels[i], owner, animator ? animator.transform : null, walkableSlope);
                 }
         }
 
@@ -89,7 +94,8 @@ namespace ThreeC.CharacterBehavior
                 !player.NeedsRebind;
             if (!live) { previous.Dispose(); return; }
             var saved = previous.states.ToArray();
-            bool keepInertia = poseInertia != null && ReferenceEquals(poseInertia, previous.poseInertia);
+            bool keepInertia = poseInertia != null && ReferenceEquals(inertiaSource, previous.inertiaSource) &&
+                inertiaBones.Equals(previous.inertiaBones);
             var history = keepInertia ? previous.poseHistory.ToArray() : null;
             var observation = previous.inertiaObservation;
             bool wasFrozen = previous.frozen;
@@ -103,7 +109,8 @@ namespace ThreeC.CharacterBehavior
             for (int i = 0; i < channels.Length; i++)
             {
                 int old = channels[i].Tuning != null ? previous.IndexOf(channels[i].Tuning.Limb) : -1;
-                if (old < 0 || !ReferenceEquals(channels[i].Tuning, previous.channels[old].Tuning)) continue;
+                if (old < 0 || !ReferenceEquals(channels[i].Source, previous.channels[old].Source) ||
+                    !channels[i].Bones.Equals(previous.channels[old].Bones)) continue;
                 var state = saved[old];
                 state.ProbeMotion = default; // 重新装配后从新的骨盆与朝向基准采样。
                 states[i] = state;
@@ -154,7 +161,7 @@ namespace ThreeC.CharacterBehavior
         public void Prepare(in CharacterAnimationComposition selection, CharacterAnimationMotion motion,
             in CharacterAnimationPlaybackPlan plan, float deltaTime, double sampleTime)
         {
-            if (sources.Length == 0 && orientation == null && poseInertia == null && !sampleFeet && visualRoot == null && !transitionTuning) return;
+            if (sources.Length == 0 && orientation == null && poseInertia == null && !sampleFeet && visualRoot == null && transitionTuning == null) return;
             if (!triedBinding || animator.avatar != avatar)
                 Bind();
             if (!graph.IsValid()) return;

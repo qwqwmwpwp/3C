@@ -28,8 +28,8 @@ namespace ThreeC.CharacterBehavior
         }
 
         internal CharacterMotorSettings Motor => (Profile ? Profile.Motor : null) ?? board.DefaultMotor;
-        // 实走复用当前角色的参数，帧末预测直接取得与角色隔离的数值副本。
-        internal CharacterMovementSettings ReadMovement(bool freeze = false) => board.ReadMovement(Profile, freeze);
+        // 解析本次主线程计算使用的移动数值，跨帧推演由快照入口独立复制。
+        internal CharacterMovementSettings ReadMovement() => board.ReadMovement(Profile);
 
         internal CharacterForecastSettings Forecast => board.ReadForecast(Profile);
         internal CharacterMoveGait DefaultGait => Profile ? Profile.DefaultGait : CharacterMoveGait.Run;
@@ -42,12 +42,20 @@ namespace ThreeC.CharacterBehavior
         // 组合实例的有效配置、绑定的刚体和烘焙步距，供实走和预演使用。
         internal CharacterDriveParameters DriveParameters(Rigidbody body, CharacterMotorSettings motorSettings, float footfallDistance)
         {
-            float acceleration = Profile ? Overrides.GroundAcceleration.Resolve(motorSettings.groundAcceleration) : motorSettings.groundAcceleration;
+            float acceleration = Overrides.GroundAcceleration.Resolve(motorSettings.groundAcceleration);
             return new CharacterDriveParameters(motorSettings, acceleration, TurnSpeed, footfallDistance,
                 body.useGravity, Physics.gravity, body.drag);
         }
 
+        // 装配时固定行为集合和打断关系，供实走与预测的所有流程共享。
         internal void InitializeRegistration() => board.InitializeRegistration(Profile, allowGuard);
+        // 未进入运行时的编辑器预演也只捕获一次注册集合，后续每份副本在主线程冻结自己的数值。
+        internal System.Func<CharacterBehaviorFlow> CreateRehearsalFactory()
+        {
+            var registration = board.ResolveRegistration(Profile, allowGuard);
+            return () => CharacterBehaviorAssembly.ForCharacter(registration, snapshot: true);
+        }
+
         // 按当前角色配置装配独立流程，预测时按值捕获动作定义和连招路线。
         internal CharacterBehaviorFlow CreateBehaviorFlow(bool snapshot = false) =>
             CharacterBehaviorAssembly.ForCharacter(board.ResolveRegistration(Profile, allowGuard), snapshot);

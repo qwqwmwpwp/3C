@@ -46,7 +46,7 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    /// <summary>本次请求已解析的招式及其原速时长，只在当前固定步内传递。</summary>
+    /// <summary>保存本次起手或接续请求选定的路线、单招参数和原速时长。</summary>
     internal readonly struct CharacterAttackOpening
     {
         internal readonly CharacterAttackLink Link;
@@ -60,6 +60,9 @@ namespace ThreeC.CharacterBehavior
             Definition = definition;
             Duration = duration;
         }
+
+        // 缓冲成功时冻结目标定义，直到执行、覆盖或撤销本次接续。
+        internal CharacterAttackOpening Freeze() => new CharacterAttackOpening(Link, Definition.Snapshot(), Duration);
     }
 
     // 让已解析的起手招式随本次申请交给获准的攻击实例。
@@ -86,7 +89,7 @@ namespace ThreeC.CharacterBehavior
         protected override object ExclusiveRuntimeStorage => readyAt;
         internal CharacterAttackState State => state.Move == CharacterAttackMove.None ? default :
             new CharacterAttackState(state.Move, state.InstanceId, Phase, state.StartProgress, (float)(state.Elapsed / state.Duration),
-                state.Duration, state.BlendRange, state.RecoveryMoveStart, state.BufferedLink.To, (float)state.BufferedAt, state.BufferResult);
+                state.Duration, state.BlendRange, state.RecoveryMoveStart, state.BufferedMove, (float)state.BufferedAt, state.BufferResult);
         public override bool AllowsOrdinaryMotionNow =>
             !state.HasAttackMotion || state.Elapsed >= state.Recovery || state.Elapsed < state.Strike && !state.AttackMotion.HasOpening;
         public override double NextBoundaryDelay
@@ -95,7 +98,7 @@ namespace ThreeC.CharacterBehavior
             {
                 if (!IsActive) return double.PositiveInfinity;
                 double next = state.NextPhaseEnd;
-                if (state.BufferedLink.To != CharacterAttackMove.None && state.BufferedAt > state.Elapsed)
+                if (state.BufferedMove != CharacterAttackMove.None && state.BufferedAt > state.Elapsed)
                     next = Math.Min(next, state.BufferedAt);
                 return next - state.Elapsed;
             }
@@ -117,10 +120,11 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 为有效按键解析一次起手招式，保留至该申请得到准入。
-        internal override CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context)
+        internal override CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
         {
+            reason = CharacterBehaviorRejectReason.StateCondition;
             if (IsActive) return null;
-            var opening = SelectOpening(context);
+            var opening = SelectOpening(context, out reason);
             return opening.Link.To == CharacterAttackMove.None ? null
                 : new CharacterAttackStart(context, GetStaminaCost(context), opening);
         }
@@ -130,17 +134,26 @@ namespace ThreeC.CharacterBehavior
             StartAttack(request.Context, ((CharacterAttackStart)request).Opening);
 
         // 按按键顺序选取符合起手条件且冷却已好的第一招。
-        private CharacterAttackOpening SelectOpening(CharacterBehaviorContext context)
+        private CharacterAttackOpening SelectOpening(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
         {
             var presses = context.Input.AttackPresses;
+            reason = CharacterBehaviorRejectReason.NoRoute;
             bool moving = IsMoving(context);
             for (int i = 0; i < presses.Count; i++)
             {
                 var link = CharacterComboRoutes.Find(routes.Openers, presses[i], moving);
-                if (link.To == CharacterAttackMove.None) continue;
-                var opening = ResolveMove(link);
-                if (opening.Duration > 0f && !float.IsInfinity(opening.Duration) && IsReady(link.To, context.SimulationTime))
-                    return opening;
+                CharacterBehaviorRejectReason failure;
+                if (link.To == CharacterAttackMove.None)
+                    failure = CharacterComboRoutes.Find(routes.Openers, presses[i]).To == CharacterAttackMove.None
+                        ? CharacterBehaviorRejectReason.NoRoute : CharacterBehaviorRejectReason.StateCondition;
+                else
+                {
+                    var opening = ResolveMove(link);
+                    if (!(opening.Duration > 0f) || float.IsInfinity(opening.Duration)) failure = CharacterBehaviorRejectReason.InvalidConfiguration;
+                    else if (!IsReady(link.To, context.SimulationTime)) failure = CharacterBehaviorRejectReason.Cooldown;
+                    else { reason = default; return opening; }
+                }
+                if (i == 0) reason = failure;
             }
             return default;
         }
@@ -154,7 +167,7 @@ namespace ThreeC.CharacterBehavior
 
         // 只读检查是否收到可执行的起手请求。
         public override bool Evaluate(CharacterBehaviorContext context) =>
-            !IsActive && SelectOpening(context).Link.To != CharacterAttackMove.None;
+            !IsActive && SelectOpening(context, out _).Link.To != CharacterAttackMove.None;
 
         // 沿用当前定义按招式编号查找参数。
         private CharacterAttackMoveSettings SettingsFor(CharacterAttackMove attack) => settings.Moves?.Move(attack);
@@ -169,7 +182,7 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 开始攻击许可并记录首招和移动起手条件。
-        public override void Start(CharacterBehaviorContext context) => StartAttack(context, SelectOpening(context));
+        public override void Start(CharacterBehaviorContext context) => StartAttack(context, SelectOpening(context, out _));
 
         // 初始化攻击许可与首招的运行状态。
         private void StartAttack(CharacterBehaviorContext context, CharacterAttackOpening opening)
@@ -208,6 +221,7 @@ namespace ThreeC.CharacterBehavior
         {
             var copy = (CharacterAttackBehavior)target;
             copy.state = state;
+            if (state.BufferedMove != default) copy.state.BufferedOpening = state.BufferedOpening.Freeze();
             copy.readyAt.Clear();
             foreach (var pair in readyAt) copy.readyAt.Add(pair.Key, pair.Value);
         }
@@ -215,8 +229,9 @@ namespace ThreeC.CharacterBehavior
         // 清除已缓存的接续路线和执行时点。
         internal void ClearBuffer()
         {
-            state.BufferedLink = default;
+            state.BufferedOpening = default;
             state.BufferedAt = 0f;
+            state.BufferedRequest = 0;
         }
 
         // 清除跨活动期的招式冷却和预输入观测。
@@ -236,16 +251,18 @@ namespace ThreeC.CharacterBehavior
             var source = routes.ForMove(state.Move);
             for (int i = 0; i < presses.Count; i++)
             {
+                long requestId = Journal?.NewRequest() ?? 0;
                 var link = CharacterComboRoutes.Find(source?.Links, presses[i], state.MovingOpening);
                 if (link.To == CharacterAttackMove.None)
                 {
-                    state.BufferResult = CharacterComboRoutes.Find(source?.Links, presses[i]).To == CharacterAttackMove.None ?
-                        "未覆盖：当前招式无此路线" : "未覆盖：起手条件不满足";
+                    bool noRoute = CharacterComboRoutes.Find(source?.Links, presses[i]).To == CharacterAttackMove.None;
+                    RejectLink(requestId, noRoute ? CharacterBehaviorRejectReason.NoRoute : CharacterBehaviorRejectReason.StateCondition,
+                        noRoute ? "未覆盖：当前招式无此路线" : "未覆盖：起手条件不满足");
                     continue;
                 }
                 if (!source.HasValidWindow)
                 {
-                    state.BufferResult = "未覆盖：当前招式的接续时间无效";
+                    RejectLink(requestId, CharacterBehaviorRejectReason.InvalidConfiguration, "未覆盖：当前招式的接续时间无效");
                     continue;
                 }
                 float open = source.LinkStart * state.Duration;
@@ -256,24 +273,46 @@ namespace ThreeC.CharacterBehavior
                     : (float)state.Elapsed + TimingTolerance >= early && (float)state.Elapsed <= end + TimingTolerance;
                 if (!inWindow)
                 {
-                    state.BufferResult = "未覆盖：窗口外";
+                    RejectLink(requestId, CharacterBehaviorRejectReason.OutsideWindow, "未覆盖：窗口外");
                     continue;
                 }
                 double linkAt = Math.Max(open, state.Elapsed);
                 if (!IsReady(link.To, context.SimulationTime + linkAt - state.Elapsed))
                 {
-                    state.BufferResult = "未覆盖：接续时仍在冷却";
+                    RejectLink(requestId, CharacterBehaviorRejectReason.Cooldown, "未覆盖：接续时仍在冷却");
                     continue;
                 }
-                if (ResolveMove(link).Duration <= 0f)
+                var next = ResolveMove(link);
+                if (!(next.Duration > 0f) || float.IsInfinity(next.Duration))
                 {
-                    state.BufferResult = "未覆盖：条件或招式配置不满足";
+                    RejectLink(requestId, CharacterBehaviorRejectReason.InvalidConfiguration, "未覆盖：条件或招式配置不满足");
                     continue;
                 }
-                state.BufferResult = state.BufferedLink.To == CharacterAttackMove.None ? "已预输入" : "后一次输入已覆盖";
-                state.BufferedLink = link;
+                state.BufferResult = state.BufferedMove == CharacterAttackMove.None ? "已预输入" : "后一次输入已覆盖";
+                if (state.BufferedMove != default) CloseBuffer(CharacterBufferEvent.Overwritten);
+                state.BufferedOpening = next.Freeze();
+                state.BufferedRequest = requestId;
+                state.BufferExpires = end;
+                Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Buffered,
+                    buffer: CharacterBufferEvent.Buffered);
                 state.BufferedAt = linkAt;
             }
+        }
+
+        // 发布实际拒绝接续的原因，不修改既有缓存的身份。
+        private void RejectLink(long requestId, CharacterBehaviorRejectReason reason, string message)
+        {
+            state.BufferResult = message;
+            Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Rejected, reason);
+        }
+
+        // 在覆盖、过期或取消发生的真实时刻终结原来的缓存请求。
+        private void CloseBuffer(CharacterBufferEvent change, CharacterBehaviorRejectReason reason = default, double? at = null)
+        {
+            if (state.BufferedMove != default)
+                Journal?.Record(RegisteredId, state.BufferedRequest, Execution.Instance, CharacterBehaviorRequestStatus.Rejected,
+                    reason, buffer: change, at: at);
+            ClearBuffer();
         }
 
         // 记录收招交还移动的时刻，并发布本步实际执行的招式。
@@ -290,11 +329,12 @@ namespace ThreeC.CharacterBehavior
         internal override void ReadOutcome(ref CharacterBehaviorStep step) => step.Attack = State;
 
         // 暂停或失去输入连续性时清除尚未执行的接续。
-        protected override void OnInputContinuityEnded() => ClearBuffer();
+        protected override void OnInputContinuityEnded() => CloseBuffer(CharacterBufferEvent.Cancelled);
 
         // 结束本次攻击并释放活动招式、运动和预输入。
         public override void End()
         {
+            CloseBuffer(CharacterBufferEvent.Cancelled);
             base.End();
             state.Move = CharacterAttackMove.None;
             state.HasAttackMotion = false;
@@ -315,15 +355,23 @@ namespace ThreeC.CharacterBehavior
             if (!CanExecuteBufferedLink(context, out float untilLink))
                 return Advance(context, seconds);
 
-            var next = ResolveMove(state.BufferedLink);
+            var next = state.BufferedOpening;
+            long requestId = state.BufferedRequest;
             untilLink = Mathf.Min(seconds, untilLink);
-            if (next.Duration <= 0f || !IsReady(next.Link.To, context.SimulationTime + untilLink))
+            var at = context.SimulationTime + untilLink;
+            bool expired = state.Elapsed + untilLink > state.BufferExpires + TimingTolerance;
+            if (expired || !IsReady(next.Link.To, at))
             {
-                ClearBuffer();
+                CloseBuffer(CharacterBufferEvent.Expired, expired ? CharacterBehaviorRejectReason.OutsideWindow
+                    : CharacterBehaviorRejectReason.Cooldown, at);
                 return Advance(context, seconds);
             }
             var previous = Advance(context, untilLink);
+            Journal?.End(this, CharacterBehaviorEndReason.Completed);
             Enter(next, context, untilLink, false);
+            Journal?.Start(this, requestId);
+            Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Started,
+                buffer: CharacterBufferEvent.Executed, at: at);
             state.MoveStarted = true;
             var current = Advance(context, seconds - untilLink);
             // 两段均消耗本步时间，帧末的阶段、转向与表现时钟属于接入的新招。
@@ -335,7 +383,7 @@ namespace ThreeC.CharacterBehavior
         private bool CanExecuteBufferedLink(CharacterBehaviorContext context, out float untilLink)
         {
             untilLink = 0f;
-            if (state.BufferedLink.To == CharacterAttackMove.None) return false;
+            if (state.BufferedMove == CharacterAttackMove.None) return false;
             if (context.SeparateBoundaries)
                 return context.DeltaTime == 0f && state.BufferedAt <= state.Elapsed;
 
@@ -374,7 +422,7 @@ namespace ThreeC.CharacterBehavior
             state.Elapsed = Math.Min(state.Duration, before + seconds);
             if (seconds >= (float)(boundary - before))
                 state.Elapsed = Math.Max(state.Elapsed, boundary);
-            if (state.BufferedLink.To != CharacterAttackMove.None && state.BufferedAt > before &&
+            if (state.BufferedMove != CharacterAttackMove.None && state.BufferedAt > before &&
                 seconds >= (float)(state.BufferedAt - before))
                 state.Elapsed = Math.Max(state.Elapsed, state.BufferedAt);
         }
@@ -385,10 +433,13 @@ namespace ThreeC.CharacterBehavior
     {
         internal CharacterAttackMove Move;
         internal long InstanceId;
+        internal long BufferedRequest;
+        internal double BufferExpires;
         internal double Elapsed, BufferedAt; // 动作运行与接续时刻，单位为秒。
         internal float Duration, Strike, Recovery; // 定义中的原速时钟，单位为秒。
         internal float StartProgress;
-        internal CharacterAttackLink BufferedLink;
+        internal CharacterAttackOpening BufferedOpening;
+        internal readonly CharacterAttackMove BufferedMove => BufferedOpening.Link.To;
         internal string BufferResult;
         internal Vector2 BlendRange;
         internal float? RecoveryMoveStart;

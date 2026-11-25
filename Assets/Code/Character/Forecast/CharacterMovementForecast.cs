@@ -149,13 +149,20 @@ namespace ThreeC.CharacterBehavior
         public bool EnvironmentLimited { get; private set; }
         public string RefreshReason { get; private set; }
 
+        // 普通失效立即撤回公开结果，并通知已有轨迹或显式边界的观察者。
         internal void Clear(CharacterForecastRevision revision = CharacterForecastRevision.Reset)
         {
-            if (count > 0) Version++;
             bool notify = count > 0 || revision != CharacterForecastRevision.Invalidated;
+            ClearSamples();
+            if (notify) Notify(revision);
+        }
+
+        // 运动交接先清除全部可读取样本，内置动画完成清理后再发公开通知。
+        internal void ClearSamples()
+        {
+            if (count > 0) Version++;
             count = 0;
             EnvironmentLimited = false;
-            if (notify) Notify(revision);
         }
 
         // 绑定完整帧版本、真实求解编号与两个时刻，后续计算只写本结果的样本。

@@ -6,16 +6,26 @@ namespace ThreeC.CharacterBehavior
     // 主线程累计在播地面素材与实际模型运动的短时差，只发布有限的水平表现修正。
     internal sealed class CharacterVisualRoot
     {
-        private readonly VisualRootModule settings;
+        private readonly float distance, yawLimit, followSpeed, turnSpeed, releaseSeconds;
+        private readonly VisualRootPolicy[] policies = new VisualRootPolicy[(int)VisualRootPhase.Missing + 1];
         private Vector3 previousPosition, previousForward;
         private bool continuous;
         internal Vector3 Offset { get; private set; }
         internal float Yaw { get; private set; }
 
         // 保存该角色使用的视觉根限制。
-        internal CharacterVisualRoot(VisualRootModule settings) => this.settings = settings;
+        internal CharacterVisualRoot(VisualRootModule settings)
+        {
+            distance = settings.Distance;
+            yawLimit = settings.Yaw;
+            followSpeed = settings.FollowSpeed;
+            turnSpeed = settings.TurnSpeed;
+            releaseSeconds = settings.Release;
+            BindingPath = settings.RootPath;
+            for (int i = 0; i < policies.Length; i++) policies[i] = settings.For((VisualRootPhase)i)?.Snapshot();
+        }
 
-        internal string BindingPath => settings.RootPath;
+        internal string BindingPath { get; }
 #if UNITY_EDITOR
         internal VisualRootDebug Debug;
 #endif
@@ -29,30 +39,30 @@ namespace ThreeC.CharacterBehavior
             var phase = Phase(clips, motion, use, coverage);
             bool valid = phase <= VisualRootPhase.Turn && forward.sqrMagnitude > 0.9f && dt > 0f && dt <= 0.25f;
             bool moving = motion.ActualSpeed > 0.02f || continuous && Vector3.Angle(previousForward, forward) > 0.1f;
-            var policy = settings.For(phase);
+            var policy = policies[(int)phase];
             var positionMode = Resolve(policy?.Position, valid && moving);
             var rotationMode = Resolve(policy?.Rotation, valid && moving);
-            float release = Mathf.Exp(-Mathf.Max(0f, dt) / Mathf.Max(0.01f, policy?.ReleaseSeconds ?? settings.Release));
+            float release = Mathf.Exp(-Mathf.Max(0f, dt) / Mathf.Max(0.01f, policy?.ReleaseSeconds ?? releaseSeconds));
             Vector3 actual = continuous ? Vector3.ProjectOnPlane(position - previousPosition, Vector3.up) : Vector3.zero;
             float turn = continuous ? Vector3.SignedAngle(previousForward, forward, Vector3.up) : 0f;
             Vector3 facing = Quaternion.AngleAxis(Yaw, Vector3.up) * previousForward;
             Vector3 reference = facing * step.Position.y + Vector3.Cross(Vector3.up, facing) * step.Position.x;
             Vector3 error = continuous && valid ? reference - actual * coverage : Vector3.zero;
             float angular = continuous && valid ? step.Yaw - turn * coverage : 0f;
-            float maxDistance = Mathf.Max(0f, settings.Distance) * Mathf.Clamp01(policy?.DistanceShare ?? 1f);
-            float maxYaw = Mathf.Max(0f, settings.Yaw) * Mathf.Clamp01(policy?.YawShare ?? 1f);
+            float maxDistance = Mathf.Max(0f, distance) * Mathf.Clamp01(policy?.DistanceShare ?? 1f);
+            float maxYaw = Mathf.Max(0f, yawLimit) * Mathf.Clamp01(policy?.YawShare ?? 1f);
             Vector3 next = positionMode switch {
                 VisualRootMode.Fixed => Vector3.zero, VisualRootMode.Release => Offset * release,
                 VisualRootMode.Accumulate => Offset + error,
-                _ => Offset * release + Vector3.ClampMagnitude(error, Mathf.Max(0f, settings.FollowSpeed) * dt) };
-            float yawStep = Mathf.Max(0f, settings.TurnSpeed) * Mathf.Max(0f, dt);
+                _ => Offset * release + Vector3.ClampMagnitude(error, Mathf.Max(0f, followSpeed) * dt) };
+            float yawStep = Mathf.Max(0f, turnSpeed) * Mathf.Max(0f, dt);
             float nextYaw = rotationMode switch {
                 VisualRootMode.Fixed => 0f, VisualRootMode.Release => Yaw * release, VisualRootMode.Accumulate => Yaw + angular,
                 _ => Yaw * release + Mathf.Clamp(angular, -yawStep, yawStep) };
             Offset = Vector3.ClampMagnitude(next, maxDistance);
             Yaw = Mathf.Clamp(nextYaw, -maxYaw, maxYaw);
 #if UNITY_EDITOR
-            Debug = new VisualRootDebug { Bound = true, Binding = string.IsNullOrEmpty(settings.RootPath) ? "Hips" : settings.RootPath,
+            Debug = new VisualRootDebug { Bound = true, Binding = string.IsNullOrEmpty(BindingPath) ? "Hips" : BindingPath,
                 Reason = !valid ? "无可比较的连续运动" : !moving ? "真实运动静止" : !continuous ? "建立连续基准" : "按阶段策略",
                 ActualYaw = turn, ReferenceYaw = step.Yaw, Phase = phase, PositionMode = positionMode, RotationMode = rotationMode,
                 Actual = actual, Reference = reference, Offset = Offset, Yaw = Yaw, Limited = next.sqrMagnitude > maxDistance * maxDistance || Mathf.Abs(nextYaw) > maxYaw };

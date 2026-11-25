@@ -150,6 +150,7 @@ namespace ThreeC.CharacterBehavior
         internal void AdvanceReset() => resetVersion++;
     }
 
+    // 保存本次装配的角色和行为关系，提供主线程复用的配置读数。
     [Serializable]
     internal sealed class CharacterConfigurationBlackboard
     {
@@ -172,25 +173,26 @@ namespace ThreeC.CharacterBehavior
             profileInitialized = true;
         }
 
+        // 初始化装配时固定本次行为列表和打断许可。
         internal void InitializeRegistration(CharacterProfile source, bool allowGuard) =>
-            registration ??= ReadRegistration(source, allowGuard);
+            registration = ReadRegistration(source, allowGuard);
 
         internal CharacterBehaviorFlow CreateForecastFlow() => CharacterBehaviorFlow.ForCharacter(registration, snapshot: true);
 
         internal CharacterBehaviorRegistration ResolveRegistration(CharacterProfile source, bool allowGuard) =>
             registration ?? ReadRegistration(source, allowGuard);
 
+        // 从角色资产读取内置与追加行为定义，固定属于本次装配的规则集合。
         private static CharacterBehaviorRegistration ReadRegistration(CharacterProfile source, bool allowGuard) =>
-            source ? new CharacterBehaviorRegistration(allowGuard, source.LightAttack, source.ComboRoutes, source.Guard)
+            source ? new CharacterBehaviorRegistration(allowGuard, source.LightAttack, source.ComboRoutes, source.Guard, source.AdditionalBehaviors)
                 : new CharacterBehaviorRegistration(allowGuard, null, null, null);
 
-        // 为当前行为步填充可复用的参数，需要跨线程读取时创建独立目标。
-        internal CharacterMovementSettings ReadMovement(CharacterProfile source, bool freeze)
+        // 读取当前行为步的参数，主线程复用同一对象，任务只能持有其独立快照。
+        internal CharacterMovementSettings ReadMovement(CharacterProfile source)
         {
-            if (!source) return freeze ? defaultMovement.Snapshot() : defaultMovement;
-            var target = freeze ? new CharacterMovementSettings() : resolvedMovement;
-            source.ReadMovement(target);
-            return target;
+            if (!source) return defaultMovement;
+            source.ReadMovement(resolvedMovement);
+            return resolvedMovement;
         }
 
         internal CharacterForecastSettings ReadForecast(CharacterProfile source) =>

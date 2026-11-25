@@ -10,18 +10,6 @@ namespace ThreeC.CharacterBehavior
         private readonly uint mask;
         internal bool Active => layout != null; // 没有可信通道时也不能临时切回另一套评分布局。
 
-#if UNITY_EDITOR
-        // 展示本次角色历史及表选维度的交集，避免把烘焙时可用位误读为本帧观测。
-        internal uint VisibleMask(GroundFeatureGroups groups)
-        {
-            if (layout == null) return 0;
-            uint selected = mask;
-            for (int i = 0; i < layout.Channels.Length; i++)
-                if ((layout.Channels[i].Group & groups) == 0 || layout.Channels[i].Weight <= 0f) selected &= ~(1u << i);
-            return selected;
-        }
-#endif
-
         // 接管主线程已经复制的原始姿态与查询有效位。
         internal GroundFeatureQuery(GroundFeatureLayout layout, Vector3[] observed, uint mask)
         {
@@ -32,8 +20,15 @@ namespace ThreeC.CharacterBehavior
 
         // 在同一组通道、时刻和逻辑倍率下评分入点与续播；不满足已启用历史的入点不可比较。
         internal float Score(CharacterMotionTrack track, float time, float rate, in CharacterMatchTrajectory goal,
-            GroundFeatureGroups groups, bool allowPast, out bool missingHistory)
+            GroundFeatureGroups groups, bool allowPast, out bool missingHistory
+#if UNITY_EDITOR
+            , bool captureCosts, out GroundFeatureScoreBreakdown breakdown
+#endif
+            )
         {
+#if UNITY_EDITOR
+            breakdown = default;
+#endif
             missingHistory = false;
             float cost = 0f;
             for (int i = 0; i < layout.Channels.Length; i++)
@@ -75,7 +70,11 @@ namespace ThreeC.CharacterBehavior
                     }
                     else error = (value - observed[i]).sqrMagnitude;
                 }
-                cost += error * c.Weight / (c.Scale * c.Scale);
+                float contribution = error * c.Weight / (c.Scale * c.Scale);
+                cost += contribution;
+#if UNITY_EDITOR
+                if (captureCosts) breakdown.Add(i, c.Group & groups, contribution);
+#endif
             }
             return cost;
         }

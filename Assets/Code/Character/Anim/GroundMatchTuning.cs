@@ -7,6 +7,9 @@ namespace ThreeC.CharacterBehavior
     [Serializable]
     internal sealed class GroundMatchWeights
     {
+        // 保留本次装配的用途系数，避免后台评分读取正在编辑的共享资产。
+        internal GroundMatchWeights Snapshot() => (GroundMatchWeights)MemberwiseClone();
+
         [Min(0f)] public float Position = 1f, Velocity = 1f, Contact = 1f, Path = 1f, Facing = 1f, Pace = 1f;
     }
 
@@ -25,6 +28,18 @@ namespace ThreeC.CharacterBehavior
         [Min(0.001f)] public float ContactScale = 1f, PathScale = 0.5f, FacingScale = 45f, PaceScale = 0.7071068f;
         public GroundMatchWeights Start = new GroundMatchWeights(), Cycle = new GroundMatchWeights(),
             Turn = new GroundMatchWeights(), Stop = new GroundMatchWeights(), Transition = new GroundMatchWeights();
+
+        // 固定模块的尺度、时间窗和各用途权重，直到角色下一次装配。
+        internal GroundMatchTuning Snapshot()
+        {
+            var copy = (GroundMatchTuning)MemberwiseClone();
+            copy.Start = Start?.Snapshot();
+            copy.Cycle = Cycle?.Snapshot();
+            copy.Turn = Turn?.Snapshot();
+            copy.Stop = Stop?.Snapshot();
+            copy.Transition = Transition?.Snapshot();
+            return copy;
+        }
 
         // 固定整次查询的特征系数，同一组系数用于入点与续播。
         internal GroundMatchCost Profile(GroundMotionUse use)
@@ -54,12 +69,15 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    // 保存同一候选的姿势、可选骨盆、运动轨迹各项贡献和入场偏好。
+    // 保存同一候选的姿势、轨迹、入场偏好及编辑器的特征分组诊断。
     internal struct GroundMatchCost
     {
         public float Position, Velocity, Contact, Path, Facing, Pace, Entry, Pelvis, Features;
         internal float HistoryWeight;
         internal bool MissingHistory;
+#if UNITY_EDITOR
+        internal GroundFeatureScoreBreakdown FeatureBreakdown;
+#endif
         public float Total => Position + Velocity + Contact + Path + Facing + Pace + Entry + Pelvis + Features;
     }
 }

@@ -107,6 +107,17 @@ namespace ThreeC.CharacterBehavior
                 return clips.Advance(Source, plan, frame, dt, created);
             }
 
+            // 卸下旧连续性的所有声部，保留混合节点及身体遮罩。
+            internal void ClearMotionSources()
+            {
+                Source?.Release(true);
+                Weight = previousWeight = ExitImpulse = 0f;
+                fadingOut = false;
+                coverage?.Reset();
+                if (Node.GetInputCount() > 1) Node.SetInputWeight(1, 0f);
+                Node.SetInputWeight(0, 1f);
+            }
+
             // 按与姿态一致的身体遮罩和权重混合片段许可。
             public CharacterCurveSample MixPermission(CharacterCurveSample previous, AvatarMaskBodyPart part,
                 string curve, float dt, string action, long? instance)
@@ -184,6 +195,16 @@ namespace ThreeC.CharacterBehavior
                 lower.ExitImpulse > 0f || upper.ExitImpulse > 0f || handoff.ExitImpulse > 0f
                 ? ReadTransition(emission) : default;
             return emission;
+        }
+
+        // 舍弃旧动作和参考轨迹的片段时钟，保持现有播放图连接。
+        internal void ClearMotionSources()
+        {
+            baseline.Release(true);
+            lower.ClearMotionSources();
+            upper.ClearMotionSources();
+            handoff.ClearMotionSources();
+            Transition = default;
         }
 
         // 查找已提交计划对应的混合源。

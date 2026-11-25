@@ -1,0 +1,55 @@
+ M Assets/Code/Character/Anim/CharacterAnimationConfig.cs
+ M Assets/Code/Character/Anim/CharacterAnimationConfiguration.cs
+ M Assets/Code/Character/Anim/CharacterAnimationIk.cs
+ M Assets/Code/Character/Anim/CharacterAnimationMotion.cs
+ M Assets/Code/Character/Anim/CharacterAnimationPipeline.cs
+ M Assets/Code/Character/Anim/CharacterAnimationResourceCatalog.cs
+ M Assets/Code/Character/Anim/CharacterBehaviorAnimationBindings.cs
+ M Assets/Code/Character/Anim/CharacterBehaviorAnimator.cs
+ M Assets/Code/Character/Anim/CharacterIkInput.cs
+ M Assets/Code/Character/Anim/CharacterMatchDebugCapture.cs
+ M Assets/Code/Character/Anim/CharacterModelBindings.cs
+ M Assets/Code/Character/Anim/CharacterMotionMatcher.cs
+ M Assets/Code/Character/Anim/CharacterTransitionInertia.cs
+ M Assets/Code/Character/Anim/CharacterTransitionProfile.cs
+ M Assets/Code/Character/Anim/CharacterVisualRoot.cs
+ M Assets/Code/Character/Anim/GroundCandidateTable.cs
+ M Assets/Code/Character/Anim/GroundFeatureQuery.cs
+ M Assets/Code/Character/Anim/GroundMatchTuning.cs
+ M Assets/Code/Character/Anim/GroundPoseSearch.cs
+ M Assets/Code/Character/Anim/Modules/CharacterAnimationModules.cs
+ M Assets/Code/Character/Anim/Modules/MotionMatchModule.cs
+ M Assets/Code/Character/Anim/Modules/OrientationWarpModule.cs
+ M Assets/Code/Character/Anim/Modules/VisualRootModule.cs
+ M Assets/Code/Character/Behavior/CharacterActionAlignmentRuntime.cs
+ M Assets/Code/Character/Behavior/CharacterAttackCombo.cs
+ M Assets/Code/Character/Behavior/CharacterBehaviorConfig.cs
+ M Assets/Code/Character/Behavior/CharacterBehaviorDriver.cs
+ M Assets/Code/Character/Behavior/CharacterBlackboard.cs
+ M Assets/Code/Character/Behavior/CharacterComboTable.cs
+ M Assets/Code/Character/Behavior/CharacterLightAttackBehavior.cs
+ M Assets/Code/Character/Behavior/CharacterProfile.cs
+ M Assets/Code/Character/Behavior/CharacterRuntimeConfiguration.cs
+ M Assets/Code/Character/Editor/CharacterAnimationConfigEditor.cs
+ M Assets/Code/Character/Editor/CharacterAnimationDebugWindow.cs
+ M Assets/Code/Character/Editor/CharacterMotionAssetAudit.cs
+ M Assets/Code/Character/Editor/CharacterProfileEditor.cs
+ M Assets/Code/Character/Editor/GroundMatchModuleInspector.cs
+ M Assets/Code/Character/Forecast/CharacterForecastOrigin.cs
+ M Assets/Code/Character/Forecast/CharacterForecastValidity.cs
+ M Assets/Code/Character/Forecast/CharacterMovementPredictor.cs
+ M Assets/Code/Character/Motion/CharacterGroundDrive.cs
+ M Assets/Code/Character/Motion/CharacterGroundPrediction.cs
+ M Assets/Code/Character/Motion/CharacterMovementConfig.cs
+ M Assets/Code/Character/Motion/CharacterRigidbodyMotor.cs
+ M "Assets/Data/Player/Shield/Modules/\345\234\260\351\235\242\345\214\271\351\205\215.asset"
+ M "Assets/Data/Player/Shield/\347\233\276\347\211\214\345\234\260\351\235\242\345\212\250\344\275\234\345\272\223.asset"
+?? .codex-animation-check-20261126-a73f/
+?? .codex-task-work/character-contracts-20261126-01/
+?? .codex-task-work/structure-opt-20261126-01/
+?? Assets/Code/Character/Anim/CharacterPresentationWork.cs
+?? Assets/Code/Character/Anim/CharacterPresentationWork.cs.meta
+?? Assets/Code/Character/Anim/Modules/AnimationModuleChanges.cs
+?? Assets/Code/Character/Anim/Modules/AnimationModuleChanges.cs.meta
+?? Assets/Code/Character/Editor/CharacterBehaviorMaskDrawer.cs
+?? Assets/Code/Character/Editor/CharacterBehaviorMaskDrawer.cs.meta

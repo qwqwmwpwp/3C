@@ -46,6 +46,25 @@ namespace ThreeC.CharacterBehavior
         internal MotionStartToken StartCursor { get; private set; }
         internal double SubmittedThrough { get; private set; }
 
+        internal double KnockbackUntil { get; private set; }
+        internal float KnockbackBraking { get; private set; }
+
+        // 按角色时钟登记硬直区间；马达和预测均在同一终点恢复普通运动。
+        internal void BeginKnockback(double start, float seconds, float braking)
+        {
+            KnockbackUntil = start + seconds;
+            KnockbackBraking = braking;
+        }
+
+        // 清除过界的动作命令、硬直和起步游标，保留已结算物理时间。
+        internal void ClearCommands()
+        {
+            commands.Clear();
+            StartCursor = previousStartCursor = default;
+            KnockbackUntil = double.NegativeInfinity;
+            KnockbackBraking = 0f;
+        }
+
         // 对齐参考起点从当前实测刚体沿尚未执行的获准切片外推，已提交区间不会重复积分。
         internal CharacterAlignmentOrigin ProjectAlignmentOrigin(double time, in CharacterAlignmentOrigin actual, float turnSpeed)
         {
@@ -102,6 +121,13 @@ namespace ThreeC.CharacterBehavior
             int index = -1;
             while (start < end)
             {
+                if (start < KnockbackUntil)
+                {
+                    double returns = Math.Min(end, KnockbackUntil);
+                    result.Add(new CharacterMotionSlice(start, returns, default, default));
+                    start = returns;
+                    continue;
+                }
                 while (index + 1 < commands.Count && commands[index + 1].Time <= start) index++;
                 double next = index + 1 < commands.Count ? Math.Min(end, commands[index + 1].Time) : end;
                 var command = index >= 0 ? commands[index] : default;
@@ -138,8 +164,7 @@ namespace ThreeC.CharacterBehavior
         // 重置角色时清空跨世代运动、马达游标和求解前的回退点。
         internal void Reset()
         {
-            commands.Clear();
-            StartCursor = previousStartCursor = default;
+            ClearCommands();
             SubmittedThrough = previousThrough = 0d;
         }
     }

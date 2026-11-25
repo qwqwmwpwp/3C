@@ -76,6 +76,7 @@ namespace ThreeC.CharacterBehavior
         private CharacterMoveGait _gait;
         private bool _dashPressed;
         private bool _guardHeld;
+        private CharacterBehaviorId pendingBehaviors;
         private AttackButtonPresses _attackPresses;
         private readonly List<CharacterInputPress> presses = new List<CharacterInputPress>();
         private bool _wasReceivingPlayerInput;
@@ -109,6 +110,15 @@ namespace ThreeC.CharacterBehavior
             return dashPressed;
         }
 
+        // 累计自定义行为的单次请求，本地持续输入采集不覆盖已提交的边沿。
+        public bool PressBehavior(CharacterBehaviorId id)
+        {
+            ulong bits = (ulong)id;
+            if (bits == 0 || (bits & (bits - 1)) != 0 || id == CharacterBehaviorId.Move || (Peek().Requests & id) != 0) return false;
+            pendingBehaviors |= id;
+            return true;
+        }
+
         public void PressAttack(AttackButton button) => _attackPresses = _attackPresses.With(button);
 
         /// <summary>写入最新方向并累计按下事件，多次写入会合并为一次待消费的冲刺请求。</summary>
@@ -130,13 +140,15 @@ namespace ThreeC.CharacterBehavior
             _guardHeld = guardHeld;
         }
 
+        // 把持续输入与尚未消费的脚本请求合成一份只读快照。
         internal CharacterInputSnapshot Peek() =>
-            new CharacterInputSnapshot(_direction, _dashPressed, _guardHeld, CharacterBehaviorId.None, _gait, _attackPresses);
+            new CharacterInputSnapshot(_direction, _dashPressed, _guardHeld, pendingBehaviors, _gait, _attackPresses);
 
         /// <summary>保留方向和持续请求，只清除已转交的按下事件。供显式写入快照的调用者消费。</summary>
         public CharacterInputSnapshot Consume()
         {
             var snapshot = Peek();
+            pendingBehaviors = default;
             _attackPresses = default;
             _dashPressed = false;
             return snapshot;
@@ -173,6 +185,7 @@ namespace ThreeC.CharacterBehavior
         /// <summary>清空全部输入，用于停用、失焦或暂停等生命周期边界。</summary>
         public void Clear()
         {
+            pendingBehaviors = default;
             _direction = Vector2.zero;
             _gait = CharacterMoveGait.Run;
             _dashPressed = false;

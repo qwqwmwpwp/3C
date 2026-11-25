@@ -3,6 +3,30 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 标记本次查询实际采用的评分来源。
+    internal enum GroundMatchScoring { None, Compatibility, Schema }
+
+    // 累计同一次特征评分各组的贡献和实际纳入评分的通道位。
+    internal struct GroundFeatureScoreBreakdown
+    {
+        internal float Feet, Body, Hands, Trajectory, Shared;
+        internal uint Channels;
+
+        // 通道只有一个有效组时归入该组，同时命中多个有效组时只计入共用项。
+        internal void Add(int index, GroundFeatureGroups groups, float contribution)
+        {
+            Channels |= 1u << index;
+            switch (groups)
+            {
+                case GroundFeatureGroups.Feet: Feet += contribution; break;
+                case GroundFeatureGroups.Body: Body += contribution; break;
+                case GroundFeatureGroups.Hands: Hands += contribution; break;
+                case GroundFeatureGroups.Trajectory: Trajectory += contribution; break;
+                default: Shared += contribution; break;
+            }
+        }
+    }
+
     // 保存诊断候选的状态、片段内时间、实际倍率和分项代价。
     internal struct CharacterMatchDebugEntry
     {
@@ -19,16 +43,25 @@ namespace ThreeC.CharacterBehavior
         public CharacterMatchDebugEntry Chosen, Continuing;
         public readonly CharacterMatchDebugEntry[] Top = new CharacterMatchDebugEntry[3];
         public int TopCount, HistoryRejected;
+        public GroundMatchScoring Scoring;
         public bool HistoryFallback;
 
         // 清空本次试算结果，重新选择时覆盖同帧第一次试算。
         internal void Reset()
         {
             Query = Reason = Choice = null;
+            Scoring = GroundMatchScoring.None;
             HistoryFallback = false;
             HistoryRejected = 0;
             UseRejected = GaitRejected = ResourceRejected = SpeedRejected = SupportRejected = WindowRejected = GroupRejected = Evaluated = TopCount = 0;
             Chosen = Continuing = default;
+        }
+
+        // 记录本轮评分采用的布局和历史范围，后续回退会覆盖先前的范围。
+        internal void StartScoring(in GroundSearchFrame frame)
+        {
+            Scoring = frame.Features.Active ? GroundMatchScoring.Schema : GroundMatchScoring.Compatibility;
+            HistoryFallback = !frame.AllowPast;
         }
 
         // 区分整条轨道的淘汰与逐采样点的入场过滤。
@@ -51,8 +84,10 @@ namespace ThreeC.CharacterBehavior
         internal void Candidate(in CharacterMatchDebugEntry entry)
         {
             Evaluated++;
+            float total = entry.Cost.Total;
+            if (float.IsNaN(total) || float.IsInfinity(total)) return;
             int i = 0;
-            while (i < TopCount && Top[i].Cost.Total <= entry.Cost.Total) i++;
+            while (i < TopCount && Top[i].Cost.Total <= total) i++;
             if (i == Top.Length) return;
             TopCount = Mathf.Min(TopCount + 1, Top.Length);
             for (int j = TopCount - 1; j > i; j--) Top[j] = Top[j - 1];

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 44657e4e192c444bba1b9c2247588623, type: 3}
+  m_Name: 地面匹配
+  m_EditorClassIdentifier:
+  motionMatching: 2
+  matchSwitchMargin: 0.12
+  matchReverseHold: 0.08
+  matchTurnAngle: 55
+  candidates: {fileID: 11400000, guid: f71b5f5e179f45e2a9501b74a39e028a, type: 2}
+  costs:
+    HistorySeconds: 0.1
+    HistoryWeight: 0.3
+    PelvisWeight: 1.5
+    NearWindow: 0.15
+    FarWindow: 0.3
+  paceLimits:
+    Walk: {x: 0.8, y: 1.2}
+    Run: {x: 0.8, y: 1.2}
+    Sprint: {x: 0.8, y: 1.2}
+    ExcessPenalty: 1

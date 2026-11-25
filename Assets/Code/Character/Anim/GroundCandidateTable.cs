@@ -9,6 +9,9 @@ namespace ThreeC.CharacterBehavior
     // 决定无匹配行或空候选组时是否放宽至同一绑定库。
     internal enum GroundRuleFallback { BoundLibrary, BehaviorRules }
 
+    // 在 Inspector 中按独立行为位编辑完整的 64 位活动许可集合。
+    internal sealed class CharacterBehaviorMaskAttribute : PropertyAttribute { }
+
     // 将一个只读上下文映射到当前播放库的一组状态和特征子集。
     [Serializable] internal sealed class GroundCandidateRule
     {
@@ -18,7 +21,8 @@ namespace ThreeC.CharacterBehavior
         public GroundTrackGait Gait;
         public GroundTrackSide Support;
         public GroundRuleGate MoveApproved, Returning;
-        public CharacterBehaviorId RequiredActive;
+        [CharacterBehaviorMask, InspectorName("要求活动的行为")] public ulong RequiredActive;
+        private CharacterBehaviorId RequiredBehaviors => (CharacterBehaviorId)RequiredActive;
         [Tooltip("勾选可用的移动阶段。")] public GroundRulePhases Phases = GroundRulePhases.All;
         public Vector2 Speed = new Vector2(0f, 100f), SignedAngle = new Vector2(-180f, 180f);
         [Tooltip("空列表使用当前绑定库内所有合法组。")] public string[] Groups;
@@ -31,7 +35,7 @@ namespace ThreeC.CharacterBehavior
             (Use == 0 || Use == query.Use) && (Gait == GroundTrackGait.Any || Gait == query.Target) &&
             (Support == GroundTrackSide.Either || Support == support) && ((int)Phases & (1 << (int)phase)) != 0 &&
             Accepts(MoveApproved, behavior.MoveApproved) && Accepts(Returning, returning) &&
-            (behavior.ActiveBehaviors & RequiredActive) == RequiredActive &&
+            (behavior.ActiveBehaviors & RequiredBehaviors) == RequiredBehaviors &&
             query.EntrySpeed >= Speed.x && query.EntrySpeed <= Speed.y && query.Angle >= SignedAngle.x && query.Angle <= SignedAngle.y;
 
         // 任意、必须、禁止三态匹配。

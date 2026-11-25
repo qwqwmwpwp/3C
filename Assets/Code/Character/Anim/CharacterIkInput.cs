@@ -62,24 +62,31 @@ namespace ThreeC.CharacterBehavior
         private long lastGrip;
         private float lastVisibleWeight;
         public void ForgetGrip() { lastGrip = 0; lastVisibleWeight = 0f; }
-        private readonly CharacterIkTuning channel;
-        private readonly CharacterIkBones bones;
+        private CharacterIkTuning channel;
+        private CharacterIkBones bones;
         private readonly Transform owner;
         private readonly Transform skeleton;
-        private readonly float walkableSlope;
+        private float walkableSlope;
         private readonly CharacterIkRequest[] requests = new CharacterIkRequest[4];
         private RaycastHit[] hits = new RaycastHit[24];
         private readonly List<string> sceneKeys = new List<string>(); // 按提供者隔离实例编号，同级保留注册顺序。
         private readonly List<CharacterIkRequest> sceneRequests = new List<CharacterIkRequest>();
         public int SceneCapacity => sceneRequests.Count;
 
+        // 安装该模型上的目标来源，初始请求为空。
         public CharacterIkInputSource(CharacterBoundIkChannel binding, Transform owner, Transform skeleton, float walkableSlope)
+        {
+            this.owner = owner;
+            this.skeleton = skeleton;
+            Rebind(binding, walkableSlope);
+        }
+
+        // 重装同一通道时更新骨链和参数，保留已登记目标及其去重编号。
+        internal void Rebind(CharacterBoundIkChannel binding, float slope)
         {
             channel = binding.Tuning;
             bones = binding.Bones;
-            this.owner = owner;
-            this.skeleton = skeleton;
-            this.walkableSlope = walkableSlope;
+            walkableSlope = slope;
         }
 
         public bool Submit(CharacterIkSource source, long instance, Transform target, int priority, string key, string provider)

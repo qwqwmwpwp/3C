@@ -16,7 +16,8 @@ namespace ThreeC.CharacterBehavior
         public bool HasStartTurn => Modules.StartTurn;
         public bool HasStop => Modules.Stop;
         public bool SamplesFeet => MatchDatabase || HasStop;
-        public CharacterMotionDatabase PlaybackLibrary, MatchDatabase;
+        public CharacterMotionDatabase PlaybackLibrary { get; }
+        public CharacterMotionDatabase MatchDatabase => Modules.Match ? PlaybackLibrary : null;
         public CharacterLightAttackSettings AttackSettings;
         // 保留普通转向使用的角度与续播窗口，安装匹配模块时可覆盖。
         public float MatchMargin = 0.12f;
@@ -71,7 +72,11 @@ namespace ThreeC.CharacterBehavior
         public float WalkableSlope = 45f;
 
         // 固定本次绑定所使用的模块组合，空组合也拥有独立装配。
-        internal CharacterAnimationConfiguration(AnimationModuleAssembly modules) => Modules = modules;
+        internal CharacterAnimationConfiguration(AnimationModuleAssembly modules, CharacterMotionDatabase library)
+        {
+            Modules = modules;
+            PlaybackLibrary = library;
+        }
 
         // 按角色运动配置解析行走与跑步的切换门槛，并提供 IK 使用的坡度上限。
         internal void BindMovement(CharacterMovementSettings movement, float walkableSlope)

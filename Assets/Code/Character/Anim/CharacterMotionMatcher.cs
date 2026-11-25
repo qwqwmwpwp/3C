@@ -18,7 +18,6 @@ namespace ThreeC.CharacterBehavior
     // 根据当前脚姿和预测轨迹搜索烘焙的地面片段，并保存续播历史。
     internal sealed class CharacterMotionMatcher
     {
-        private readonly CharacterMotionDatabase database;
         private readonly Animator animator;
         private readonly CharacterAnimationResourceCatalog resources;
         private const float CycleSearchInterval = 0.10f;
@@ -84,7 +83,7 @@ namespace ThreeC.CharacterBehavior
             search = new GroundPoseSearch(resources);
             walkLimit = Mathf.Max(0.01f, config.RunEnterSpeed);
             sprintEntry = Mathf.Max(walkLimit, config.SprintEnterSpeed);
-            database = config.MatchDatabase;
+            var database = config.MatchDatabase;
             margin = InputMath.NonNegative(config.MatchMargin, 0.12f);
             maxHold = InputMath.NonNegative(config.MatchReverseHold, 0.08f);
             if (!database || database.Format != CharacterMotionDatabase.CurrentFormat || database.BakedTracks == null) return;
@@ -118,7 +117,7 @@ namespace ThreeC.CharacterBehavior
 #if UNITY_EDITOR
             search.DebugFrame = CharacterMatchDebugCapture.Begin(animator);
 #endif
-            string issue = mode == CharacterMatchMode.Rules ? null : resources.ValidateMatchLibrary(database);
+            string issue = mode == CharacterMatchMode.Rules ? null : resources.ValidateMatchLibrary();
             if (issue != null && issue != compatibilityError) Debug.LogWarning(issue, animator);
             compatibilityError = issue;
         }
@@ -267,7 +266,6 @@ namespace ThreeC.CharacterBehavior
                     Describe(continuingQuery);
                     var continued = Frame(continuingQuery, feet, motion);
                     if (!source.IsLoop && history.EntryWithoutPast) continued = continued.WithoutHistory();
-                    search.DebugFrame.HistoryFallback = !continued.AllowPast;
                     RecordContinuing(source, current, last, continued, continuingQuery);
                     search.DebugFrame.Reason = "仍在续播窗口";
                 }
@@ -420,7 +418,11 @@ namespace ThreeC.CharacterBehavior
         private GroundSearchFrame Frame(in GroundPoseQuery query, in CharacterFootObservation feet, in CharacterAnimationMotion motion) =>
             new GroundSearchFrame(feet, motion.Trajectory.Match, tuning.Profile(query.Use), motion.ActualSpeed,
                 GroundPlaybackPace.StartSpeed(motion, resources.WalkSpeed), motion.Trajectory, resources.PlaybackClockScale,
-                Features, query.Selection.Features, true, layout?.LegacyPelvis == true);
+                Features, query.Selection.Features, true, layout?.LegacyPelvis == true
+#if UNITY_EDITOR
+                , search.DebugFrame != null
+#endif
+                );
 
         // 返回常规规则，并仅在诊断开启时保留具体原因。
         private CharacterMatchResult Fallback(string reason)
@@ -436,14 +438,14 @@ namespace ThreeC.CharacterBehavior
         private void Describe(in GroundPoseQuery query)
         {
             if (search.DebugFrame == null) return;
-            string observed = Features.Active ? $" · 本帧可用位 {Features.VisibleMask(query.Selection.Features):X}" : "";
-            search.DebugFrame.Query = $"{query.Use} · {query.From} → {query.Target} · {query.Selection.Label} · {layout?.Status ?? "兼容脚姿"}{observed}";
+            search.DebugFrame.Query = $"{query.Use} · {query.From} → {query.Target} · {query.Selection.Label} · {layout?.Status ?? "兼容脚姿"}";
         }
 
         // 只有监听角色需要为直接续播的窗口补算当前姿势代价。
         private void RecordContinuing(CharacterMotionTrack source, CharacterClipProgress current,
             in CharacterAnimationPlaybackPlan last, in GroundSearchFrame frame, in GroundPoseQuery query)
         {
+            search.DebugFrame.StartScoring(frame);
             var cost = frame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
                 out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
             cost.Entry = query.EntryPenalty(source);

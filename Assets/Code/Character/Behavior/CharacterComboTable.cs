@@ -4,10 +4,12 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 提供角色起手及接续请求查阅的招式路线与输入窗口。
     [CreateAssetMenu(menuName = "3C/角色数据/02 连招表", fileName = "02 连招表")]
     public sealed class CharacterComboTable : ScriptableObject
     {
-        [SerializeField, InspectorName("接续配置")] internal CharacterComboRoutes Routes = new CharacterComboRoutes();
+        [SerializeField, InspectorName("接续配置"), Tooltip("下一次输入按当前路线与窗口判断，已接受的预输入保留原招式与接入时刻。")]
+        internal CharacterComboRoutes Routes = new CharacterComboRoutes();
 
 #if UNITY_EDITOR
         private void OnValidate() =>

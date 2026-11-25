@@ -56,7 +56,7 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 汇总角色配置引用的持握许可曲线，检查匹配模块使用的动作库。
+        // 汇总使用当前播放库的角色动作和持握许可曲线。
         private static void AddGripNeeds(CharacterMotionDatabase db, List<Need> needs)
         {
             foreach (var profile in Profiles(db))
@@ -64,10 +64,6 @@ namespace ThreeC.CharacterBehavior
                 CharacterAnimationConfiguration config;
                 try { config = profile.BindAnimation(new CharacterModelBindings(), new CharacterProfileOverrides()); }
                 catch (ArgumentException error) { Debug.LogWarning(error.Message, profile); continue; }
-
-                var motion = config.MatchDatabase;
-                if (motion && motion != db)
-                    Debug.LogWarning($"{profile.name} 的播放库和匹配库分别为 {db.name}、{motion.name}。地面匹配需要共用同一份动作库。", profile);
 
                 foreach (var bound in config.IkChannels ?? Array.Empty<CharacterBoundIkChannel>())
                 {

@@ -10,6 +10,9 @@ namespace ThreeC.CharacterBehavior
     // 每个阶段单独选择平移和偏航规则，局部上限以模块总预算的倍率表示。
     [System.Serializable] internal sealed class VisualRootPolicy
     {
+        // 保存角色装配时本阶段的根骨跟随策略。
+        internal VisualRootPolicy Snapshot() => (VisualRootPolicy)MemberwiseClone();
+
         public VisualRootPhase Phase;
         public VisualRootMode Position = VisualRootMode.Follow, Rotation = VisualRootMode.Follow;
         [Range(0f, 1f)] public float DistanceShare = 1f, YawShare = 1f;

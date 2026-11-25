@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
@@ -11,6 +9,7 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterBehaviorAnimator owner;
         private readonly CharacterClipPlayback clips;
         private CharacterAnimationConfiguration config;
+        private AnimationBindingDefinitions definitions;
         internal CharacterAnimationPlayer Player { get; }
         internal CharacterAnimationComposer Composer { get; }
         internal CharacterAnimationIntentConverter Intent { get; }
@@ -23,17 +22,21 @@ namespace ThreeC.CharacterBehavior
 
         // 以当前行为许可初始化动作模块，物理观测由流水线单独接收。
         internal CharacterAnimationModules(Animator animator, CharacterBehaviorAnimator owner,
-            CharacterAnimationConfiguration config, CharacterBehaviorObservation seed)
+            CharacterAnimationConfiguration config, CharacterBehaviorObservation seed, int stateVersion)
         {
             this.animator = animator;
             this.owner = owner;
             this.config = config;
+            definitions = new AnimationBindingDefinitions(config);
             clips = new CharacterClipPlayback(animator, config);
             Player = new CharacterAnimationPlayer(animator, clips);
             BindGround(config);
             Intent = new CharacterAnimationIntentConverter(config);
             Composer = new CharacterAnimationComposer(Resources.Rules, Resources.HasBinding);
-            Bindings = new CharacterBehaviorAnimationBindings(config.BehaviorAnimations, Composer, Resources, owner);
+#if UNITY_EDITOR
+            Composer.Trace = owner.ActionTrace;
+#endif
+            Bindings = new CharacterBehaviorAnimationBindings(config.BehaviorAnimations, Composer, Resources, owner) { StateVersion = stateVersion };
             if (seed.FrameNumber != 0) Bindings.Observe(seed, seed: true);
             Ik = CreateIk(config);
         }
@@ -52,74 +55,37 @@ namespace ThreeC.CharacterBehavior
             Poses = new CharacterLocomotionPoseSelector(Resources, next);
         }
 
-        // 依据模块差异替换所需阶段，并交接仍有效的动作与姿态输入。
-        internal void Reconfigure(CharacterAnimationConfiguration next, CharacterBehaviorObservation seed)
+        // 在旧装配仍可用时校验新配置并固定所有受影响的绑定。
+        internal AnimationModuleChanges Prepare(CharacterAnimationConfiguration next, bool refreshContents) =>
+            new AnimationModuleChanges(config, next, definitions, refreshContents);
+
+        // 按已验证的影响范围更新资源索引、动作绑定及 IK，并保留未受影响的动作实例。
+        internal void Reconfigure(CharacterAnimationConfiguration next, AnimationModuleChanges changes, CharacterBehaviorObservation seed)
         {
-            var before = config.Modules;
-            var after = next.Modules;
-            bool gaitChanged = before.Gait != after.Gait || before.StartTurn != after.StartTurn || before.Stop != after.Stop;
-            bool groundChanged = gaitChanged || before.Match != after.Match;
-            var replaced = ChangedKeys(config.Actions, next.Actions);
-            bool mappingsChanged = !SameOrder(config.BehaviorAnimations, next.BehaviorAnimations);
-            foreach (string key in replaced) Composer.WithdrawKey(key);
-            if (groundChanged)
+            foreach (string key in changes.ActionKeys) Composer.WithdrawKey(key);
+            if (changes.GroundChanged)
             {
                 BindGround(next);
                 clips.ConfigurePaces(next);
                 Resources.RefreshBindings();
                 Poses.BindClips();
                 Composer.RebindRules(Resources);
+                Intent.Configure(next);
+                if (changes.ResetGait) Intent.ResetGait(seed.Behavior);
             }
-            else if (replaced.Count != 0 || mappingsChanged)
+            else if (changes.ActionKeys.Count != 0 || changes.MappingsChanged)
                 Resources.ReplaceActions(next, owner);
 
-            if (groundChanged)
-            {
-                Intent.Configure(next);
-                if (before.Gait != after.Gait) Intent.ResetGait(seed.Behavior);
-            }
-            Bindings.Reconfigure(next.BehaviorAnimations, Resources, seed, replaced);
-            if (groundChanged || before.VisualRoot != after.VisualRoot || before.TransitionInertia != after.TransitionInertia ||
-                config.Orientation != next.Orientation || config.PoseInertia != next.PoseInertia || config.SamplesFeet != next.SamplesFeet ||
-                !SameChannels(config.IkChannels, next.IkChannels))
+            Bindings.Reconfigure(next.BehaviorAnimations, Resources, seed, changes);
+            if (changes.IkChanged)
             {
                 var previous = Ik;
                 Ik = CreateIk(next);
                 Ik.TakeOver(previous);
             }
             Resources.Transitions = next.Transitions;
+            definitions = changes.Definitions;
             config = next;
-        }
-
-        private static HashSet<string> ChangedKeys(CharacterAnimationActionSettings[] before, CharacterAnimationActionSettings[] after)
-        {
-            var previous = new Dictionary<string, CharacterAnimationActionSettings>(StringComparer.Ordinal);
-            foreach (var action in before ?? Array.Empty<CharacterAnimationActionSettings>())
-                if (action != null && !string.IsNullOrWhiteSpace(action.Key)) previous[action.Key] = action;
-            var changed = new HashSet<string>(previous.Keys, StringComparer.Ordinal);
-            foreach (var action in after ?? Array.Empty<CharacterAnimationActionSettings>())
-            {
-                if (action == null || string.IsNullOrWhiteSpace(action.Key)) continue;
-                if (previous.TryGetValue(action.Key, out var old) && ReferenceEquals(old, action)) changed.Remove(action.Key);
-                else changed.Add(action.Key);
-            }
-            return changed;
-        }
-
-        private static bool SameOrder<T>(T[] a, T[] b) where T : class
-        {
-            if (ReferenceEquals(a, b)) return true;
-            if (a == null || b == null || a.Length != b.Length) return false;
-            for (int i = 0; i < a.Length; i++) if (!ReferenceEquals(a[i], b[i])) return false;
-            return true;
-        }
-
-        private static bool SameChannels(CharacterBoundIkChannel[] a, CharacterBoundIkChannel[] b)
-        {
-            if (ReferenceEquals(a, b)) return true;
-            if (a == null || b == null || a.Length != b.Length) return false;
-            for (int i = 0; i < a.Length; i++) if (!ReferenceEquals(a[i].Tuning, b[i].Tuning)) return false;
-            return true;
         }
     }
 }

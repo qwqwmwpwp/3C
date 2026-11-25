@@ -26,13 +26,23 @@ namespace ThreeC.CharacterBehavior
         public Vector3 Apply(Vector3 velocity, float dt) =>
             Vector3.MoveTowards(velocity, Vector3.zero, SpeedReduction(dt, LeadInSeconds));
 
-        // 分段积分轻制动和主制动在指定时长内的世界位移。
-        public Vector3 Travel(Vector3 velocity, float horizon)
+        // 按固定步提交的末速度累计世界位移，窗口落在步内时按该步速度截取。
+        public Vector3 Travel(Vector3 velocity, float horizon, float dt)
         {
-            float lead = Mathf.Min(LeadInSeconds, horizon);
-            Vector3 first = CharacterGroundPrediction.PredictTravel(velocity, Vector3.zero, leadInDeceleration, lead);
-            return first + CharacterGroundPrediction.PredictTravel(Apply(velocity, lead), Vector3.zero,
-                mainDeceleration, horizon - lead);
+            float initialSpeed = velocity.magnitude;
+            if (initialSpeed <= 0f || horizon <= 0f || dt <= 0f) return Vector3.zero;
+            double speed = initialSpeed;
+            double wholeSteps = Math.Floor((double)horizon / dt);
+            double travel = IntegrateSteps(ref speed, dt, wholeSteps, out _);
+            double elapsed = wholeSteps * dt;
+            double remainder = horizon - elapsed;
+            if (remainder > 0d && speed > 0d)
+            {
+                float nextLead = (float)Math.Max(0d, LeadInSeconds - elapsed);
+                double nextSpeed = Math.Max(0d, speed - SpeedReduction(dt, nextLead));
+                travel += nextSpeed * remainder;
+            }
+            return velocity * (float)(travel / initialSpeed);
         }
 
         // 扣除已执行的轻制动时间，受阻或静止时直接进入主制动。
@@ -62,23 +72,30 @@ namespace ThreeC.CharacterBehavior
         public void PredictStop(Vector3 velocity, float dt, out float distance, out float seconds)
         {
             double speed = velocity.magnitude;
+            double travel = IntegrateSteps(ref speed, dt, double.PositiveInfinity, out double steps);
+            float flatRatio = velocity.sqrMagnitude > 0f
+                ? Vector3.ProjectOnPlane(velocity, Vector3.up).magnitude / velocity.magnitude : 0f;
+            distance = (float)(travel * flatRatio);
+            seconds = (float)(steps * dt);
+        }
+
+        // 累计给定数量的完整物理步或提前停稳，返回沿速度方向的距离、段末速度与步数。
+        private double IntegrateSteps(ref double speed, float dt, double maximumSteps, out double steps)
+        {
             double travel = 0d;
-            double steps = 0d;
+            steps = 0d;
             // 匀减速的连续整步直接按等差数列求和，中间最多只有一个跨阶段的步。
             double leadSteps = Math.Floor((double)LeadInSeconds / dt);
             double leadRemainder = LeadInSeconds - leadSteps * dt;
-            AccumulateSteps(ref speed, dt, leadInDeceleration, leadSteps, ref travel, ref steps);
-            if (speed > 0d && leadRemainder > dt * 0.00001d)
+            AccumulateSteps(ref speed, dt, leadInDeceleration, Math.Min(leadSteps, maximumSteps), ref travel, ref steps);
+            if (speed > 0d && steps < maximumSteps && leadRemainder > dt * 0.00001d)
             {
                 speed = Math.Max(0d, speed - SpeedReduction(dt, (float)leadRemainder));
                 travel += speed * dt;
                 steps++;
             }
-            AccumulateSteps(ref speed, dt, mainDeceleration, double.PositiveInfinity, ref travel, ref steps);
-            float flatRatio = velocity.sqrMagnitude > 0f
-                ? Vector3.ProjectOnPlane(velocity, Vector3.up).magnitude / velocity.magnitude : 0f;
-            distance = (float)(travel * flatRatio);
-            seconds = (float)(steps * dt);
+            AccumulateSteps(ref speed, dt, mainDeceleration, maximumSteps - steps, ref travel, ref steps);
+            return travel;
         }
 
         // 按等差数列累加同一减速度下的完整物理步。

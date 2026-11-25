@@ -9,6 +9,9 @@ namespace ThreeC.CharacterBehavior
     [Serializable]
     public class CharacterIkTuning
     {
+        // 固定当前角色安装此通道时的求解与许可参数。
+        internal CharacterIkTuning Snapshot() => (CharacterIkTuning)MemberwiseClone();
+
         [InspectorName("部位")] public CharacterIkLimb Limb;
         [InspectorName("许可曲线"), Tooltip("素材许可曲线名称。零参数播放从烘焙素材曲线读取，缺失时权重为零。")]
         public string WeightCurve;
@@ -27,9 +30,13 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("目标切换秒数"), Min(0f)] public float BlendSeconds = 0.12f;
     }
 
+    // 定义胸臂在制动和收步时的惯性响应。
     [Serializable]
     public class CharacterInertiaTuning
     {
+        // 固定本角色安装时的胸臂惯性参数。
+        internal CharacterInertiaTuning Snapshot() => (CharacterInertiaTuning)MemberwiseClone();
+
         [InspectorName("惯性强度"), Range(0f, 1f)] public float Strength;
         [InspectorName("胸部响应时间（秒）"), Min(0.01f)] public float ChestResponseSeconds = 0.18f;
         [InspectorName("手臂响应时间（秒）"), Min(0.01f)] public float ArmResponseSeconds = 0.24f;
@@ -93,14 +100,17 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("默认场景目标")] public Transform SceneTarget;
     }
 
+    // 保存通道来源、安装时的参数和当前模型骨链。
     internal readonly struct CharacterBoundIkChannel
     {
-        public readonly CharacterIkTuning Tuning;
+        public readonly CharacterIkTuning Source, Tuning;
         public readonly CharacterIkBones Bones;
 
+        // 用原定义标识可接管的请求，求解使用独立参数快照。
         public CharacterBoundIkChannel(CharacterIkTuning tuning, CharacterIkBones bones)
         {
-            Tuning = tuning;
+            Source = tuning;
+            Tuning = tuning?.Snapshot();
             Bones = bones;
         }
     }

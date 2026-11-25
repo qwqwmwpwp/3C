@@ -20,6 +20,8 @@ namespace ThreeC.FollowCamera
 
         private Transform trackedTarget;
         private CameraRenderPositionSource renderSource;
+        private ICameraTargetContinuity continuity;
+        private int observedCut;
         private int targetVersion;
         private int cutVersion;
         private bool hasRawPosition;
@@ -82,6 +84,7 @@ namespace ThreeC.FollowCamera
             hasFixedSample = true;
         }
 
+        // 读取目标实际位置，在显式位置边界或距离跳变时撤销旧插值。
         private bool TryReadRawPosition(out Vector3 position)
         {
             position = default;
@@ -97,6 +100,13 @@ namespace ThreeC.FollowCamera
                 ClearTarget();
                 trackedTarget = target;
                 renderSource = target.GetComponent<CameraRenderPositionSource>();
+                continuity = target.GetComponent<ICameraTargetContinuity>();
+                observedCut = continuity?.CameraCutVersion ?? 0;
+            }
+            else if (continuity is Object source && source && observedCut != continuity.CameraCutVersion)
+            {
+                observedCut = continuity.CameraCutVersion;
+                ClearHistory();
             }
 
             position = trackedTarget.position;
@@ -111,10 +121,12 @@ namespace ThreeC.FollowCamera
 
         private void OnDisable() => ClearTarget();
 
+        // 解除目标连续性来源，并清理切换前的跟随历史。
         private void ClearTarget()
         {
             trackedTarget = null;
             renderSource = null;
+            continuity = null;
             targetVersion++;
             ClearHistory();
         }

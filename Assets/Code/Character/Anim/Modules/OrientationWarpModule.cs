@@ -7,6 +7,9 @@ namespace ThreeC.CharacterBehavior
     [Serializable]
     internal sealed class OrientationWarpTuning
     {
+        // 固定本次安装的方向响应与骨骼补偿参数。
+        internal OrientationWarpTuning Snapshot() => (OrientationWarpTuning)MemberwiseClone();
+
         [InspectorName("最大校正角（度）"), Range(0f, 45f)] public float MaxAngle = 25f;
         [InspectorName("方向死区（度）"), Range(0f, 15f)] public float DeadZone = 3f;
         [InspectorName("响应时间（秒）"), Min(0.01f)] public float ResponseSeconds = 0.12f;

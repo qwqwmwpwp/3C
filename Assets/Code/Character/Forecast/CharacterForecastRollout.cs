@@ -45,7 +45,7 @@ namespace ThreeC.CharacterBehavior
                 simulation.Alignment.Observe(slices, stepStart, motion.Position, motion.Facing, motion.Contacts);
                 var sample = motion.Sample(behavior, frame.Held.Gait, end < frame.ControlReturnsAt);
                 output.Append(sample);
-                if (end >= frame.ControlReturnsAt && motion.AtRest(frame.Held, behavior))
+                if (simulation.AllowsStationaryForecast && end >= frame.ControlReturnsAt && motion.AtRest(frame.Held, behavior))
                 {
                     for (int j = i + 1; j < window.Steps; j++) output.Append(sample);
                     break;
@@ -63,25 +63,33 @@ namespace ThreeC.CharacterBehavior
             while (time < end)
             {
                 bool forced = time < frame.ControlReturnsAt;
-                var input = forced ? default : frame.Held;
-                double next = flow.NextBoundary(time, forced ? Math.Min(end, frame.ControlReturnsAt) : end);
-                var command = forced ? default : flow.PublishMotion(time, behavior, input, facing, groundVelocity, frame.Movement, origin);
+                if (forced)
+                {
+                    double returns = Math.Min(end, frame.ControlReturnsAt);
+                    slices.Add(new CharacterMotionSlice(time, returns, default, default));
+                    flow.AdvanceExternal(returns - time);
+                    time = returns;
+                    if (time >= frame.ControlReturnsAt)
+                        behavior = flow.AdvanceTimeline(frame.Held, facing, 0f, frame.Movement, groundVelocity);
+                    continue;
+                }
+                var input = frame.Held;
+                double next = flow.NextBoundary(time, end);
+                var command = flow.PublishMotion(time, behavior, input, facing, groundVelocity, frame.Movement, origin);
                 float seconds = (float)(next - time);
                 var advanced = flow.AdvanceTimeline(input, facing, seconds, frame.Movement, groundVelocity);
-                if (!forced && flow.HasCustomMotion(advanced))
-                    command = new CharacterMotionCommand(time, next, advanced, input);
+                if (flow.HasCustomMotion(advanced)) command = new CharacterMotionCommand(time, next, advanced, input);
                 double cursor = time;
                 while (cursor < next)
                 {
-                    var slice = forced ? new CharacterMotionSlice(cursor, next, default, default)
-                        : command.SampleNext(cursor, next);
+                    var slice = command.SampleNext(cursor, next);
                     slices.Add(slice);
                     if (flow.Alignment.HasTarget) origin.Advance(slice, frame.Drive.TurnSpeed);
                     cursor = slice.End;
                 }
                 time = next;
                 // 已到接续窗口或控制归还的同一时刻，先落地新实例和费用再捕获下一命令。
-                behavior = flow.AdvanceTimeline(time < frame.ControlReturnsAt ? default : frame.Held,
+                behavior = flow.AdvanceTimeline(frame.Held,
                     facing, 0f, frame.Movement, groundVelocity);
             }
         }
@@ -139,11 +147,7 @@ namespace ThreeC.CharacterBehavior
                     float dt = (float)(slice.End - slice.Start);
                     if (slice.Start < frame.ControlReturnsAt)
                     {
-                        if (ground.y > 0f)
-                        {
-                            Vector3 planar = Vector3.ProjectOnPlane(velocity, ground);
-                            velocity += Vector3.MoveTowards(planar, Vector3.zero, frame.ForcedBraking * dt) - planar;
-                        }
+                        CharacterMotorStep.AdvanceKnockback(ref velocity, ground, frame.ForcedBraking, dt);
                         motor = default;
                     }
                     else

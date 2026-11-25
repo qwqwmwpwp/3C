@@ -76,10 +76,10 @@ namespace ThreeC.CharacterBehavior
         private CharacterTransitionSignal edge;
 
         // 建立独立于胸臂减速逻辑的人形骨骼集合；骨盆整体移动与偏航留给视觉根。
-        internal static CharacterTransitionBone[] Bind(Animator animator, TransitionInertiaModule tuning,
+        internal static CharacterTransitionBone[] Bind(Animator animator, CharacterTransitionProfiles tuning,
             HashSet<Transform> bound)
         {
-            if (!tuning || !animator.isHuman) return Array.Empty<CharacterTransitionBone>();
+            if (tuning == null || !animator.isHuman) return Array.Empty<CharacterTransitionBone>();
             var bones = new List<CharacterTransitionBone>();
             Add(TransitionRegions.Body, HumanBodyBones.Spine, HumanBodyBones.Chest,
                 HumanBodyBones.UpperChest, HumanBodyBones.Neck, HumanBodyBones.Head);
@@ -90,17 +90,14 @@ namespace ThreeC.CharacterBehavior
             Add(TransitionRegions.LeftLeg, HumanBodyBones.LeftUpperLeg, HumanBodyBones.LeftLowerLeg, HumanBodyBones.LeftFoot);
             Add(TransitionRegions.RightLeg, HumanBodyBones.RightUpperLeg, HumanBodyBones.RightLowerLeg, HumanBodyBones.RightFoot);
             // 按策略显式要求可补充默认精简集合之外的人形骨，骨盆仍留给视觉根。
-            if (tuning.Profiles != null)
-                foreach (var profile in tuning.Profiles)
-                    if (profile?.Bones != null)
-                        foreach (var name in profile.Bones)
-                        {
-                            if ((int)name < 0 || name >= HumanBodyBones.LastBone || name == HumanBodyBones.Hips) continue;
-                            var target = animator.GetBoneTransform(name);
-                            if (!target || bound.Contains(target)) continue;
-                            var region = RegionOf(animator, target);
-                            Add(region, name);
-                        }
+            foreach (var name in tuning.AdditionalBones())
+            {
+                if ((int)name < 0 || name >= HumanBodyBones.LastBone || name == HumanBodyBones.Hips) continue;
+                var target = animator.GetBoneTransform(name);
+                if (!target || bound.Contains(target)) continue;
+                var region = RegionOf(animator, target);
+                Add(region, name);
+            }
             return bones.ToArray();
 
             // 为启用区域保存独有句柄，并标记共享骨上的旧交接已被替代。

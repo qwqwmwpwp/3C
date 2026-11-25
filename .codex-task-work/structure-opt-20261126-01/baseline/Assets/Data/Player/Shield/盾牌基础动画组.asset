@@ -1,0 +1,2855 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26ed6494d5154152ad6e2151831258ef, type: 3}
+  m_Name: 盾牌基础动画组
+  m_EditorClassIdentifier:
+  Schema: {fileID: 11400000, guid: 04796e8c8bb74eeabc8f655623e95f86, type: 2}
+  Layers:
+  - Mask: {fileID: 31900000, guid: 0da4119d6955e5f488cf931257435553, type: 2}
+    Additive: 0
+    Weight: 0
+    DefaultState: Lower Body.idle
+  - Mask: {fileID: 31900000, guid: 8f4bf6e2231166d48a49f4f53dec9997, type: 2}
+    Additive: 0
+    Weight: 0
+    DefaultState: Upper Body.idle
+  Bindings:
+  - Path: Lower Body.idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.dash
+    Clip: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.locomotion_turn_left
+    Clip: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Layer: 0
+    Speed: 1.5
+  - Path: Lower Body.locomotion_turn_right
+    Clip: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Layer: 0
+    Speed: 1.5
+  - Path: Lower Body.Local.idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Local.move
+    Clip: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Local.walk
+    Clip: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Local.dash
+    Clip: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Upper Body.idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 1
+    Speed: 1
+  - Path: Upper Body.move
+    Clip: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Layer: 1
+    Speed: 1
+  - Path: Upper Body.walk
+    Clip: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Layer: 1
+    Speed: 1
+  - Path: Upper Body.dash
+    Clip: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Layer: 1
+    Speed: 1
+  - Path: Upper Body.shield_raise
+    Clip: {fileID: 740381002100001, guid: 7739bed5bb55d074cbf73297d850ce47, type: 3}
+    Layer: 1
+    Speed: 1
+  - Path: Lower Body.light_attack
+    Clip: {fileID: -7391068719408809722, guid: f935b9f1d197ae64fa23d312530efa23, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.light_attack_2
+    Clip: {fileID: -4705555360703855209, guid: 0c17a750330e6e04c9685ac96f8e0351, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.heavy_attack
+    Clip: {fileID: -5630466525676994369, guid: 28c7be177e10c4c4cafe6fa3949cb723, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Actions.idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Actions.light_attack
+    Clip: {fileID: -7391068719408809722, guid: f935b9f1d197ae64fa23d312530efa23, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Actions.light_attack_2
+    Clip: {fileID: -4705555360703855209, guid: 0c17a750330e6e04c9685ac96f8e0351, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Actions.skill_2
+    Clip: {fileID: 5355005919754498082, guid: a09590c5da341a34aa5bf7a1bebe3175, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Lower Body.Actions.heavy_attack
+    Clip: {fileID: -5630466525676994369, guid: 28c7be177e10c4c4cafe6fa3949cb723, type: 3}
+    Layer: 0
+    Speed: 1
+  Groups:
+  - Name: 跑步循环
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0
+      States:
+      - Lower Body.move
+      Use: 1
+      Gait: 2
+      Side: 0
+      Loop: 1
+      Blend: 0.08
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.66666667
+      Seconds: 0.66666667
+  - Name: 步行循环
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0
+      States:
+      - Lower Body.walk
+      Use: 1
+      Gait: 1
+      Side: 0
+      Loop: 1
+      Blend: 0.08
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 1.1333333
+      Seconds: 1.1333333
+  - Name: 跑步收步
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Weights: {x: 0, y: 0.65, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_stop_left
+      Use: 4
+      Gait: 2
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0.16
+      LastEntrySeconds: 0.09
+      Seconds: 0.43333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_stop_right
+      Use: 4
+      Gait: 2
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0.16
+      LastEntrySeconds: 0.09
+      Seconds: 0.43333333
+  - Name: 冲刺循环
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint
+      Use: 1
+      Gait: 3
+      Side: 0
+      Loop: 1
+      Blend: 0.08
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.6
+      Seconds: 0.6
+  - Name: 步行收步
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Weights: {x: 0, y: 0.65, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_stop_left
+      Use: 4
+      Gait: 1
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0.115
+      LastEntrySeconds: 0.065
+      Seconds: 0.36666667
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_stop_right
+      Use: 4
+      Gait: 1
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0.115
+      LastEntrySeconds: 0.065
+      Seconds: 0.36666667
+  - Name: 冲刺收步
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Weights: {x: 0, y: 0.65, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_stop_left
+      Use: 4
+      Gait: 3
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0.16
+      LastEntrySeconds: 0.065
+      Seconds: 0.5
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_stop_right
+      Use: 4
+      Gait: 3
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0.16
+      LastEntrySeconds: 0.065
+      Seconds: 0.5
+  - Name: 跑步左转90度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.833333333
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_turn_left_l
+      Use: 3
+      TurnDegrees: 90
+      Gait: 2
+      Side: 1
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 2.5
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.58
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.08
+        Position: {x: -0.12, y: 0.28}
+        Yaw: -32
+      - Seconds: 0.16
+        Position: {x: -0.42, y: 0.42}
+        Yaw: -68
+      - Seconds: 0.24
+        Position: {x: -0.8, y: 0.46}
+        Yaw: -88
+      - Seconds: 0.4
+        Position: {x: -1.59, y: 0.47}
+        Yaw: -90
+      - Seconds: 0.8
+        Position: {x: -3.58, y: 0.47}
+        Yaw: -90
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.12
+      Seconds: 0.8
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_turn_left_r
+      Use: 3
+      TurnDegrees: 90
+      Gait: 2
+      Side: 1
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 2.5
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.58
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.08
+        Position: {x: -0.12, y: 0.28}
+        Yaw: -32
+      - Seconds: 0.16
+        Position: {x: -0.42, y: 0.42}
+        Yaw: -68
+      - Seconds: 0.24
+        Position: {x: -0.8, y: 0.46}
+        Yaw: -88
+      - Seconds: 0.4
+        Position: {x: -1.59, y: 0.47}
+        Yaw: -90
+      - Seconds: 0.8
+        Position: {x: -3.58, y: 0.47}
+        Yaw: -90
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.12
+      Seconds: 0.8
+  - Name: 跑步右转90度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.833333333
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_turn_right_l
+      Use: 3
+      TurnDegrees: 90
+      Gait: 2
+      Side: 2
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 2.5
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.58
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.08
+        Position: {x: 0.12, y: 0.28}
+        Yaw: 32
+      - Seconds: 0.16
+        Position: {x: 0.42, y: 0.42}
+        Yaw: 68
+      - Seconds: 0.24
+        Position: {x: 0.8, y: 0.46}
+        Yaw: 88
+      - Seconds: 0.4
+        Position: {x: 1.59, y: 0.47}
+        Yaw: 90
+      - Seconds: 0.8
+        Position: {x: 3.58, y: 0.47}
+        Yaw: 90
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.12
+      Seconds: 0.8
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_turn_right_r
+      Use: 3
+      TurnDegrees: 90
+      Gait: 2
+      Side: 2
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 2.5
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.58
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.08
+        Position: {x: 0.12, y: 0.28}
+        Yaw: 32
+      - Seconds: 0.16
+        Position: {x: 0.42, y: 0.42}
+        Yaw: 68
+      - Seconds: 0.24
+        Position: {x: 0.8, y: 0.46}
+        Yaw: 88
+      - Seconds: 0.4
+        Position: {x: 1.59, y: 0.47}
+        Yaw: 90
+      - Seconds: 0.8
+        Position: {x: 3.58, y: 0.47}
+        Yaw: 90
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.12
+      Seconds: 0.8
+  - Name: 步行起步
+    First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Second: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Weights: {x: 0, y: 0.58, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.470588235
+      States:
+      - Lower Body.locomotion_walk_start
+      Use: 2
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.0028220227}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.018929191}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.056760524}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.11934541}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.20430363}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 0.30384529}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 0.40714922}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 0.51048255}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 0.56214922}
+        Yaw: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.970588235
+      States:
+      - Lower Body.walk_start_r
+      Use: 2
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.0028220227}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.018929191}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.056760524}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.11934541}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.20430363}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 0.30384529}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 0.40714922}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 0.51048255}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 0.56214922}
+        Yaw: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+  - Name: 步行左转90度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot90_left_l
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00019286757, y: 0.10079349}
+        Yaw: -0.44597918
+      - Seconds: 0.13333333
+        Position: {x: -0.0046947395, y: 0.18879825}
+        Yaw: -6.3517383
+      - Seconds: 0.2
+        Position: {x: -0.017964808, y: 0.25426064}
+        Yaw: -17.614071
+      - Seconds: 0.26666667
+        Position: {x: -0.035956316, y: 0.29401376}
+        Yaw: -32.309613
+      - Seconds: 0.33333333
+        Position: {x: -0.05261474, y: 0.31395443}
+        Yaw: -48.514996
+      - Seconds: 0.4
+        Position: {x: -0.068801464, y: 0.32466946}
+        Yaw: -64.306856
+      - Seconds: 0.46666667
+        Position: {x: -0.093483551, y: 0.33285252}
+        Yaw: -77.761826
+      - Seconds: 0.53333333
+        Position: {x: -0.13684395, y: 0.3381987}
+        Yaw: -86.956541
+      - Seconds: 0.6
+        Position: {x: -0.20370154, y: 0.33938441}
+        Yaw: -90
+      - Seconds: 0.66666667
+        Position: {x: -0.29185055, y: 0.33938441}
+        Yaw: -90
+      - Seconds: 0.73333333
+        Position: {x: -0.39264442, y: 0.33938441}
+        Yaw: -90
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot90_left_r
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00019286757, y: 0.10079349}
+        Yaw: -0.44597918
+      - Seconds: 0.13333333
+        Position: {x: -0.0046947395, y: 0.18879825}
+        Yaw: -6.3517383
+      - Seconds: 0.2
+        Position: {x: -0.017964808, y: 0.25426064}
+        Yaw: -17.614071
+      - Seconds: 0.26666667
+        Position: {x: -0.035956316, y: 0.29401376}
+        Yaw: -32.309613
+      - Seconds: 0.33333333
+        Position: {x: -0.05261474, y: 0.31395443}
+        Yaw: -48.514996
+      - Seconds: 0.4
+        Position: {x: -0.068801464, y: 0.32466946}
+        Yaw: -64.306856
+      - Seconds: 0.46666667
+        Position: {x: -0.093483551, y: 0.33285252}
+        Yaw: -77.761826
+      - Seconds: 0.53333333
+        Position: {x: -0.13684395, y: 0.3381987}
+        Yaw: -86.956541
+      - Seconds: 0.6
+        Position: {x: -0.20370154, y: 0.33938441}
+        Yaw: -90
+      - Seconds: 0.66666667
+        Position: {x: -0.29185055, y: 0.33938441}
+        Yaw: -90
+      - Seconds: 0.73333333
+        Position: {x: -0.39264442, y: 0.33938441}
+        Yaw: -90
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 步行右转90度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot90_right_l
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00019286757, y: 0.10079349}
+        Yaw: 0.44597918
+      - Seconds: 0.13333333
+        Position: {x: 0.0046947395, y: 0.18879825}
+        Yaw: 6.3517383
+      - Seconds: 0.2
+        Position: {x: 0.017964808, y: 0.25426064}
+        Yaw: 17.614071
+      - Seconds: 0.26666667
+        Position: {x: 0.035956316, y: 0.29401376}
+        Yaw: 32.309613
+      - Seconds: 0.33333333
+        Position: {x: 0.05261474, y: 0.31395443}
+        Yaw: 48.514996
+      - Seconds: 0.4
+        Position: {x: 0.068801464, y: 0.32466946}
+        Yaw: 64.306856
+      - Seconds: 0.46666667
+        Position: {x: 0.093483551, y: 0.33285252}
+        Yaw: 77.761826
+      - Seconds: 0.53333333
+        Position: {x: 0.13684395, y: 0.3381987}
+        Yaw: 86.956541
+      - Seconds: 0.6
+        Position: {x: 0.20370154, y: 0.33938441}
+        Yaw: 90
+      - Seconds: 0.66666667
+        Position: {x: 0.29185055, y: 0.33938441}
+        Yaw: 90
+      - Seconds: 0.73333333
+        Position: {x: 0.39264442, y: 0.33938441}
+        Yaw: 90
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot90_right_r
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00019286757, y: 0.10079349}
+        Yaw: 0.44597918
+      - Seconds: 0.13333333
+        Position: {x: 0.0046947395, y: 0.18879825}
+        Yaw: 6.3517383
+      - Seconds: 0.2
+        Position: {x: 0.017964808, y: 0.25426064}
+        Yaw: 17.614071
+      - Seconds: 0.26666667
+        Position: {x: 0.035956316, y: 0.29401376}
+        Yaw: 32.309613
+      - Seconds: 0.33333333
+        Position: {x: 0.05261474, y: 0.31395443}
+        Yaw: 48.514996
+      - Seconds: 0.4
+        Position: {x: 0.068801464, y: 0.32466946}
+        Yaw: 64.306856
+      - Seconds: 0.46666667
+        Position: {x: 0.093483551, y: 0.33285252}
+        Yaw: 77.761826
+      - Seconds: 0.53333333
+        Position: {x: 0.13684395, y: 0.3381987}
+        Yaw: 86.956541
+      - Seconds: 0.6
+        Position: {x: 0.20370154, y: 0.33938441}
+        Yaw: 90
+      - Seconds: 0.66666667
+        Position: {x: 0.29185055, y: 0.33938441}
+        Yaw: 90
+      - Seconds: 0.73333333
+        Position: {x: 0.39264442, y: 0.33938441}
+        Yaw: 90
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 步行左转180度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot180_left_l
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00038573222, y: 0.10079237}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.009368632, y: 0.18836514}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.035284938, y: 0.24966561}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.067865918, y: 0.27829123}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.09324536, y: 0.28288253}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.11098762, y: 0.27535367}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.12644211, y: 0.25460617}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.13702822, y: 0.21232645}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.13939861, y: 0.14551793}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.13939861, y: 0.057368917}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.13939861, y: -0.043424953}
+        Yaw: -180
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot180_left_r
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00038573222, y: 0.10079237}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.009368632, y: 0.18836514}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.035284938, y: 0.24966561}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.067865918, y: 0.27829123}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.09324536, y: 0.28288253}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.11098762, y: 0.27535367}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.12644211, y: 0.25460617}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.13702822, y: 0.21232645}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.13939861, y: 0.14551793}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.13939861, y: 0.057368917}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.13939861, y: -0.043424953}
+        Yaw: -180
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 步行右转180度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot180_right_l
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00038573222, y: 0.10079237}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.009368632, y: 0.18836514}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.035284938, y: 0.24966561}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.067865918, y: 0.27829123}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.09324536, y: 0.28288253}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.11098762, y: 0.27535367}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.12644211, y: 0.25460617}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.13702822, y: 0.21232645}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.13939861, y: 0.14551793}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.13939861, y: 0.057368917}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.13939861, y: -0.043424953}
+        Yaw: 180
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_pivot180_right_r
+      Use: 3
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00038573222, y: 0.10079237}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.009368632, y: 0.18836514}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.035284938, y: 0.24966561}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.067865918, y: 0.27829123}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.09324536, y: 0.28288253}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.11098762, y: 0.27535367}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.12644211, y: 0.25460617}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.13702822, y: 0.21232645}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.13939861, y: 0.14551793}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.13939861, y: 0.057368917}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.13939861, y: -0.043424953}
+        Yaw: 180
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 步行左转32度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 0.588235311
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_arc_left
+      Use: 1
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 1
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: -0
+      - Seconds: 0.066666667
+        Position: {x: -0.0016972847, y: 0.10331591}
+        Yaw: -1.8823529
+      - Seconds: 0.13333333
+        Position: {x: -0.0067873069, y: 0.20652031}
+        Yaw: -3.7647059
+      - Seconds: 0.2
+        Position: {x: -0.015264573, y: 0.30950183}
+        Yaw: -5.6470588
+      - Seconds: 0.26666667
+        Position: {x: -0.027119935, y: 0.41214933}
+        Yaw: -7.5294118
+      - Seconds: 0.33333333
+        Position: {x: -0.042340597, y: 0.51435201}
+        Yaw: -9.4117647
+      - Seconds: 0.4
+        Position: {x: -0.060910133, y: 0.61599959}
+        Yaw: -11.294118
+      - Seconds: 0.46666667
+        Position: {x: -0.082808501, y: 0.71698235}
+        Yaw: -13.176471
+      - Seconds: 0.53333333
+        Position: {x: -0.10801207, y: 0.81719132}
+        Yaw: -15.058824
+      - Seconds: 0.6
+        Position: {x: -0.13649363, y: 0.91651835}
+        Yaw: -16.941176
+      - Seconds: 0.66666667
+        Position: {x: -0.16822246, y: 1.0148562}
+        Yaw: -18.823529
+      - Seconds: 0.73333333
+        Position: {x: -0.2031643, y: 1.1120988}
+        Yaw: -20.705882
+      - Seconds: 0.8
+        Position: {x: -0.24128145, y: 1.2081412}
+        Yaw: -22.588235
+      - Seconds: 0.86666667
+        Position: {x: -0.28253277, y: 1.3028797}
+        Yaw: -24.470588
+      - Seconds: 0.93333333
+        Position: {x: -0.32687374, y: 1.3962121}
+        Yaw: -26.352941
+      - Seconds: 1
+        Position: {x: -0.3742565, y: 1.4880377}
+        Yaw: -28.235294
+      - Seconds: 1.0666667
+        Position: {x: -0.42462992, y: 1.5782573}
+        Yaw: -30.117647
+      - Seconds: 1.1333333
+        Position: {x: -0.47793963, y: 1.6667736}
+        Yaw: -32
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 1.1333333
+      Seconds: 1.1333333
+  - Name: 步行右转32度
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 0.588235311
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0
+      States:
+      - Lower Body.walk_arc_right
+      Use: 1
+      Gait: 1
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 2
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0016972847, y: 0.10331591}
+        Yaw: 1.8823529
+      - Seconds: 0.13333333
+        Position: {x: 0.0067873069, y: 0.20652031}
+        Yaw: 3.7647059
+      - Seconds: 0.2
+        Position: {x: 0.015264573, y: 0.30950183}
+        Yaw: 5.6470588
+      - Seconds: 0.26666667
+        Position: {x: 0.027119935, y: 0.41214933}
+        Yaw: 7.5294118
+      - Seconds: 0.33333333
+        Position: {x: 0.042340597, y: 0.51435201}
+        Yaw: 9.4117647
+      - Seconds: 0.4
+        Position: {x: 0.060910133, y: 0.61599959}
+        Yaw: 11.294118
+      - Seconds: 0.46666667
+        Position: {x: 0.082808501, y: 0.71698235}
+        Yaw: 13.176471
+      - Seconds: 0.53333333
+        Position: {x: 0.10801207, y: 0.81719132}
+        Yaw: 15.058824
+      - Seconds: 0.6
+        Position: {x: 0.13649363, y: 0.91651835}
+        Yaw: 16.941176
+      - Seconds: 0.66666667
+        Position: {x: 0.16822246, y: 1.0148562}
+        Yaw: 18.823529
+      - Seconds: 0.73333333
+        Position: {x: 0.2031643, y: 1.1120988}
+        Yaw: 20.705882
+      - Seconds: 0.8
+        Position: {x: 0.24128145, y: 1.2081412}
+        Yaw: 22.588235
+      - Seconds: 0.86666667
+        Position: {x: 0.28253277, y: 1.3028797}
+        Yaw: 24.470588
+      - Seconds: 0.93333333
+        Position: {x: 0.32687374, y: 1.3962121}
+        Yaw: 26.352941
+      - Seconds: 1
+        Position: {x: 0.3742565, y: 1.4880377}
+        Yaw: 28.235294
+      - Seconds: 1.0666667
+        Position: {x: 0.42462992, y: 1.5782573}
+        Yaw: 30.117647
+      - Seconds: 1.1333333
+        Position: {x: 0.47793963, y: 1.6667736}
+        Yaw: 32
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 1.1333333
+      Seconds: 1.1333333
+  - Name: 跑步起步
+    First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Weights: {x: 0, y: 0.58, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.05
+      States:
+      - Lower Body.locomotion_run_start
+      Use: 2
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.0090668859}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.060817658}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.18236607}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.38344527}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.65640778}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 0.97622552}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.308131}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.640131}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 1.806131}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.5
+      States:
+      - Lower Body.run_start_r
+      Use: 2
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.0090668859}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.060817658}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.18236607}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.38344527}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.65640778}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 0.97622552}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.308131}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.640131}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 1.806131}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+  - Name: 跑步左转180度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_pivot180_left_l
+      Use: 3
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.0012393203, y: 0.32383613}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.030100508, y: 0.60519896}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.11336709, y: 0.80215144}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.21804663, y: 0.8941228}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.29958832, y: 0.90887419}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.35659248, y: 0.8846847}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.40624626, y: 0.818025}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.44025839, y: 0.68218433}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.44787424, y: 0.46753503}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.44787424, y: 0.18432078}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.44787424, y: -0.13952017}
+        Yaw: -180
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_pivot180_left_r
+      Use: 3
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.0012393203, y: 0.32383613}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.030100508, y: 0.60519896}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.11336709, y: 0.80215144}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.21804663, y: 0.8941228}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.29958832, y: 0.90887419}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.35659248, y: 0.8846847}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.40624626, y: 0.818025}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.44025839, y: 0.68218433}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.44787424, y: 0.46753503}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.44787424, y: 0.18432078}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.44787424, y: -0.13952017}
+        Yaw: -180
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 跑步右转180度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_pivot180_right_l
+      Use: 3
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0012393203, y: 0.32383613}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.030100508, y: 0.60519896}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.11336709, y: 0.80215144}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.21804663, y: 0.8941228}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.29958832, y: 0.90887419}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.35659248, y: 0.8846847}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.40624626, y: 0.818025}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.44025839, y: 0.68218433}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.44787424, y: 0.46753503}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.44787424, y: 0.18432078}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.44787424, y: -0.13952017}
+        Yaw: 180
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_pivot180_right_r
+      Use: 3
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0012393203, y: 0.32383613}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.030100508, y: 0.60519896}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.11336709, y: 0.80215144}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.21804663, y: 0.8941228}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.29958832, y: 0.90887419}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.35659248, y: 0.8846847}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.40624626, y: 0.818025}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.44025839, y: 0.68218433}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.44787424, y: 0.46753503}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.44787424, y: 0.18432078}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.44787424, y: -0.13952017}
+        Yaw: 180
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 跑步左转32度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 0.999999995
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0
+      States:
+      - Lower Body.run_arc_left
+      Use: 1
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 1
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: -0
+      - Seconds: 0.066666667
+        Position: {x: -0.0092690805, y: 0.33183821}
+        Yaw: -3.2
+      - Seconds: 0.13333333
+        Position: {x: -0.037047416, y: 0.66264159}
+        Yaw: -6.4
+      - Seconds: 0.2
+        Position: {x: -0.083248382, y: 0.99137854}
+        Yaw: -9.6
+      - Seconds: 0.26666667
+        Position: {x: -0.1477279, y: 1.3170239}
+        Yaw: -12.8
+      - Seconds: 0.33333333
+        Position: {x: -0.2302849, y: 1.6385622}
+        Yaw: -16
+      - Seconds: 0.4
+        Position: {x: -0.33066191, y: 1.9549906}
+        Yaw: -19.2
+      - Seconds: 0.46666667
+        Position: {x: -0.44854593, y: 2.2653225}
+        Yaw: -22.4
+      - Seconds: 0.53333333
+        Position: {x: -0.58356934, y: 2.56859}
+        Yaw: -25.6
+      - Seconds: 0.6
+        Position: {x: -0.73531106, y: 2.8638475}
+        Yaw: -28.8
+      - Seconds: 0.66666667
+        Position: {x: -0.90329789, y: 3.1501741}
+        Yaw: -32
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.66666667
+      Seconds: 0.66666667
+  - Name: 跑步右转32度
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 0.999999995
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0
+      States:
+      - Lower Body.run_arc_right
+      Use: 1
+      Gait: 2
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 2
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0092690805, y: 0.33183821}
+        Yaw: 3.2
+      - Seconds: 0.13333333
+        Position: {x: 0.037047416, y: 0.66264159}
+        Yaw: 6.4
+      - Seconds: 0.2
+        Position: {x: 0.083248382, y: 0.99137854}
+        Yaw: 9.6
+      - Seconds: 0.26666667
+        Position: {x: 0.1477279, y: 1.3170239}
+        Yaw: 12.8
+      - Seconds: 0.33333333
+        Position: {x: 0.2302849, y: 1.6385622}
+        Yaw: 16
+      - Seconds: 0.4
+        Position: {x: 0.33066191, y: 1.9549906}
+        Yaw: 19.2
+      - Seconds: 0.46666667
+        Position: {x: 0.44854593, y: 2.2653225}
+        Yaw: 22.4
+      - Seconds: 0.53333333
+        Position: {x: 0.58356934, y: 2.56859}
+        Yaw: 25.6
+      - Seconds: 0.6
+        Position: {x: 0.73531106, y: 2.8638475}
+        Yaw: 28.8
+      - Seconds: 0.66666667
+        Position: {x: 0.90329789, y: 3.1501741}
+        Yaw: 32
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.66666667
+      Seconds: 0.66666667
+  - Name: 冲刺起步
+    First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Second: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Weights: {x: 0, y: 0.58, z: 1}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.0555555556
+      States:
+      - Lower Body.sprint_start_l
+      Use: 2
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.011870702}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.079624725}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.2387604}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.50202071}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.85939332}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.2781105}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.7126535}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 2.1473202}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 2.3646535}
+        Yaw: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+    - Clip: {fileID: 0}
+      FirstPhase: 0
+      SecondPhase: 0.555555556
+      States:
+      - Lower Body.sprint_start_r
+      Use: 2
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.52666667
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.011870702}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.079624725}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.2387604}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.50202071}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.85939332}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.2781105}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.7126535}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 2.1473202}
+        Yaw: 0
+      - Seconds: 0.56666667
+        Position: {x: 0, y: 2.3646535}
+        Yaw: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.1
+      Seconds: 0.56666667
+  - Name: 冲刺左转90度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot90_left_l
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00081128811, y: 0.42398296}
+        Yaw: -0.44597918
+      - Seconds: 0.13333333
+        Position: {x: -0.019748195, y: 0.7941707}
+        Yaw: -6.3517383
+      - Seconds: 0.2
+        Position: {x: -0.075568097, y: 1.0695351}
+        Yaw: -17.614071
+      - Seconds: 0.26666667
+        Position: {x: -0.1512485, y: 1.2367547}
+        Yaw: -32.309613
+      - Seconds: 0.33333333
+        Position: {x: -0.22132136, y: 1.3206341}
+        Yaw: -48.514996
+      - Seconds: 0.4
+        Position: {x: -0.28941003, y: 1.3657064}
+        Yaw: -64.306856
+      - Seconds: 0.46666667
+        Position: {x: -0.39323403, y: 1.400128}
+        Yaw: -77.761826
+      - Seconds: 0.53333333
+        Position: {x: -0.57562743, y: 1.4226165}
+        Yaw: -86.956541
+      - Seconds: 0.6
+        Position: {x: -0.85686066, y: 1.4276041}
+        Yaw: -90
+      - Seconds: 0.66666667
+        Position: {x: -1.2276552, y: 1.4276041}
+        Yaw: -90
+      - Seconds: 0.73333333
+        Position: {x: -1.6516398, y: 1.4276041}
+        Yaw: -90
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot90_left_r
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.00081128811, y: 0.42398296}
+        Yaw: -0.44597918
+      - Seconds: 0.13333333
+        Position: {x: -0.019748195, y: 0.7941707}
+        Yaw: -6.3517383
+      - Seconds: 0.2
+        Position: {x: -0.075568097, y: 1.0695351}
+        Yaw: -17.614071
+      - Seconds: 0.26666667
+        Position: {x: -0.1512485, y: 1.2367547}
+        Yaw: -32.309613
+      - Seconds: 0.33333333
+        Position: {x: -0.22132136, y: 1.3206341}
+        Yaw: -48.514996
+      - Seconds: 0.4
+        Position: {x: -0.28941003, y: 1.3657064}
+        Yaw: -64.306856
+      - Seconds: 0.46666667
+        Position: {x: -0.39323403, y: 1.400128}
+        Yaw: -77.761826
+      - Seconds: 0.53333333
+        Position: {x: -0.57562743, y: 1.4226165}
+        Yaw: -86.956541
+      - Seconds: 0.6
+        Position: {x: -0.85686066, y: 1.4276041}
+        Yaw: -90
+      - Seconds: 0.66666667
+        Position: {x: -1.2276552, y: 1.4276041}
+        Yaw: -90
+      - Seconds: 0.73333333
+        Position: {x: -1.6516398, y: 1.4276041}
+        Yaw: -90
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 冲刺右转90度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.48, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot90_right_l
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00081128811, y: 0.42398296}
+        Yaw: 0.44597918
+      - Seconds: 0.13333333
+        Position: {x: 0.019748195, y: 0.7941707}
+        Yaw: 6.3517383
+      - Seconds: 0.2
+        Position: {x: 0.075568097, y: 1.0695351}
+        Yaw: 17.614071
+      - Seconds: 0.26666667
+        Position: {x: 0.1512485, y: 1.2367547}
+        Yaw: 32.309613
+      - Seconds: 0.33333333
+        Position: {x: 0.22132136, y: 1.3206341}
+        Yaw: 48.514996
+      - Seconds: 0.4
+        Position: {x: 0.28941003, y: 1.3657064}
+        Yaw: 64.306856
+      - Seconds: 0.46666667
+        Position: {x: 0.39323403, y: 1.400128}
+        Yaw: 77.761826
+      - Seconds: 0.53333333
+        Position: {x: 0.57562743, y: 1.4226165}
+        Yaw: 86.956541
+      - Seconds: 0.6
+        Position: {x: 0.85686066, y: 1.4276041}
+        Yaw: 90
+      - Seconds: 0.66666667
+        Position: {x: 1.2276552, y: 1.4276041}
+        Yaw: 90
+      - Seconds: 0.73333333
+        Position: {x: 1.6516398, y: 1.4276041}
+        Yaw: 90
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot90_right_r
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 90
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.00081128811, y: 0.42398296}
+        Yaw: 0.44597918
+      - Seconds: 0.13333333
+        Position: {x: 0.019748195, y: 0.7941707}
+        Yaw: 6.3517383
+      - Seconds: 0.2
+        Position: {x: 0.075568097, y: 1.0695351}
+        Yaw: 17.614071
+      - Seconds: 0.26666667
+        Position: {x: 0.1512485, y: 1.2367547}
+        Yaw: 32.309613
+      - Seconds: 0.33333333
+        Position: {x: 0.22132136, y: 1.3206341}
+        Yaw: 48.514996
+      - Seconds: 0.4
+        Position: {x: 0.28941003, y: 1.3657064}
+        Yaw: 64.306856
+      - Seconds: 0.46666667
+        Position: {x: 0.39323403, y: 1.400128}
+        Yaw: 77.761826
+      - Seconds: 0.53333333
+        Position: {x: 0.57562743, y: 1.4226165}
+        Yaw: 86.956541
+      - Seconds: 0.6
+        Position: {x: 0.85686066, y: 1.4276041}
+        Yaw: 90
+      - Seconds: 0.66666667
+        Position: {x: 1.2276552, y: 1.4276041}
+        Yaw: 90
+      - Seconds: 0.73333333
+        Position: {x: 1.6516398, y: 1.4276041}
+        Yaw: 90
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 冲刺左转180度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot180_left_l
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.0016225639, y: 0.42397822}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.039408697, y: 0.79234884}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.14842438, y: 1.0502063}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.2854747, y: 1.1706186}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.3922321, y: 1.1899317}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.46686405, y: 1.1582619}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.53187261, y: 1.0709885}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.57640256, y: 0.89314093}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.58637351, y: 0.61211414}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.58637351, y: 0.24131957}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.58637351, y: -0.18266496}
+        Yaw: -180
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot180_left_r
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: -0.0016225639, y: 0.42397822}
+        Yaw: -0.89195837
+      - Seconds: 0.13333333
+        Position: {x: -0.039408697, y: 0.79234884}
+        Yaw: -12.703477
+      - Seconds: 0.2
+        Position: {x: -0.14842438, y: 1.0502063}
+        Yaw: -35.228143
+      - Seconds: 0.26666667
+        Position: {x: -0.2854747, y: 1.1706186}
+        Yaw: -64.619225
+      - Seconds: 0.33333333
+        Position: {x: -0.3922321, y: 1.1899317}
+        Yaw: -97.029992
+      - Seconds: 0.4
+        Position: {x: -0.46686405, y: 1.1582619}
+        Yaw: -128.61371
+      - Seconds: 0.46666667
+        Position: {x: -0.53187261, y: 1.0709885}
+        Yaw: -155.52365
+      - Seconds: 0.53333333
+        Position: {x: -0.57640256, y: 0.89314093}
+        Yaw: -173.91308
+      - Seconds: 0.6
+        Position: {x: -0.58637351, y: 0.61211414}
+        Yaw: -180
+      - Seconds: 0.66666667
+        Position: {x: -0.58637351, y: 0.24131957}
+        Yaw: -180
+      - Seconds: 0.73333333
+        Position: {x: -0.58637351, y: -0.18266496}
+        Yaw: -180
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 冲刺右转180度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.68, z: 0}
+    FirstRate: 1
+    SecondRate: 0.909090913
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot180_right_l
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0016225639, y: 0.42397822}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.039408697, y: 0.79234884}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.14842438, y: 1.0502063}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.2854747, y: 1.1706186}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.3922321, y: 1.1899317}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.46686405, y: 1.1582619}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.53187261, y: 1.0709885}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.57640256, y: 0.89314093}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.58637351, y: 0.61211414}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.58637351, y: 0.24131957}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.58637351, y: -0.18266496}
+        Yaw: 180
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_pivot180_right_r
+      Use: 3
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.69333333
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.0016225639, y: 0.42397822}
+        Yaw: 0.89195837
+      - Seconds: 0.13333333
+        Position: {x: 0.039408697, y: 0.79234884}
+        Yaw: 12.703477
+      - Seconds: 0.2
+        Position: {x: 0.14842438, y: 1.0502063}
+        Yaw: 35.228143
+      - Seconds: 0.26666667
+        Position: {x: 0.2854747, y: 1.1706186}
+        Yaw: 64.619225
+      - Seconds: 0.33333333
+        Position: {x: 0.3922321, y: 1.1899317}
+        Yaw: 97.029992
+      - Seconds: 0.4
+        Position: {x: 0.46686405, y: 1.1582619}
+        Yaw: 128.61371
+      - Seconds: 0.46666667
+        Position: {x: 0.53187261, y: 1.0709885}
+        Yaw: 155.52365
+      - Seconds: 0.53333333
+        Position: {x: 0.57640256, y: 0.89314093}
+        Yaw: 173.91308
+      - Seconds: 0.6
+        Position: {x: 0.58637351, y: 0.61211414}
+        Yaw: 180
+      - Seconds: 0.66666667
+        Position: {x: 0.58637351, y: 0.24131957}
+        Yaw: 180
+      - Seconds: 0.73333333
+        Position: {x: 0.58637351, y: -0.18266496}
+        Yaw: 180
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.73333333
+  - Name: 冲刺左转32度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 1.11111111
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_arc_left
+      Use: 1
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 1
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: -0
+      - Seconds: 0.066666667
+        Position: {x: -0.013483083, y: 0.43440516}
+        Yaw: -3.5555556
+      - Seconds: 0.13333333
+        Position: {x: -0.053880428, y: 0.86713799}
+        Yaw: -7.1111111
+      - Seconds: 0.2
+        Position: {x: -0.12103651, y: 1.2965326}
+        Yaw: -10.666667
+      - Seconds: 0.26666667
+        Position: {x: -0.21469281, y: 1.7209358}
+        Yaw: -14.222222
+      - Seconds: 0.33333333
+        Position: {x: -0.33448876, y: 2.138714}
+        Yaw: -17.777778
+      - Seconds: 0.4
+        Position: {x: -0.47996319, y: 2.5482586}
+        Yaw: -21.333333
+      - Seconds: 0.46666667
+        Position: {x: -0.65055606, y: 2.9479932}
+        Yaw: -24.888889
+      - Seconds: 0.53333333
+        Position: {x: -0.84561062, y: 3.3363788}
+        Yaw: -28.444444
+      - Seconds: 0.6
+        Position: {x: -1.064376, y: 3.7119202}
+        Yaw: -32
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.6
+      Seconds: 0.6
+  - Name: 冲刺右转32度
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
+    Weights: {x: 0, y: 0.18, z: 0}
+    FirstRate: 1
+    SecondRate: 1.11111111
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0
+      States:
+      - Lower Body.sprint_arc_right
+      Use: 1
+      Gait: 3
+      FromGait: 0
+      TurnDegrees: 32
+      Side: 2
+      Loop: 1
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0.013483083, y: 0.43440516}
+        Yaw: 3.5555556
+      - Seconds: 0.13333333
+        Position: {x: 0.053880428, y: 0.86713799}
+        Yaw: 7.1111111
+      - Seconds: 0.2
+        Position: {x: 0.12103651, y: 1.2965326}
+        Yaw: 10.666667
+      - Seconds: 0.26666667
+        Position: {x: 0.21469281, y: 1.7209358}
+        Yaw: 14.222222
+      - Seconds: 0.33333333
+        Position: {x: 0.33448876, y: 2.138714}
+        Yaw: 17.777778
+      - Seconds: 0.4
+        Position: {x: 0.47996319, y: 2.5482586}
+        Yaw: 21.333333
+      - Seconds: 0.46666667
+        Position: {x: 0.65055606, y: 2.9479932}
+        Yaw: 24.888889
+      - Seconds: 0.53333333
+        Position: {x: 0.84561062, y: 3.3363788}
+        Yaw: 28.444444
+      - Seconds: 0.6
+        Position: {x: 1.064376, y: 3.7119202}
+        Yaw: 32
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.6
+      Seconds: 0.6
+  - Name: 步行转跑步
+    First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Weights: {x: 0, y: 0.5, z: 1}
+    FirstRate: 1.35
+    SecondRate: 0.794117647
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.470588235
+      SecondPhase: 0.05
+      States:
+      - Lower Body.walk_to_run_l
+      Use: 5
+      Gait: 2
+      FromGait: 1
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.10893449}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.24445034}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.42409475}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.65533035}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.93553513}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.2520025}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.5831079}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.9151079}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 2.2471079}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+    - Clip: {fileID: 0}
+      FirstPhase: 0.970588235
+      SecondPhase: 0.5
+      States:
+      - Lower Body.walk_to_run_r
+      Use: 5
+      Gait: 2
+      FromGait: 1
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.10893449}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.24445034}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.42409475}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 0.65533035}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 0.93553513}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.2520025}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.5831079}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.9151079}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 2.2471079}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+  - Name: 跑步转步行
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
+    Weights: {x: 0, y: 0.5, z: 1}
+    FirstRate: 0.794117647
+    SecondRate: 1.35
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0.470588235
+      States:
+      - Lower Body.run_to_walk_l
+      Use: 5
+      Gait: 1
+      FromGait: 2
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.32639884}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.62621633}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.88190525}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.086003}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.2411315}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.3599975}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.4642254}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.5675587}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 1.6708921}
+        Yaw: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0.970588235
+      States:
+      - Lower Body.run_to_walk_r
+      Use: 5
+      Gait: 1
+      FromGait: 2
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.32639884}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.62621633}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 0.88190525}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.086003}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.2411315}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 1.3599975}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 1.4642254}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 1.5675587}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 1.6708921}
+        Yaw: 0
+      ReferenceSpeed: 1.55
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+  - Name: 跑步转冲刺
+    First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Second: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Weights: {x: 0, y: 0.5, z: 1}
+    FirstRate: 1.05555556
+    SecondRate: 0.95
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.05
+      SecondPhase: 0.0555555556
+      States:
+      - Lower Body.run_to_sprint_l
+      Use: 5
+      Gait: 3
+      FromGait: 2
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.33451481}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.6809641}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 1.0472262}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.4366517}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.8480634}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 2.2757562}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 2.7100213}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 3.1446879}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 3.5793546}
+        Yaw: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+    - Clip: {fileID: 0}
+      FirstPhase: 0.5
+      SecondPhase: 0.555555556
+      States:
+      - Lower Body.run_to_sprint_r
+      Use: 5
+      Gait: 3
+      FromGait: 2
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.33451481}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.6809641}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 1.0472262}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.4366517}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.8480634}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 2.2757562}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 2.7100213}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 3.1446879}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 3.5793546}
+        Yaw: 0
+      ReferenceSpeed: 6.52
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+  - Name: 冲刺转跑步
+    First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
+    Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
+    Weights: {x: 0, y: 0.5, z: 1}
+    FirstRate: 0.95
+    SecondRate: 1.05555556
+    Variants:
+    - Clip: {fileID: 0}
+      FirstPhase: 0.0555555556
+      SecondPhase: 0.05
+      States:
+      - Lower Body.sprint_to_run_l
+      Use: 5
+      Gait: 2
+      FromGait: 3
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.43215186}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.85236924}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 1.2527738}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.6300149}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.9852699}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 2.3242438}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 2.6566454}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 2.9886454}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 3.3206454}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6
+    - Clip: {fileID: 0}
+      FirstPhase: 0.555555556
+      SecondPhase: 0.5
+      States:
+      - Lower Body.sprint_to_run_r
+      Use: 5
+      Gait: 2
+      FromGait: 3
+      TurnDegrees: 0
+      Side: 0
+      Loop: 0
+      Blend: 0.12
+      MinimumSpeed: 0
+      FirstEntrySeconds: 0
+      ExitSeconds: 0.56
+      PathSource: 1
+      ReferencePath:
+      - Seconds: 0
+        Position: {x: 0, y: 0}
+        Yaw: 0
+      - Seconds: 0.066666667
+        Position: {x: 0, y: 0.43215186}
+        Yaw: 0
+      - Seconds: 0.13333333
+        Position: {x: 0, y: 0.85236924}
+        Yaw: 0
+      - Seconds: 0.2
+        Position: {x: 0, y: 1.2527738}
+        Yaw: 0
+      - Seconds: 0.26666667
+        Position: {x: 0, y: 1.6300149}
+        Yaw: 0
+      - Seconds: 0.33333333
+        Position: {x: 0, y: 1.9852699}
+        Yaw: 0
+      - Seconds: 0.4
+        Position: {x: 0, y: 2.3242438}
+        Yaw: 0
+      - Seconds: 0.46666667
+        Position: {x: 0, y: 2.6566454}
+        Yaw: 0
+      - Seconds: 0.53333333
+        Position: {x: 0, y: 2.9886454}
+        Yaw: 0
+      - Seconds: 0.6
+        Position: {x: 0, y: 3.3206454}
+        Yaw: 0
+      ReferenceSpeed: 4.98
+      BrakeSeconds: 0
+      LastEntrySeconds: 0.14
+      Seconds: 0.6

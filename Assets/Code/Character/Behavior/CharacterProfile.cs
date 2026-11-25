@@ -21,6 +21,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterMotionDatabase EffectivePlayback => animationConfig ? animationConfig.PlaybackLibrary : null;
         internal CharacterLightAttackSettings LightAttack => behaviorConfig ? behaviorConfig.Attack : null;
         internal CharacterComboRoutes ComboRoutes => comboTable ? comboTable.Routes : null;
+        internal CharacterBehaviorDefinition[] AdditionalBehaviors => behaviorConfig ? behaviorConfig.Additional : null;
         internal CharacterGuardSettings Guard => behaviorConfig ? behaviorConfig.Guard : null;
         internal CharacterMoveGait DefaultGait => behaviorConfig ? behaviorConfig.DefaultGait : CharacterMoveGait.Run;
         /// <summary>读取或设置移动预测数值，未绑定预测资产时仅在当前实例保留。</summary>
@@ -81,11 +82,12 @@ namespace ThreeC.CharacterBehavior
         public float Resolve(float inherited) => Enabled ? Value : inherited;
     }
 
+    // 提供角色实例对运动、动画及预测数值的逐项覆盖。
     [Serializable]
     internal sealed class CharacterProfileOverrides
     {
         [Header("移动与物理")]
-        [Tooltip("地面加速度，单位为米/秒²。")] public CharacterFloatOverride GroundAcceleration;
+        [Tooltip("地面加速度，单位为米/秒²。在下一物理步生效，相关旧预测失效。")] public CharacterFloatOverride GroundAcceleration;
         [Header("动画表现")]
         [Tooltip("起步阶段的时长，单位为秒。")] public CharacterFloatOverride StartSeconds;
         [Tooltip("普通动画过渡，占源动画长度的比例，范围为 0 到 1。")] public CharacterFloatOverride Transition;

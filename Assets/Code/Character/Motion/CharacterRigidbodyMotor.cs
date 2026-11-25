@@ -7,7 +7,7 @@ namespace ThreeC.CharacterBehavior
     internal struct CharacterMotorSuspension
     {
         public bool Active;
-        public Vector3 Velocity;
+        public Vector3 Velocity, AngularVelocity;
     }
 
     // 保存求解后的刚体位姿、速度和接触面，供步末结算与后续推演共享。
@@ -38,6 +38,8 @@ namespace ThreeC.CharacterBehavior
     {
         private float submittedGroundDot; // 本次求解判为可行走表面的法线 Y 下限。
         private float bakedFootfallDistance;
+        private double solverFixedTime = double.NegativeInfinity;
+        private double discardedContactTime = double.NegativeInfinity;
 
         internal struct Surface
         {
@@ -56,7 +58,8 @@ namespace ThreeC.CharacterBehavior
         // 用当前角色物理配置和已绑定的刚体读取本次驱动参数，预测读取也不会改写实走状态。
         internal CharacterDriveParameters Parameters(in CharacterRuntimeConfiguration config) =>
             config.DriveParameters(body, config.Motor, bakedFootfallDistance);
-        internal bool Available => body != null && capsule != null && capsule.enabled;
+        internal bool Bound => body != null && capsule != null;
+        internal bool Available => Bound && capsule.enabled;
 
         internal readonly struct StepState
         {
@@ -77,6 +80,13 @@ namespace ThreeC.CharacterBehavior
 
         internal StepState ReadStepState() => new StepState(body, ReadContacts());
 
+        // 在目标变化时读取当前真实刚体站位与水平朝向，尚未绑定时没有可用起点。
+        internal CharacterAlignmentOrigin? ReadAlignmentOrigin()
+        {
+            if (!Available) return null;
+            return new CharacterAlignmentOrigin { Position = body.position, Facing = CharacterAlignmentPlan.Flat(body.rotation * Vector3.forward) };
+        }
+
         // 读取实际求解后的刚体运动和接触面。
         internal CharacterMotorObservation ReadSolvedPose()
         {
@@ -95,9 +105,14 @@ namespace ThreeC.CharacterBehavior
             Steps = new CharacterStepProbe(body, collider);
         }
 
+        // 记下求解器所属时刻，识别瞬移发生在本轮碰撞通知之前还是之中。
+        internal void MarkSolverTime(double fixedTime) => solverFixedTime = fixedTime;
+
         // 按实走提交时锁定的坡度阈值记录本次求解的接触面。
         public void Record(Collision collision)
         {
+            // 边界之后到达的同轮回调仍携带旧坐标中的接触，不能污染下一步的地面与斜坡。
+            if (discardedContactTime == Time.fixedTimeAsDouble) return;
             var surface = new Surface();
             for (int i = 0; i < collision.contactCount; i++)
             {
@@ -160,11 +175,12 @@ namespace ThreeC.CharacterBehavior
 
         // 逐段计算速度和转向，将整步积分得到的平均速度只交给求解器一次。
         internal CharacterPendingPhysicsStep DriveStep(CharacterRigidbodyBlackboard board, float dt, double end,
-            long number, in CharacterDriveParameters parameters)
+            long number, in CharacterDriveParameters parameters, CharacterSimulationContinuity continuity = null)
         {
             float groundDot = Mathf.Cos(parameters.Settings.slopeLimit * Mathf.Deg2Rad);
             float stepHeight = parameters.Settings.stepHeight;
             var startCursor = board.ReadStep(end, stepSlices);
+            if (continuity?.Pending == true) return default;
             beforePending = step;
             pendingVelocity = body.velocity;
             pendingPosition = body.position;
@@ -183,6 +199,13 @@ namespace ThreeC.CharacterBehavior
             foreach (var slice in stepSlices)
             {
                 float seconds = (float)(slice.End - slice.Start);
+                if (slice.Start < board.KnockbackUntil)
+                {
+                    CharacterMotorStep.AdvanceKnockback(ref velocity, contacts.Ground, board.KnockbackBraking, seconds);
+                    step = default;
+                    integrated += velocity * seconds;
+                    continue;
+                }
                 bool supported = CharacterMotorStep.IsGroundSupported(velocity, contacts.Ground);
                 drive = step.Advance(slice.Behavior, slice.Input, seconds, body.position + integrated,
                     ref velocity, contacts.Steep, contacts.Ground, contacts.Flags, supported, stepped, parameters, ref rotation);
@@ -228,6 +251,58 @@ namespace ThreeC.CharacterBehavior
             return true;
         }
 
+        // 同步刚体与显示根的绝对位姿，切断插值缓存使小幅传送同样立即可见。
+        internal void Teleport(Vector3 position, Quaternion rotation)
+        {
+            var interpolation = body.interpolation;
+            if (interpolation != RigidbodyInterpolation.None) body.interpolation = RigidbodyInterpolation.None;
+            body.position = position;
+            body.rotation = rotation;
+            body.transform.SetPositionAndRotation(position, rotation);
+            if (interpolation != RigidbodyInterpolation.None) body.interpolation = interpolation;
+        }
+
+        // 归还时先读取外部留下的实速，再恢复角色动力学与原有游戏暂停状态。
+        internal void ResumeOwnership(CharacterVelocityPolicy policy, Vector3 velocity,
+            ref CharacterMotorSuspension suspension, bool characterRunning)
+        {
+            suspension = default;
+            var actualVelocity = body.velocity;
+            var actualAngular = body.angularVelocity;
+            Teleport(body.position, body.rotation);
+            body.isKinematic = false;
+            if (policy == CharacterVelocityPolicy.Preserve)
+            {
+                body.velocity = actualVelocity;
+                body.angularVelocity = actualAngular;
+            }
+            else SetBoundaryVelocity(policy, velocity, ref suspension);
+            SetSuspended(!characterRunning, ref suspension);
+        }
+
+        // 将速度策略写入当前刚体或暂停快照，避免恢复时复活旧速度。
+        internal void SetBoundaryVelocity(CharacterVelocityPolicy policy, Vector3 value, ref CharacterMotorSuspension suspension)
+        {
+            if (policy == CharacterVelocityPolicy.Preserve) return;
+            suspension.Velocity = policy == CharacterVelocityPolicy.Set ? value : Vector3.zero;
+            suspension.AngularVelocity = Vector3.zero;
+            if (suspension.Active || body.isKinematic) return;
+            body.velocity = suspension.Velocity;
+            body.angularVelocity = Vector3.zero;
+        }
+
+        // 丢弃前一运动来源的步幅、平均速度校正和旧接触，原地击退保留真实地面。
+        internal void ForgetMotionHistory(bool clearContacts)
+        {
+            step = default;
+            stepSlices.Clear();
+            if (!clearContacts) return;
+            surfaces.Clear();
+            if (Time.inFixedTimeStep && solverFixedTime == Time.fixedTimeAsDouble)
+                discardedContactTime = solverFixedTime;
+        }
+
+        // 暂停时封存速度，恢复时重新启用角色动态刚体。
         public void SetSuspended(bool value, ref CharacterMotorSuspension suspension)
         {
             if (body == null || value == suspension.Active)
@@ -238,12 +313,14 @@ namespace ThreeC.CharacterBehavior
             if (value)
             {
                 suspension.Velocity = body.velocity;
+                suspension.AngularVelocity = body.angularVelocity;
                 body.isKinematic = true;
             }
             else
             {
                 body.isKinematic = false;
                 body.velocity = suspension.Velocity;
+                body.angularVelocity = suspension.AngularVelocity;
                 body.WakeUp();
             }
         }
@@ -252,7 +329,7 @@ namespace ThreeC.CharacterBehavior
         {
             step = default;
             surfaces.Clear();
-            suspension.Velocity = Vector3.zero;
+            suspension.Velocity = suspension.AngularVelocity = Vector3.zero;
             if (body != null && !body.isKinematic)
             {
                 body.velocity = Vector3.zero;

@@ -26,8 +26,13 @@ namespace ThreeC.CharacterBehavior
         public override bool Evaluate(CharacterBehaviorContext context) =>
             CanStart(context, context.DashCooldownRemaining) && CharacterStaminaBlackboard.CanAfford(context.StaminaRemaining, GetStaminaCost(context));
 
-        // 按本步输入、冷却和配置检查冲刺自身的请求条件。
-        internal override bool EvaluateRequest(CharacterBehaviorContext context) => CanStart(context, Cooldown);
+        // 在实际准入处区分没有有效按下、冷却和无效的冲刺时长或速度。
+        protected override CharacterBehaviorRejectReason CheckRequest(CharacterBehaviorContext context)
+        {
+            if (!context.Input.DashPressed || IsActive) return CharacterBehaviorRejectReason.StateCondition;
+            if (Cooldown > 0f) return CharacterBehaviorRejectReason.Cooldown;
+            return HasValidMotion(context.Settings) ? CharacterBehaviorRejectReason.None : CharacterBehaviorRejectReason.InvalidConfiguration;
+        }
 
         // 用指定来源的冷却判断公开查询或本实例的启动请求。
         private bool CanStart(CharacterBehaviorContext context, float cooldown)
@@ -35,7 +40,12 @@ namespace ThreeC.CharacterBehavior
             if (IsActive || !context.Input.DashPressed || cooldown > 0f)
                 return false;
 
-            CharacterMovementSettings settings = context.Settings;
+            return HasValidMotion(context.Settings);
+        }
+
+        // 使用实际运动采用的回退数值检查能否产生有效位移。
+        private static bool HasValidMotion(CharacterMovementSettings settings)
+        {
             float duration = InputMath.NonNegative(settings.DashDuration, CharacterMovementSettings.DefaultDashDuration);
             float speed = InputMath.NonNegative(settings.DashSpeed, CharacterMovementSettings.DefaultDashSpeed);
 

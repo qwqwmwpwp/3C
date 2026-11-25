@@ -81,16 +81,34 @@ namespace ThreeC.CharacterBehavior
         internal void BeginPlan() => planning = true;
         internal void FinishPlan() => planning = false;
 
-        internal void PublishReceipts(bool applied)
+#if UNITY_EDITOR
+        internal CharacterActionTrace Trace { get; set; }
+#endif
+
+        // 在真实下发之后记录开始，忽略重复下发和已失效的句柄。
+        internal void Start(CharacterActionPlayback playback)
+        {
+            if (playback?.Start() != true) return;
+#if UNITY_EDITOR
+            Trace?.Record(playback, CharacterActionTraceKind.PlaybackStarted);
+#endif
+        }
+
+        // 播放提交或批次撤回时，按规划顺序发布暂存终态。
+        internal void PublishReceipts(CharacterPlaybackEndSource discarded = CharacterPlaybackEndSource.None)
         {
             planning = false;
-            foreach (var playback in receipts)
-            {
-                playback.Status = applied ? playback.PendingStatus.Value : playback.HasStarted
-                    ? CharacterActionPlaybackStatus.Interrupted : CharacterActionPlaybackStatus.Withdrawn;
-                playback.PendingStatus = null;
-            }
+            foreach (var playback in receipts) PublishEnd(playback, discarded);
             receipts.Clear();
+        }
+
+        // 冻结终态后向选中角色的历史写入一次结果。
+        private void PublishEnd(CharacterActionPlayback playback, CharacterPlaybackEndSource discarded = CharacterPlaybackEndSource.None)
+        {
+            if (!playback.PublishEnd(discarded)) return;
+#if UNITY_EDITOR
+            Trace?.Record(playback, CharacterActionTraceKind.PlaybackEnded);
+#endif
         }
 
         public CharacterAnimationComposer(IReadOnlyDictionary<string, CharacterAnimationRule> rules, Predicate<string> hasBinding)
@@ -105,9 +123,11 @@ namespace ThreeC.CharacterBehavior
             hasBinding = resources.HasBinding;
         }
 
+        // 移除装配变更前仍占用该键的请求。
         internal void WithdrawKey(string key)
         {
-            if (active.TryGetValue(key, out var demand)) Withdraw(key, demand.InstanceId);
+            if (active.TryGetValue(key, out var demand))
+                End(key, demand.InstanceId, CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ModuleRemoved);
         }
 
         public IEnumerable<string> ActiveKeys => active.Keys;
@@ -119,16 +139,23 @@ namespace ThreeC.CharacterBehavior
             return latest < long.MaxValue ? latest + 1 : 0;
         }
 
-        public CharacterActionPlayback PlayOnce(string key, float weight)
+        // 关联当前执行并申请一个新的单次播放，续播始终产生独立句柄。
+        public CharacterActionPlayback PlayOnce(string key, float weight, CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source)
         {
             long id = NextInstance(key);
             if (id == 0) return null;
-            var playback = new CharacterActionPlayback(key, id);
-            return Submit(new CharacterAnimationRequest(key, id, weight), playback) ? playback : null;
+            var playback = new CharacterActionPlayback(key, id, origin, source);
+            if (!Submit(new CharacterAnimationRequest(key, id, weight), playback)) return null;
+#if UNITY_EDITOR
+            if (source == CharacterPlaybackStartSource.Rebind || source == CharacterPlaybackStartSource.ArbitrationRecovery)
+                Trace?.Record(playback, CharacterActionTraceKind.PlaybackResumed);
+#endif
+            return playback;
         }
 
         public bool Submit(CharacterAnimationRequest request) => Submit(request, null);
 
+        // 更新相同实例的需求，新实例抢占同键旧实例。
         private bool Submit(CharacterAnimationRequest request, CharacterActionPlayback playback)
         {
             string key = request.SemanticKey;
@@ -145,7 +172,7 @@ namespace ThreeC.CharacterBehavior
                     active[key] = CreateDemand(request, rule, current.SubmissionOrder, current.Playback).WithTiming(current.Timing);
                     return true;
                 }
-                End(key, latest, CharacterActionPlaybackStatus.Interrupted);
+                End(key, latest, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ArbitrationLost);
             }
 
             latestInstances[key] = request.InstanceId;
@@ -165,29 +192,27 @@ namespace ThreeC.CharacterBehavior
             active[playback.Key] = demand.WithTiming(new CharacterActionTiming(start, phase, handoff, startAtZero, resumed));
         }
 
-        public bool Withdraw(string key, long instanceId) => End(key, instanceId, CharacterActionPlaybackStatus.Withdrawn);
+        // 按语义键撤销调用者指定的实例。
+        public bool Withdraw(string key, long instanceId) =>
+            End(key, instanceId, CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ExplicitWithdrawal);
 
         public bool Withdraw(CharacterActionPlayback playback) => playback != null &&
             active.TryGetValue(playback.Key, out var demand) && demand.Playback == playback &&
             Withdraw(playback.Key, playback.InstanceId);
 
-        public bool End(string key, long instanceId, CharacterActionPlaybackStatus status)
+        // 先从仲裁集合移出指定实例，再暂存或提交其唯一终态。
+        public bool End(string key, long instanceId, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source)
         {
             if (!active.TryGetValue(key, out var demand) || demand.InstanceId != instanceId) return false;
-            if (demand.Playback != null)
-            {
-                var playback = demand.Playback;
-                if (status == CharacterActionPlaybackStatus.Interrupted && !playback.HasStarted)
-                    status = CharacterActionPlaybackStatus.Withdrawn;
-                if (planning)
-                {
-                    if (!playback.PendingStatus.HasValue) receipts.Add(playback);
-                    playback.PendingStatus = status;
-                }
-                else playback.Status = status;
-            }
             rankedKeys.Remove(key);
-            return active.Remove(key);
+            active.Remove(key);
+            var playback = demand.Playback;
+            if (playback != null && playback.QueueEnd(status, source))
+            {
+                if (planning) receipts.Add(playback);
+                else PublishEnd(playback);
+            }
+            return true;
         }
 
         public CharacterAnimationComposition Preview(CharacterAnimationRequest behavior)
@@ -214,12 +239,13 @@ namespace ThreeC.CharacterBehavior
             previousSelection = selected;
         }
 
+        // 在最终选择发生变化时结束失去部位的旧实例。
         private void CancelInterrupted(CharacterAnimationDemand previous, CharacterAnimationDemand selected)
         {
             if (!previous.IsValid || previous.Playback == null && previous.InterruptionPolicy != CharacterAnimationInterruptionPolicy.Cancel ||
                 previous.Key == selected.Key && previous.InstanceId == selected.InstanceId)
                 return;
-            if (End(previous.Key, previous.InstanceId, CharacterActionPlaybackStatus.Interrupted) && previous.Playback != null)
+            if (End(previous.Key, previous.InstanceId, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ArbitrationLost) && previous.Playback != null)
                 previous.Playback.WasPreempted = true;
         }
 
@@ -241,23 +267,26 @@ namespace ThreeC.CharacterBehavior
         private static float ClampUnit(float value) => Math.Min(1f, InputMath.NonNegative(value, 0f));
 
         // 播放资源重绑时重建选中历史，保留持续请求和实例编号。
-        public void ResetSelection()
+        public void ResetSelection(CharacterPlaybackEndSource source)
         {
             for (int i = rankedKeys.Count - 1; i >= 0; i--)
             {
                 var demand = active[rankedKeys[i]];
-                if (demand.Playback != null) End(demand.Key, demand.InstanceId, CharacterActionPlaybackStatus.Interrupted);
+                if (demand.Playback != null) End(demand.Key, demand.InstanceId, CharacterActionPlaybackStatus.Interrupted, source);
             }
             previousSelection = default;
         }
 
-        public void Reset()
+        // 结束本角色当前的全部请求，回执在角色重置后仍然可查。
+        public void Reset(CharacterPlaybackEndSource source, bool forgetInstances = true)
         {
-            foreach (var demand in active.Values)
-                if (demand.Playback != null) demand.Playback.Status = CharacterActionPlaybackStatus.Withdrawn;
-            active.Clear();
-            rankedKeys.Clear();
-            latestInstances.Clear();
+            PublishReceipts(source);
+            for (int i = rankedKeys.Count - 1; i >= 0; i--)
+            {
+                var demand = active[rankedKeys[i]];
+                End(demand.Key, demand.InstanceId, CharacterActionPlaybackStatus.Withdrawn, source);
+            }
+            if (forgetInstances) latestInstances.Clear();
             submissionOrder = 0;
             previousSelection = default;
         }

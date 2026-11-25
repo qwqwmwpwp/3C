@@ -64,15 +64,13 @@ namespace ThreeC.CharacterBehavior
 
         private readonly bool requiresMovement;
         private readonly CharacterClipPlayback clips;
-        private readonly CharacterMotionDatabase matchDatabase, playbackLibrary;
-        // 只有与播放共用一次烘焙的库才能参与当前角色的地面匹配。
-        internal bool MatchesLibrary(CharacterMotionDatabase db) => db && db == playbackLibrary && clips.Available;
+        private readonly CharacterMotionDatabase playbackLibrary;
+        private readonly bool matchEnabled;
 
         // 返回匹配模块的库绑定问题，调用方可继续使用常规步态规则。
-        internal string ValidateMatchLibrary(CharacterMotionDatabase db)
+        internal string ValidateMatchLibrary()
         {
-            if (!db) return "地面匹配模块缺少烘焙动作库，将使用常规步态规则。";
-            if (db != playbackLibrary) return "地面匹配模块与动画配置引用了不同的烘焙库，将使用常规步态规则。";
+            if (!playbackLibrary) return "角色缺少动画播放库，将使用常规步态规则。";
             if (groundTracks.Count == 0) return "当前烘焙库没有与片段对应的有效地面匹配轨道，将使用常规步态规则。";
             return null;
         }
@@ -135,7 +133,7 @@ namespace ThreeC.CharacterBehavior
             requiresMovement = config.HasGait;
             this.clips = clips;
             Transitions = config.Transitions;
-            matchDatabase = config.MatchDatabase;
+            matchEnabled = config.Modules.Match;
             playbackLibrary = config.PlaybackLibrary;
             Dictionary<string, CharacterLocomotionGaitPhase> gaitPhases = BuildGaitPhases(config.LocomotionGaitPhases, logContext);
             foreach (var pair in gaitPhases)
@@ -319,8 +317,8 @@ namespace ThreeC.CharacterBehavior
             }
             foreach (var value in validVariants.Values) CacheLength(value.StateHash);
             foreach (var key in validMoving) CacheLength(movingBindings[key].StateHash);
-            var tracks = matchDatabase ? matchDatabase.BakedTracks : null;
-            if (tracks != null && MatchesLibrary(matchDatabase))
+            var tracks = matchEnabled && playbackLibrary ? playbackLibrary.BakedTracks : null;
+            if (tracks != null)
                 foreach (var track in tracks)
                 {
                     if (track?.States == null || !track.ReadyForSearch) continue;
@@ -343,15 +341,8 @@ namespace ThreeC.CharacterBehavior
         private CharacterAnimationBinding WithBakedStopTrack(CharacterAnimationBinding binding)
         {
             if (!binding.IsStop) return binding;
-            var clip = clips.StateClip(binding.StateHash);
-            CharacterMotionTrack Find(CharacterMotionDatabase db)
-            {
-                if (!MatchesLibrary(db)) return null;
-                var candidate = db.FindStopTrack(binding.StateName, clip);
-                return candidate != null && clips.MatchesTrack(binding.StateHash, candidate) ? candidate : null;
-            }
-            var track = Find(matchDatabase);
-            if (track == null && playbackLibrary != matchDatabase) track = Find(playbackLibrary);
+            var track = playbackLibrary.FindStopTrack(binding.StateName, clips.StateClip(binding.StateHash));
+            if (track != null && !clips.MatchesTrack(binding.StateHash, track)) return binding;
             return track == null ? binding : CharacterAnimationBinding.Stop(binding.StateName, binding.Variant,
                 binding.Transition, binding.BrakingClipSeconds, track);
         }

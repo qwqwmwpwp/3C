@@ -110,6 +110,7 @@ namespace ThreeC.CharacterBehavior
             new Dictionary<(CharacterBehaviorId, CharacterBehaviorId), CharacterBehaviorPhase>();
         private readonly Dictionary<CharacterBehaviorId, CharacterBehaviorRule> rulesById;
 
+        internal CharacterBehaviorId Registered { get; }
         public CharacterBehaviorRule Movement { get; }
         public CharacterBehaviorRule[] Actions { get; }
         internal CharacterBehaviorRule[] Participants { get; }
@@ -139,6 +140,7 @@ namespace ThreeC.CharacterBehavior
                 rulesById.Add(rule.Id, rule);
             }
 
+            Registered = registered;
             ValidateRules(registered);
             if (interruptRules != null)
             {
@@ -164,8 +166,42 @@ namespace ThreeC.CharacterBehavior
             Participants = new CharacterBehaviorRule[Actions.Length + 1];
             Participants[0] = Movement;
             Array.Copy(Actions, 0, Participants, 1, Actions.Length);
+            ClaimStorage();
             foreach (CharacterBehaviorRule rule in Participants)
                 rule.Behavior.IsBound = true;
+        }
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, CharacterBehavior> owners =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<object, CharacterBehavior>();
+
+        // 在所有真实和预演流程装配时检查独占容器；弱键不延长行为实例的生命周期。
+        private void ClaimStorage()
+        {
+            var storage = new HashSet<object>(ReferenceIdentityComparer.Instance);
+            lock (owners)
+            {
+                foreach (var rule in Participants)
+                {
+                    var item = rule.Behavior.RuntimeStorageForCopy;
+                    if (item != null && (!storage.Add(item) || owners.TryGetValue(item, out _)))
+                        throw new ArgumentException($"行为 {rule.Id} 复用了独占运行容器。");
+                }
+                foreach (var rule in Participants)
+                {
+                    var item = rule.Behavior.RuntimeStorageForCopy;
+                    if (item != null) owners.Add(item, rule.Behavior);
+                }
+            }
+        }
+
+        // 使用引用身份识别不同流程共同持有的可变容器。
+        private sealed class ReferenceIdentityComparer : IEqualityComparer<object>
+        {
+            internal static readonly ReferenceIdentityComparer Instance = new ReferenceIdentityComparer();
+            // 比较两个容器是否是同一对象。
+            public new bool Equals(object a, object b) => ReferenceEquals(a, b);
+            // 返回与引用身份一致的哈希值。
+            public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
         }
 
         // 核对两个流程的完整编号集合、实际类型和运行状态隔离，验证期间不修改目标。
@@ -268,45 +304,47 @@ namespace ThreeC.CharacterBehavior
             return priority != 0 ? priority : ((ulong)left.Id).CompareTo((ulong)right.Id);
         }
 
-        // 检查活动行为的门控是否接受新许可。
-        internal bool Admits(CharacterBehaviorId request, CharacterBehaviorId active)
+        // 返回首个拒绝当前请求的活动门控，顺序与裁决顺序相同。
+        internal CharacterBehaviorId GateBlocker(CharacterBehaviorId request, CharacterBehaviorId active)
         {
-            foreach (CharacterBehaviorRule holder in Actions)
-                if ((active & holder.Id) != CharacterBehaviorId.None && !holder.Gate.Admits(request))
-                    return false;
-            return true;
+            foreach (var holder in Actions)
+                if ((active & holder.Id) != 0 && !holder.Gate.Admits(request)) return holder.Id;
+            return default;
         }
 
-        // 收集本次请求可打断的全部冲突许可，未全部通过时不修改任何行为。
-        internal bool TryApprove(CharacterBehaviorRule request, bool fallbackPermit,
-            in CharacterBehaviorStep step, out CharacterBehaviorId interrupted)
+        // 收集整组可打断行为，首个无法通过的门控、互斥或阶段限制就是本次拒绝原因。
+        internal bool TryApprove(CharacterBehaviorRule request, bool fallbackPermit, in CharacterBehaviorStep step,
+            out CharacterBehaviorId interrupted, out CharacterBehaviorRejectReason reason, out CharacterBehaviorId blocker)
         {
-            interrupted = CharacterBehaviorId.None;
-            if (!Admits(request.Id, step.Active))
-                return false;
-
+            interrupted = default;
+            blocker = GateBlocker(request.Id, step.Active);
+            reason = CharacterBehaviorRejectReason.Gate;
+            if (blocker != default) return false;
             if (fallbackPermit && request.InterruptsMovementOnStart(Movement))
             {
-                if (!CheckInterrupt(request.Id, Movement))
-                    return false;
+                blocker = Movement.Id;
+                reason = InterruptReason(request.Id, Movement);
+                if (reason != default) return false;
                 interrupted |= Movement.Id;
             }
-
-            foreach (CharacterBehaviorRule holder in Actions)
+            foreach (var holder in Actions)
             {
-                if (!step.IsActive(holder.Id) || !request.ConflictsWith(holder))
-                    continue;
-                // 本步刚获准的行为不会被后续请求打断。
-                if ((step.Started & holder.Id) != CharacterBehaviorId.None || !CheckInterrupt(request.Id, holder))
-                    return false;
+                if (!step.IsActive(holder.Id) || !request.ConflictsWith(holder)) continue;
+                blocker = holder.Id;
+                reason = (step.Started & holder.Id) != 0 ? CharacterBehaviorRejectReason.Conflict : InterruptReason(request.Id, holder);
+                if (reason != default) return false;
                 interrupted |= holder.Id;
             }
+            blocker = default;
+            reason = default;
             return true;
         }
 
-        // 检查打断关系及持有者所处阶段。
-        private bool CheckInterrupt(CharacterBehaviorId requester, CharacterBehaviorRule holder) =>
-            interrupts.TryGetValue((requester, holder.Id), out CharacterBehaviorPhase allowed) &&
-            (holder.Behavior.Phase & allowed) != 0;
+        // 缺少关系与持有者所处阶段不允许打断有不同的诊断原因。
+        private CharacterBehaviorRejectReason InterruptReason(CharacterBehaviorId requester, CharacterBehaviorRule holder)
+        {
+            if (!interrupts.TryGetValue((requester, holder.Id), out var allowed)) return CharacterBehaviorRejectReason.Conflict;
+            return (holder.Behavior.Phase & allowed) == 0 ? CharacterBehaviorRejectReason.PhaseRestriction : default;
+        }
     }
 }

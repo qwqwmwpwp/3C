@@ -8,6 +8,7 @@ namespace ThreeC.CharacterBehavior
     {
         internal float OrdinaryMovementSeconds;
         internal CharacterBehaviorMotion Action;
+        internal CharacterBehaviorId MotionBlocker;
     }
 
     /// <summary>维护基础移动许可，并将动作交还的时间和限速合成为普通位移。</summary>
@@ -15,7 +16,7 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterBehaviorRule fallback;
         private readonly CharacterMoveBehavior movement;
-        private bool previousApproval;
+        private bool previousApproval, requested;
 
         // 绑定基础移动及其准入规则。
         internal CharacterBehaviorLocomotion(CharacterBehaviorRule fallback, CharacterMoveBehavior movement)
@@ -41,9 +42,12 @@ namespace ThreeC.CharacterBehavior
             return new CharacterLocomotionStep { OrdinaryMovementSeconds = seconds };
         }
 
+        // 在本步裁决开始时只求值一次基础移动请求。
+        internal void ReadRequest(CharacterBehaviorContext context) => requested = movement.Evaluate(context);
+
         // 检查上步获得的基础移动许可在当前输入下是否仍有效。
         internal bool HasExistingPermit(CharacterBehaviorContext context, in CharacterBehaviorStep step) =>
-            step.IsActive(fallback.Id) && previousApproval && movement.Evaluate(context);
+            step.IsActive(fallback.Id) && previousApproval && requested;
 
         // 合并活动动作给出的时长、限制和位移归属。
         internal void Combine(CharacterBehaviorRule rule, CharacterBehaviorMotion motion,
@@ -51,10 +55,15 @@ namespace ThreeC.CharacterBehavior
         {
             step.OrdinarySpeedLimit = Math.Min(step.OrdinarySpeedLimit, rule.OrdinarySpeedLimit);
             if (rule.HasExplicitConflictWith(fallback))
+            {
                 locomotion.OrdinaryMovementSeconds = 0f;
+                if (locomotion.MotionBlocker == default) locomotion.MotionBlocker = rule.Id;
+            }
             if (!rule.ProvidesDisplacement)
                 return;
 
+            if (motion.OrdinaryMovementSeconds == 0f && !rule.Behavior.AllowsOrdinaryMotionNow && locomotion.MotionBlocker == default)
+                locomotion.MotionBlocker = rule.Id;
             locomotion.Action = motion; // 准入规则保证至多一个活动动作提供位移。
             locomotion.OrdinaryMovementSeconds = Math.Min(locomotion.OrdinaryMovementSeconds, motion.OrdinaryMovementSeconds);
             step.Motion = motion.Motion;
@@ -81,7 +90,8 @@ namespace ThreeC.CharacterBehavior
                         permittedTime = false;
                 }
             }
-            step.OrdinaryMovementApproved = ResolvePermit(context, rules, permittedTime, ref step);
+            if (movement.Journal.DispatchCancelled) return locomotion.Action.Displacement;
+            step.OrdinaryMovementApproved = ResolvePermit(context, rules, permittedTime, locomotion.MotionBlocker, ref step);
             if (step.OrdinaryMovementApproved && !previousApproval)
                 step.RecordGrant(fallback.Id);
             previousApproval = step.OrdinaryMovementApproved;
@@ -95,18 +105,42 @@ namespace ThreeC.CharacterBehavior
 
         // 在动作留出时间时保持基础移动生命周期，新许可需要经过门控。
         private bool ResolvePermit(CharacterBehaviorContext context, CharacterBehaviorRules rules,
-            bool permittedTime, ref CharacterBehaviorStep step)
+            bool permittedTime, CharacterBehaviorId motionBlocker, ref CharacterBehaviorStep step)
         {
+            var journal = movement.Journal;
             if (!permittedTime)
             {
                 if (step.IsActive(fallback.Id))
-                    step.End(fallback);
+                    step.End(fallback, CharacterBehaviorEndReason.Interrupted);
+                if (context.Input.Direction != default)
+                    journal.Record(fallback.Id, journal.NewRequest(), 0, CharacterBehaviorRequestStatus.Rejected,
+                        CharacterBehaviorRejectReason.Conflict, motionBlocker);
                 return false;
             }
 
             if (!step.IsActive(fallback.Id))
                 step.Start(fallback, new CharacterBehaviorStart(context, 0f), recordGrant: false);
-            return movement.Evaluate(context) && (previousApproval || rules.Admits(fallback.Id, step.Active));
+            if (context.Input.Direction == default)
+            {
+                if (previousApproval) journal.End(movement, CharacterBehaviorEndReason.Withdrawn);
+                return false;
+            }
+            var blocker = requested && !previousApproval ? rules.GateBlocker(fallback.Id, step.Active) : default;
+            if (!requested || blocker != default)
+            {
+                if (previousApproval) journal.End(movement, CharacterBehaviorEndReason.Withdrawn);
+                journal.Record(fallback.Id, journal.NewRequest(), 0, CharacterBehaviorRequestStatus.Rejected,
+                    !requested ? CharacterBehaviorRejectReason.InvalidConfiguration : CharacterBehaviorRejectReason.Gate, blocker);
+                return false;
+            }
+            if (previousApproval && movement.Execution.EndReason == default && movement.Execution.Instance != 0) step.HeldRequests |= fallback.Id;
+            else
+            {
+                long request = journal.NewRequest();
+                journal.Start(movement, request);
+                journal.Record(fallback.Id, request, movement.Execution.Instance, CharacterBehaviorRequestStatus.Started);
+            }
+            return true;
         }
     }
 }

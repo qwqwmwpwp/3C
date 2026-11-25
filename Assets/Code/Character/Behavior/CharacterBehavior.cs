@@ -7,6 +7,14 @@ namespace ThreeC.CharacterBehavior
     {
         /// <summary>行为已进入活动生命周期，由流程统一启动、执行和结束。</summary>
         public bool IsActive { get; protected set; }
+        internal CharacterBehaviorJournal Journal;
+        internal CharacterBehaviorId RegisteredId;
+        internal CharacterBehaviorExecution Execution;
+        internal bool HeldRequest;
+        /// <summary>生命周期回调也可区分独立预测，避免在预演或工作线程发出真实副作用。</summary>
+        protected bool IsPrediction => Journal?.Forecasting == true;
+        /// <summary>启动获准后可在运动冻结或后续执行时读取当前通用执行号。</summary>
+        protected long ExecutionInstance => Execution.Instance;
         internal bool IsBound { get; set; }
         /// <summary>位移动作起手时允许保留普通移动许可。显式互斥仍然有效。</summary>
         public virtual bool SharesMovementOnStart => false;
@@ -27,21 +35,30 @@ namespace ThreeC.CharacterBehavior
         /// <summary>只读判断行为自身是否允许开始，互斥和打断由规则裁决。</summary>
         public abstract bool Evaluate(CharacterBehaviorContext context);
 
-        // 判断动作自身的请求条件，供共享准入检查继续验证体力。
-        internal virtual bool EvaluateRequest(CharacterBehaviorContext context) => Evaluate(context);
+        /// <summary>一次性检查请求条件。旧 Evaluate 仍可由状态主动触发，显式请求未通过时使用兼容原因。</summary>
+        protected virtual CharacterBehaviorRejectReason CheckRequest(CharacterBehaviorContext context) =>
+            Evaluate(context) ? CharacterBehaviorRejectReason.None : CharacterBehaviorRejectReason.LegacyEvaluation;
 
-        // 只为满足自身条件的动作建立启动请求并记录本次报价。
-        internal virtual CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context) =>
-            EvaluateRequest(context) ? new CharacterBehaviorStart(context, GetStaminaCost(context)) : null;
+        // 用同一次检查及报价准备启动；失败原因由实际拒绝的检查直接给出。
+        internal virtual CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
+        {
+            reason = CheckRequest(context);
+            if (reason != default || Journal?.DispatchCancelled == true) return null;
+            return new CharacterBehaviorStart(context, GetStaminaCost(context));
+        }
 
         // 将通用请求交给已有行为的公开启动入口。
         internal virtual void StartPrepared(CharacterBehaviorStart request) => Start(request.Context);
 
-        // 一次性解析并检查申请条件和体力报价，供许可后使用同一份请求。
-        internal bool TryPrepareStart(CharacterBehaviorContext context, out CharacterBehaviorStart request)
+        // 检查已准备请求的报价，资源只在获准启动后消费。
+        internal CharacterBehaviorStart Quote(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
         {
-            request = PrepareStart(context);
-            return request != null && CharacterStaminaBlackboard.CanAfford(context.StaminaRemaining, request.Cost);
+            var prepared = PrepareStart(context, out reason);
+            if (prepared == null) return null;
+            if (CharacterStaminaBlackboard.CanAfford(context.StaminaRemaining, prepared.Cost)) return prepared;
+            reason = prepared.Cost >= 0f && !float.IsInfinity(prepared.Cost)
+                ? CharacterBehaviorRejectReason.InsufficientResource : CharacterBehaviorRejectReason.InvalidConfiguration;
+            return null;
         }
 
         /// <summary>成功开始时消耗的共享体力。此查询不更改行为或体力。</summary>
@@ -93,6 +110,8 @@ namespace ThreeC.CharacterBehavior
         internal void ApplyRuntimeCopyTo(CharacterBehavior target)
         {
             target.IsActive = IsActive;
+            target.Execution = Execution;
+            target.HeldRequest = HeldRequest;
             CopyRuntimeStateTo(target);
         }
 
@@ -143,9 +162,11 @@ namespace ThreeC.CharacterBehavior
         public CharacterMovementSettings Settings { get; }
         public float StaminaRemaining { get; }
         public float DashCooldownRemaining { get; }
-        internal double SimulationTime { get; }
-        internal Vector2 GroundVelocity { get; }
-        internal bool SeparateBoundaries { get; }
+        /// <summary>预测与预演只计算独占状态，不能发送真实事件或修改场景对象。</summary>
+        public bool IsPrediction { get; }
+        public double SimulationTime { get; }
+        public Vector2 GroundVelocity { get; }
+        public bool SeparateBoundaries { get; }
 
         // 保存外部调用者提供的共享输入、体力与兼容冷却快照。
         public CharacterBehaviorContext(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
@@ -157,15 +178,18 @@ namespace ThreeC.CharacterBehavior
             Settings = settings ?? new CharacterMovementSettings();
             StaminaRemaining = staminaRemaining;
             DashCooldownRemaining = dashCooldownRemaining;
+            IsPrediction = false;
             SeparateBoundaries = false;
             SimulationTime = 0d;
             GroundVelocity = default;
         }
 
+        // 捕获该步的角色时钟、真实地速、端点规则及预测语境。
         internal CharacterBehaviorContext(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
-            CharacterMovementSettings settings, float stamina, float dashCooldown, double simulationTime, Vector2 groundVelocity, bool separateBoundaries = false)
+            CharacterMovementSettings settings, float stamina, float dashCooldown, double simulationTime, Vector2 groundVelocity, bool separateBoundaries = false, bool isPrediction = false)
             : this(input, facing, deltaTime, settings, stamina, dashCooldown)
         {
+            IsPrediction = isPrediction;
             SeparateBoundaries = separateBoundaries;
             SimulationTime = simulationTime;
             GroundVelocity = groundVelocity;

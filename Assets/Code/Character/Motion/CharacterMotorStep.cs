@@ -168,6 +168,14 @@ namespace ThreeC.CharacterBehavior
         internal static bool IsGroundSupported(Vector3 velocity, Vector3 ground) =>
             ground.y > 0f && Vector3.Dot(velocity, ground) < 0.5f;
 
+        // 击退在受支撑时衰减切向速度，腾空时保留重力和外部冲量。
+        internal static void AdvanceKnockback(ref Vector3 velocity, Vector3 ground, float braking, float seconds)
+        {
+            if (!IsGroundSupported(velocity, ground)) return;
+            Vector3 planar = Vector3.ProjectOnPlane(velocity, ground);
+            velocity += Vector3.MoveTowards(planar, Vector3.zero, braking * seconds) - planar;
+        }
+
         // 仅在仍受支撑时向行为提供世界 XZ 平面速度。
         internal static Vector2 GroundVelocity(Vector3 velocity, Vector3 ground) =>
             IsGroundSupported(velocity, ground) ? new Vector2(velocity.x, velocity.z) : default;

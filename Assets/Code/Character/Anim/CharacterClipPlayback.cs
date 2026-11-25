@@ -175,6 +175,13 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 丢弃瞬移和外控前的片段与时间差，后续从新基线建声部。
+        internal void ClearMotionSources()
+        {
+            body?.ClearMotionSources();
+            delta = 0f;
+        }
+
         // 销毁本角色的播放节点并清除本帧动画时间。
         public void Close()
         {

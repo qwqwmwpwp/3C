@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    // 安装地面动作库、用途权重和步态调速配置。
+    // 为角色播放库提供匹配规则、用途权重和步态调速配置。
     [CreateAssetMenu(menuName = "3C/动画模块/地面动作匹配", fileName = "地面动作匹配")]
     public sealed class MotionMatchModule : AnimationModule
     {
@@ -14,21 +14,24 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("改向选姿夹角（度）"), SerializeField, Range(15f, 180f), Tooltip("持续移动中触发选姿的输入与速度改向角（度）。")]
         private float matchTurnAngle = 55f;
         [SerializeField, InspectorName("候选条件表")] internal GroundCandidateTable candidates;
-        [SerializeField, InspectorName("地面动作库")] private CharacterMotionDatabase database;
 
         [SerializeField, InspectorName("匹配特征与用途权重")] private GroundMatchTuning costs = new GroundMatchTuning();
         [SerializeField, InspectorName("循环步频倍率范围")] private GroundPaceLimits paceLimits = new GroundPaceLimits();
+
+        // 使用角色播放库的烘焙轨道校验布局，编辑器与运行时共用同一结果。
+        internal static GroundFeatureLayout LayoutFor(CharacterMotionDatabase library) =>
+            new GroundFeatureLayout(library && library.Groups ? library.Groups.Schema : null, library ? library.BakedTracks : null);
 
         internal override void Include(AnimationModuleAssembly assembly) => assembly.Add(this);
 
         // 将匹配配置写入本次角色装配。
         internal void Apply(CharacterAnimationConfiguration config)
         {
+            var database = config.PlaybackLibrary;
             config.CandidatePolicy = new GroundCandidatePolicy(candidates, database);
-            config.FeatureLayout = database && database.Groups ? new GroundFeatureLayout(database.Groups.Schema, database.BakedTracks) : null;
-            config.MatchCosts = costs ?? new GroundMatchTuning();
+            config.FeatureLayout = LayoutFor(database);
+            config.MatchCosts = costs?.Snapshot() ?? new GroundMatchTuning();
             config.PaceLimits = paceLimits;
-            config.MatchDatabase = database;
             config.MatchMode = motionMatching;
             config.MatchMargin = matchSwitchMargin;
             config.MatchReverseHold = matchReverseHold;

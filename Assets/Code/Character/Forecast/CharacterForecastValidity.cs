@@ -20,6 +20,38 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
+    // 保存轨迹真正依赖的连续运动数值，可与原地编辑之后的新观测逐项比较。
+    internal readonly struct CharacterForecastTuning
+    {
+        private readonly (float walk, float run, float sprint, float turn) movement;
+        private readonly (float ground, float air, float turnSpeed, float footfall) acceleration;
+        private readonly (float walk, float run, float sprint) braking, turnRise;
+        private readonly (float settle, float brakingRatio, float lateralRatio) turning;
+        private readonly (float seconds, float deceleration, float minSpeed, float footfall) leadIn;
+        private readonly (float slopeLimit, float stepHeight, float drag, bool useGravity) body;
+        private readonly Vector3 gravity;
+
+        // 记录已应用实例覆盖的驱动参数，以及本次行为和物理计算读取的数值。
+        internal CharacterForecastTuning(CharacterMovementSettings speeds, in CharacterDriveParameters drive)
+        {
+            var motor = drive.Settings;
+            movement = (speeds.WalkSpeed, speeds.MoveSpeed, speeds.SprintSpeed, speeds.MoveTurnSpeed);
+            acceleration = (drive.GroundAcceleration, motor.airAcceleration, drive.TurnSpeed, drive.FootfallDistance);
+            braking = (motor.walkBraking, motor.runBraking, motor.sprintBraking);
+            turnRise = (motor.walkTurnRise, motor.runTurnRise, motor.sprintTurnRise);
+            turning = (motor.turnSettle, motor.turnBrakingRatio, motor.turnLateralRatio);
+            leadIn = (motor.runBrakeLeadInSeconds, motor.runBrakeLeadInDeceleration,
+                motor.runBrakeLeadInMinSpeed, motor.runBrakeLeadInFootfallDistance);
+            body = (motor.slopeLimit, motor.stepHeight, drive.Drag, drive.UseGravity);
+            gravity = drive.Gravity;
+        }
+
+        // 标量沿用逐项相等判断，重力向量沿用 Unity 的比较精度。
+        internal bool Matches(in CharacterForecastTuning other) => movement == other.movement && acceleration == other.acceleration &&
+            braking == other.braking && turnRise == other.turnRise && turning == other.turning && leadIn == other.leadIn &&
+            body == other.body && gravity == other.gravity;
+    }
+
     // 按当前帧末的输入、动作、动态接触和实测偏差校验任务与已发布轨迹。
     internal static class CharacterForecastValidity
     {
@@ -38,16 +70,20 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 以任务真正使用的那一帧为基准，能识别许多小幅输入变化累计造成的方向偏离。
-        internal static ForecastRefreshReason Changed(in CharacterForecastFrame basis, in CharacterForecastFrame current)
+        internal static ForecastRefreshReason Changed(in CharacterForecastFrame basis, in CharacterForecastObservation current,
+            double controlReturnsAt, float forcedBraking)
         {
-            if (basis.Generation != current.Generation) return ForecastRefreshReason.SimulationBoundary;
-            if (basis.AlignmentRevision != current.AlignmentRevision) return ForecastRefreshReason.ExternalState;
-            if (basis.Origin.DynamicContact != current.Origin.DynamicContact) return ForecastRefreshReason.DynamicContact;
-            if (basis.ControlReturnsAt != current.ControlReturnsAt || basis.ForcedBraking != current.ForcedBraking)
+            ref readonly var old = ref basis.Observation;
+            if (old.Generation != current.Generation) return ForecastRefreshReason.SimulationBoundary;
+            if (old.AlignmentRevision != current.AlignmentRevision) return ForecastRefreshReason.ExternalState;
+            if (old.Origin.DynamicContact != current.Origin.DynamicContact) return ForecastRefreshReason.DynamicContact;
+            if (basis.ControlReturnsAt != controlReturnsAt || basis.ForcedBraking != forcedBraking)
                 return ForecastRefreshReason.Knockback;
             var changed = ChangedInput(basis, current.Held);
             if (changed != ForecastRefreshReason.None) return changed;
-            return SameSettings(basis, current) ? ForecastRefreshReason.None : ForecastRefreshReason.Settings;
+            return old.Window.Step == current.Window.Step && old.Window.Interval == current.Window.Interval &&
+                old.Window.Horizon == current.Window.Horizon && old.DirectionTolerance == current.DirectionTolerance &&
+                old.Tuning.Matches(current.Tuning) ? ForecastRefreshReason.None : ForecastRefreshReason.Settings;
         }
 
         // 动画采集前也可只检查已完成的行为和输入，具体计算仍由帧末统一启动。
@@ -56,32 +92,9 @@ namespace ThreeC.CharacterBehavior
             var oldInput = basis.Held;
             if (input.Gait != oldInput.Gait || input.GuardHeld != oldInput.GuardHeld ||
                 (input.Direction == Vector2.zero) != (oldInput.Direction == Vector2.zero) ||
-                (input.Direction - oldInput.Direction).sqrMagnitude >= basis.DirectionTolerance * basis.DirectionTolerance)
+                (input.Direction - oldInput.Direction).sqrMagnitude >= basis.Observation.DirectionTolerance * basis.Observation.DirectionTolerance)
                 return ForecastRefreshReason.MovementInput;
             return ForecastRefreshReason.None;
-        }
-
-        // 比较快照中的数值，配置对象在 Inspector 中原地修改也会撤回旧假设。
-        private static bool SameSettings(in CharacterForecastFrame a, in CharacterForecastFrame b)
-        {
-            var x = a.Drive;
-            var y = b.Drive;
-            var old = x.Settings;
-            var next = y.Settings;
-            return a.Window.Step == b.Window.Step && a.Window.Interval == b.Window.Interval && a.Window.Horizon == b.Window.Horizon &&
-                a.DirectionTolerance == b.DirectionTolerance &&
-                a.Movement.WalkSpeed == b.Movement.WalkSpeed && a.Movement.MoveSpeed == b.Movement.MoveSpeed &&
-                a.Movement.SprintSpeed == b.Movement.SprintSpeed && a.Movement.MoveTurnSpeed == b.Movement.MoveTurnSpeed &&
-                x.GroundAcceleration == y.GroundAcceleration && x.TurnSpeed == y.TurnSpeed && x.FootfallDistance == y.FootfallDistance &&
-                x.Drag == y.Drag && x.UseGravity == y.UseGravity && x.Gravity == y.Gravity &&
-                old.airAcceleration == next.airAcceleration && old.walkBraking == next.walkBraking &&
-                old.runBraking == next.runBraking && old.sprintBraking == next.sprintBraking &&
-                old.walkTurnRise == next.walkTurnRise && old.runTurnRise == next.runTurnRise && old.sprintTurnRise == next.sprintTurnRise &&
-                old.turnSettle == next.turnSettle && old.turnBrakingRatio == next.turnBrakingRatio &&
-                old.turnLateralRatio == next.turnLateralRatio && old.runBrakeLeadInSeconds == next.runBrakeLeadInSeconds &&
-                old.runBrakeLeadInDeceleration == next.runBrakeLeadInDeceleration && old.runBrakeLeadInMinSpeed == next.runBrakeLeadInMinSpeed &&
-                old.runBrakeLeadInFootfallDistance == next.runBrakeLeadInFootfallDistance &&
-                old.slopeLimit == next.slopeLimit && old.stepHeight == next.stepHeight;
         }
 
         // 后台任务可晚于新帧到达。校验沿途全部已求解步、当前实测和剩余可信窗口。
@@ -93,11 +106,11 @@ namespace ThreeC.CharacterBehavior
                 var difference = CompareAt(path, check.time, check.pose);
                 if (difference != ForecastRefreshReason.None) return difference;
             }
-            return ValidatePublished(path, current);
+            return ValidatePublished(path, current.Observation);
         }
 
         // 可信边界前可以保留短样本；边界过去后即使是动态物体截断也须重新取得起点。
-        internal static ForecastRefreshReason ValidatePublished(CharacterMovementForecast path, in CharacterForecastFrame current)
+        internal static ForecastRefreshReason ValidatePublished(CharacterMovementForecast path, in CharacterForecastObservation current)
         {
             var difference = CompareAt(path, current.Origin.Time, current.Origin.Pose);
             if (difference != ForecastRefreshReason.None) return difference;

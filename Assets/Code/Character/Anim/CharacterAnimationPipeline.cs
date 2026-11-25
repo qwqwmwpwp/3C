@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace ThreeC.CharacterBehavior
@@ -14,22 +13,14 @@ namespace ThreeC.CharacterBehavior
         private CharacterAnimationPlaybackPlan committedPlan;
         public CharacterAnimationIk Ik => modules.Ik;
         public CharacterMotionMatcher Matcher => modules.Matcher;
-        private readonly List<(CharacterControllerFrameResult frame, CharacterAnimationMotion motion, bool reset, double time, bool preserve)> steps =
-            new List<(CharacterControllerFrameResult, CharacterAnimationMotion, bool, double, bool)>();
-        private CharacterPresentationInput input;
-        private CharacterPoseCandidate candidate;
-        private CharacterPlaybackObservation observed;
-        private bool prepared;
-        private bool awaitingGaitForecast;
-        private int capturedSteps, deferredSteps;
+        private readonly CharacterAnimationStepHistory steps;
+        private CharacterPresentationWork batch;
         private Task job;
         private readonly System.Action compute;
-        private int capturedSimulation;
-        private Avatar capturedAvatar;
-        private bool reselect;
         private int stateVersion;
         private string reportedError;
         private bool animatorUnavailable;
+        private bool clearMotionSources;
         private CharacterBehaviorObservation lastBehavior;
 #if UNITY_EDITOR
         private readonly CharacterAnimationDebugTrace debugTrace = new CharacterAnimationDebugTrace();
@@ -45,20 +36,26 @@ namespace ThreeC.CharacterBehavior
             this.logContext = logContext;
             observer = new CharacterAnimationMotionObserver(logContext.transform, configuration.IkTeleportDistance);
             lastBehavior = behavior.SimulationVersion == simulationVersion ? behavior : default;
-            modules = new CharacterAnimationModules(animator, logContext, configuration, lastBehavior);
+            modules = new CharacterAnimationModules(animator, logContext, configuration, lastBehavior, currentStateVersion);
+            steps = new CharacterAnimationStepHistory(modules);
             stateVersion = currentStateVersion;
             observer.Reset(latestFrame, simulationVersion, externalTrajectory);
             modules.Intent.ResetGait(lastBehavior.Behavior);
             SynchronizeResources();
         }
 
+        // 核对当前播放库与模块影响，旧批次可在校验期间继续完成规划。
+        internal AnimationModuleChanges PrepareModules(CharacterAnimationConfiguration config, bool refreshContents) =>
+            modules.Prepare(config, refreshContents);
+
         // 交接旧配置下的固定步后重新装配模块。
-        internal void Reconfigure(CharacterAnimationConfiguration config, CharacterBehaviorObservation seed)
+        internal void Reconfigure(CharacterAnimationConfiguration config, AnimationModuleChanges changes, CharacterBehaviorObservation seed)
         {
             Join();
-            if (prepared) Discard();
-            ConsumeSteps(steps.Count);
-            modules.Reconfigure(config, seed);
+            if (batch.Pending) Discard(CharacterPlaybackEndSource.Rebind);
+            steps.Consume(steps.Count, ref batch);
+            modules.Reconfigure(config, changes, seed);
+            observer.ConfigureTeleport(config.IkTeleportDistance);
         }
 
         public CharacterAnimationMotion ReadMotion(CharacterControllerFrameResult latestFrame,
@@ -78,8 +75,8 @@ namespace ThreeC.CharacterBehavior
             bool received = observer.Receive(frame, simulationVersion, simulating, out bool resetPose, externalTrajectory);
             if (resetPose) Ik.ClearPose();
             if (received)
-                steps.Add((frame, observer.Read(frame, simulationVersion, simulating), resetPose, time, false));
-            else if (resetPose) steps.Add((default, default, true, time, false));
+                steps.Add(frame, observer.Read(frame, simulationVersion, simulating), resetPose, time);
+            else if (resetPose) steps.Add(default, default, true, time);
         }
 
         // 接收当前代次的新行为片段；固定步重读与同帧重复采集均不会触发动作。
@@ -93,56 +90,19 @@ namespace ThreeC.CharacterBehavior
             modules.Intent.ObserveDash(frame.Behavior);
         }
 
-        // 按顺序消化本次采集覆盖的固定步，后到的提交留给下一次采集。
-        private void ConsumeSteps(int count, bool deferGait = false)
-        {
-            for (int i = 0; i < count; i++)
-            {
-                var step = steps[i];
-                if (step.reset) Matcher.Reset();
-                if (step.frame.FrameNumber != 0)
-                {
-                    modules.Intent.ObserveActionVariantMotion(step.motion);
-                    step.preserve = modules.Bindings.PreservesEntryGait(step.frame);
-                }
-                if (deferGait) steps[i] = step;
-                else ReceiveIntent(step, false);
-            }
-            if (deferGait) deferredSteps = count;
-            else steps.RemoveRange(0, count);
-        }
-
-        // 用与本步绑定结果对应的步态许可推进意图。
-        private void ReceiveIntent(in (CharacterControllerFrameResult frame, CharacterAnimationMotion motion,
-            bool reset, double time, bool preserve) step, bool projectGait)
-        {
-            if (step.reset) modules.Intent.InvalidateMotion();
-            if (step.frame.FrameNumber == 0) return;
-            var motion = projectGait && modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)
-                ? input.ProjectStep(step.frame, step.motion, step.time) : step.motion;
-            modules.Intent.Receive(motion, step.frame.Behavior, step.frame.Input, step.frame.DeltaTime, step.preserve);
-        }
-
-        // 只补交已处理绑定的固定步意图，绑定和许可仍然按原计划发布一次。
-        private void FinishDeferredGait(bool projectGait)
-        {
-            for (int i = 0; i < deferredSteps; i++) ReceiveIntent(steps[i], projectGait);
-            steps.RemoveRange(0, deferredSteps);
-            deferredSteps = 0;
-        }
-
-        // 找出需要先核对发布预测、再更新持久步态的固定步批次。
-        private bool HasForecastSensitiveSteps()
-        {
-            foreach (var step in steps)
-                if (modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)) return true;
-            return false;
-        }
-
         // 采样动画更新所需输入，并处理暂停、Animator 停用与资源缺失。
         public bool Capture(CharacterControllerFrameResult latestFrame, CharacterBehaviorObservation behavior, int currentStateVersion,
             int simulationVersion, bool simulating, float deltaTime, double now, long guardGrant, CharacterMovementForecast forecast)
         {
+            Join();
+            if (batch.Pending) Discard();
+            if (clearMotionSources)
+            {
+                // 外控可从片段事件重入，等到下一次采集再修改可播放图和 IK 作业。
+                clearMotionSources = false;
+                modules.Player.ClearMotionSources();
+                Ik.ClearPose();
+            }
             Receive(latestFrame, currentStateVersion, simulationVersion, simulating, now); // 补读遗漏的固定步提交，观测端负责去重。
             CharacterAnimationMotion motion = observer.Read(latestFrame, simulationVersion, simulating);
             bool validGrant = simulating && behavior.FrameNumber > 0 && behavior.SimulationVersion == simulationVersion;
@@ -151,14 +111,14 @@ namespace ThreeC.CharacterBehavior
 #endif
             if (animator == null || !animator.isActiveAndEnabled)
             {
-                ConsumeSteps(steps.Count);
+                steps.Consume(steps.Count, ref batch);
                 modules.Bindings.UpdateGrants(validGrant, guardGrant);
-                modules.Bindings.SuspendPulses();
+                modules.Bindings.SuspendPulses(CharacterPlaybackEndSource.ResourceUnavailable);
                 // Animator 停用时仍接收固定步，恢复时重发播放状态并重建步态相位。
                 if (!animatorUnavailable)
                 {
                     modules.Bindings.RebindGrantedEntries();
-                    modules.Composer.ResetSelection();
+                    modules.Composer.ResetSelection(CharacterPlaybackEndSource.ResourceUnavailable);
                     committedPlan = default;
                     Matcher.Reset();
                     Ik.Invalidate();
@@ -177,9 +137,9 @@ namespace ThreeC.CharacterBehavior
             bool ready = SynchronizeResources();
             if (!simulating || !ready)
             {
-                ConsumeSteps(steps.Count);
+                steps.Consume(steps.Count, ref batch);
                 modules.Bindings.UpdateGrants(validGrant, guardGrant);
-                modules.Bindings.SuspendPulses();
+                modules.Bindings.SuspendPulses(ready ? CharacterPlaybackEndSource.Paused : CharacterPlaybackEndSource.ResourceUnavailable);
                 Matcher.Reset();
                 if (!ready) Ik.Invalidate();
                 else Ik.SetFrozen(true);
@@ -196,23 +156,26 @@ namespace ThreeC.CharacterBehavior
             var feet = motion.IsValid ? Ik.ReadFeet(motion) : default;
             Matcher.Features = Ik.ReadFeatures(feet);
             var seen = modules.Playback.Capture(committedPlan.FullBody, feet);
-            input = new CharacterPresentationInput(latestFrame, behavior.Behavior, motion, forecast, seen, feet,
+            var input = new CharacterPresentationInput(latestFrame, behavior.Behavior, motion, forecast, seen, feet,
                 deltaTime, now, validGrant, guardGrant, Matcher.Windows);
-            capturedSteps = steps.Count;
-            awaitingGaitForecast = forecast != null && HasForecastSensitiveSteps();
-            capturedSimulation = simulationVersion;
-            capturedAvatar = animator.avatar;
-            reselect = false;
-            prepared = true;
+            batch = new CharacterPresentationWork(input, steps.Count, forecast != null && steps.HasForecastSensitiveSteps(),
+                currentStateVersion, simulationVersion, animator.avatar);
             return true;
         }
 
+        // 在工作线程或当前线程完成本次试选。
         internal void Schedule(bool threaded)
         {
             if (threaded) job = Task.Run(compute);
-            else { Plan(); modules.Composer.FinishPlan(); }
+            else
+            {
+                try { Plan(); }
+                catch { Discard(); throw; }
+                finally { modules.Composer.FinishPlan(); }
+            }
         }
 
+        // 等待后台规划退出后，才可交接或复用同一批次。
         internal void Join()
         {
             if (job == null) return;
@@ -224,6 +187,7 @@ namespace ThreeC.CharacterBehavior
             finally { modules.Composer.FinishPlan(); }
         }
 
+        // 核对本批次的代次、模型与播放图，并在暂停时冻结输出。
         internal bool CanApply(int state, int simulation, bool simulating)
         {
             if (!simulating && animator && animator.isActiveAndEnabled)
@@ -231,8 +195,8 @@ namespace ThreeC.CharacterBehavior
                 modules.Player.SetPaused(true);
                 Ik.SetFrozen(true);
             }
-            return prepared && simulating && stateVersion == state && capturedSimulation == simulation &&
-                animator && animator.isActiveAndEnabled && animator.avatar == capturedAvatar && !modules.Player.NeedsRebind;
+            return simulating && animator && animator.isActiveAndEnabled && batch.Matches(state, simulation, animator.avatar) &&
+                !modules.Player.NeedsRebind;
         }
 
         // 按计划时点提交绑定；预测敏感的步态要等最终核对后才用于选姿。
@@ -240,58 +204,55 @@ namespace ThreeC.CharacterBehavior
         {
             using var sample = CharacterPresentationBatch.Planning.Auto();
             modules.Composer.BeginPlan();
-            ConsumeSteps(capturedSteps, awaitingGaitForecast);
-            var motion = input.Motion;
-            modules.Bindings.UpdateGrants(input.ValidGrant, input.GuardGrant);
+            steps.Consume(batch.CoveredSteps, ref batch, batch.AwaitingGaitForecast);
+            var motion = batch.Input.Motion;
+            modules.Bindings.UpdateGrants(batch.Input.ValidGrant, batch.Input.GuardGrant);
             if (!motion.IsValid) modules.Intent.ObserveActionVariantMotion(motion);
             modules.Bindings.SubmitGranted();
-            if (!awaitingGaitForecast) PlanSelection();
+            if (!batch.AwaitingGaitForecast) PlanSelection();
         }
 
         // 用此批次已更新的步态历史推进表现时间和候选选择。
         private void PlanSelection()
         {
-            if (input.Motion.IsValid) modules.Intent.AdvancePresentation(input.DeltaTime);
+            if (batch.Input.Motion.IsValid) modules.Intent.AdvancePresentation(batch.Input.DeltaTime);
             else modules.Intent.InvalidateMotion();
-            observed = input.Observation.ForPhase(modules.Intent.Phase);
+            batch.Observed = batch.Input.Observation.ForPhase(modules.Intent.Phase);
             Matcher.SaveSelectionHistory();
-            candidate = EvaluateCandidate();
+            batch.Select(EvaluateCandidate());
         }
 
         // 以当前意图仲裁部位，计算下身片段及足部覆盖许可。
         private CharacterPoseOwners SelectOwners()
         {
             var selection = modules.Composer.Preview(modules.Intent.Current);
-            bool returning = modules.Bindings.IsReturningToMovement(selection.Overlay, input.Behavior);
-            return modules.Poses.SelectOwners(selection, observed, committedPlan, returning, modules.Intent.UsesMovingActionVariant);
+            bool returning = modules.Bindings.IsReturningToMovement(selection.Overlay, batch.Input.Behavior);
+            return modules.Poses.SelectOwners(selection, batch.Observed, committedPlan, returning, modules.Intent.UsesMovingActionVariant);
         }
 
         // 用本帧观测和最近提交的播放计划计算完整候选。
         private CharacterPoseCandidate EvaluateCandidate() =>
-            modules.Poses.EvaluateCandidate(SelectOwners(), modules.Intent, Matcher, input, observed, committedPlan);
+            modules.Poses.EvaluateCandidate(SelectOwners(), modules.Intent, Matcher, batch.Input, batch.Observed, committedPlan);
 
         // 在提交前更新本帧的预测输入，轨迹发生变化时重新选择。
         internal void RefreshForecast(CharacterMovementForecast published)
-        {
-            input = input.RefreshForecast(published, out bool changed);
-            reselect |= changed;
-        }
+            => batch.RefreshForecast(published);
 
         // 在预测核对后处理尚未计划的步态批次，并提交动画组合。
         internal void Apply()
         {
-            if (!prepared) return;
-            prepared = false;
+            if (!batch.Pending) return;
+            batch.BeginApply();
             try
             {
-                if (awaitingGaitForecast)
+                if (batch.AwaitingGaitForecast)
                 {
-                    FinishDeferredGait(true);
+                    steps.FinishDeferredGait(true, ref batch);
                     PlanSelection();
-                    reselect = false;
                 }
                 modules.Composer.BeginPlan(); // 单次动作的完成回执随最终播放结果发布。
                 ApplySelection();
+                batch = default;
             }
             catch { Discard(); throw; }
         }
@@ -299,33 +260,32 @@ namespace ThreeC.CharacterBehavior
         // 核对单次动作回执并重新选择，完成播放下发后发布最终结果。
         private void ApplySelection()
         {
-            var preview = reselect ? modules.Composer.Preview(modules.Intent.Current) : candidate.Owners.Selection;
-            if (modules.Player.ReconcileOneShots(committedPlan, observed, preview, modules.Composer))
-            {
-                modules.Bindings.SubmitGranted();
-                reselect = true;
-            }
-            if (reselect)
+            var preview = batch.NeedsSelection ? modules.Composer.Preview(modules.Intent.Current) : batch.Candidate.Owners.Selection;
+            bool reconciled = modules.Player.ReconcileOneShots(committedPlan, batch.Observed, preview, modules.Composer);
+            if (reconciled) modules.Bindings.SubmitGranted();
+            if (reconciled || batch.NeedsSelection)
             {
                 Matcher.RestoreSelectionHistory();
-                candidate = EvaluateCandidate();
+                batch.Select(EvaluateCandidate());
             }
+            var candidate = batch.Candidate;
             var entryVelocity = modules.Intent.StopEntryVelocity;
             if (modules.Intent.ApplyRelease(candidate.Release))
                 candidate = new CharacterPoseCandidate(SelectOwners(), candidate.Release, candidate.Match);
-            var motion = input.Motion;
-            float deltaTime = input.DeltaTime;
-            var plan = modules.Poses.Select(candidate, modules.Intent.UsesMovingActionVariant, observed, motion, entryVelocity, committedPlan);
+            var motion = batch.Input.Motion;
+            float deltaTime = batch.Input.DeltaTime;
+            var plan = modules.Poses.Select(candidate, modules.Intent.UsesMovingActionVariant, batch.Observed, motion, entryVelocity, committedPlan);
             var selection = candidate.Owners.Selection.WithPlaybackWeights(plan);
             var emission = modules.Player.ApplyPlan(plan, deltaTime);
-            modules.Composer.PublishReceipts(true);
+            modules.Composer.PublishReceipts();
             modules.Composer.Commit(selection);
-            modules.Player.PublishOneShotStarts(plan, emission);
+            modules.Player.PublishOneShotStarts(plan, emission, modules.Composer);
             modules.Bindings.ReleaseExpiredRequests();
             committedPlan = plan;
-            Ik.Prepare(selection, motion, plan, deltaTime, input.Time); // 目标许可与当前片段混合、分层遮罩同步。
+            Ik.Prepare(selection, motion, plan, deltaTime, batch.Input.Time); // 目标许可与当前片段混合、分层遮罩同步。
             modules.Player.EvaluatePose();
 #if UNITY_EDITOR
+            if (clearMotionSources) return; // 片段事件已切换到新的运动基线。
             Matcher.Publish(candidate.Match, plan);
             debugTrace.Publish(plan, emission, modules.Player.CaptureDebugMix(), Ik.RootDebug);
 #endif
@@ -334,21 +294,24 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 撤销本帧回执，已结算意图仍以固定步观测完成交接。
-        internal void Discard()
+        internal void Discard(CharacterPlaybackEndSource source = CharacterPlaybackEndSource.BatchDiscarded)
         {
-            prepared = false;
-            if (deferredSteps != 0) FinishDeferredGait(false);
-            modules.Composer.PublishReceipts(false);
+            if (batch.DeferredSteps != 0) steps.FinishDeferredGait(false, ref batch);
+            batch = default;
+            modules.Composer.PublishReceipts(source);
             Matcher.Reset();
         }
 
+        // 提交新单次动作并使本帧尚未提交的候选重新参与仲裁。
         public CharacterActionPlayback PlayOnce(string key, float weight, CharacterControllerFrameResult latestFrame,
             int currentStateVersion, int simulationVersion)
         {
             Join();
             if (stateVersion != currentStateVersion) Reset(latestFrame, currentStateVersion, simulationVersion);
-            var result = SynchronizeResources() && modules.Resources.CanPlayOnce(key) ? modules.Composer.PlayOnce(key, weight) : null;
-            reselect |= prepared && result != null;
+            var origin = new CharacterPlaybackOrigin(currentStateVersion, simulationVersion);
+            var result = SynchronizeResources() && modules.Resources.CanPlayOnce(key)
+                ? modules.Composer.PlayOnce(key, weight, origin, CharacterPlaybackStartSource.ExplicitRequest) : null;
+            batch.RequestSelection(result != null);
             return result;
         }
 
@@ -357,11 +320,12 @@ namespace ThreeC.CharacterBehavior
         {
             Join();
             Discard();
-            ConsumeSteps(steps.Count);
+            steps.Consume(steps.Count, ref batch);
             observer.InvalidatePosition();
             ClearPoseHistory();
         }
 
+        // 清空匹配、步态及最终骨骼修正的跨帧采样。
         private void ClearPoseHistory()
         {
             Matcher.Reset();
@@ -369,6 +333,36 @@ namespace ThreeC.CharacterBehavior
             Ik.ClearPose();
         }
 
+        // 外控边界停止旧动作并丢弃运动历史，保留绑定、播放图和显式 IK 目标。
+        internal void MotionBoundary(CharacterMotionBoundaryKind kind, int simulationVersion)
+        {
+            Join();
+            var source = kind switch
+            {
+                CharacterMotionBoundaryKind.Teleport => CharacterPlaybackEndSource.Teleport,
+                CharacterMotionBoundaryKind.Knockback => CharacterPlaybackEndSource.Knockback,
+                _ => CharacterPlaybackEndSource.ExternalControl
+            };
+            Discard(source);
+            steps.Clear();
+            lastBehavior = default;
+            observer.Reset(default, simulationVersion);
+            modules.Intent.ResetGait(default);
+            modules.Intent.ObserveActionVariantMotion(default);
+            if (kind != CharacterMotionBoundaryKind.Recovery)
+            {
+                modules.Bindings.Reset(source);
+                modules.Composer.Reset(source, forgetInstances: false);
+            }
+            committedPlan = default;
+            clearMotionSources = true;
+#if UNITY_EDITOR
+            CharacterMatchDebugCapture.Clear(animator);
+            debugTrace.Clear();
+#endif
+        }
+
+        // 校验资源与实例号，接收持续动作后更新本批次的选姿需求。
         public bool Submit(CharacterAnimationRequest request, CharacterControllerFrameResult latestFrame,
             int currentStateVersion, int simulationVersion)
         {
@@ -379,23 +373,25 @@ namespace ThreeC.CharacterBehavior
                 !SynchronizeResources() || !modules.Resources.CanSubmit(request.SemanticKey))
                 return false;
             bool accepted = modules.Composer.Submit(request);
-            reselect |= prepared && accepted;
+            batch.RequestSelection(accepted);
             return accepted;
         }
 
+        // 按语义键和实例号撤回动作并使本批次候选失效。
         public bool Withdraw(string semanticKey, long instanceId)
         {
             Join();
             bool removed = !string.IsNullOrWhiteSpace(semanticKey) && modules.Composer.Withdraw(semanticKey, instanceId);
-            reselect |= prepared && removed;
+            batch.RequestSelection(removed);
             return removed;
         }
 
+        // 撤回指定单次回执所属的动作并使本批次候选失效。
         public bool Withdraw(CharacterActionPlayback playback)
         {
             Join();
             bool removed = modules.Composer.Withdraw(playback);
-            reselect |= prepared && removed;
+            batch.RequestSelection(removed);
             return removed;
         }
 
@@ -403,15 +399,15 @@ namespace ThreeC.CharacterBehavior
         public void Reset(CharacterControllerFrameResult latestFrame, int currentStateVersion, int simulationVersion)
         {
             Join();
-            Discard();
+            Discard(CharacterPlaybackEndSource.StateReset);
             steps.Clear();
-            stateVersion = currentStateVersion;
+            stateVersion = modules.Bindings.StateVersion = currentStateVersion;
             observer.Reset(latestFrame, simulationVersion);
             lastBehavior = default;
             modules.Intent.ResetGait(default);
             modules.Intent.ObserveActionVariantMotion(default);
-            modules.Bindings.Reset();
-            modules.Composer.Reset();
+            modules.Bindings.Reset(CharacterPlaybackEndSource.StateReset);
+            modules.Composer.Reset(CharacterPlaybackEndSource.StateReset);
             committedPlan = default;
             Ik.Reset();
             modules.Player.CloseGraph();
@@ -426,7 +422,7 @@ namespace ThreeC.CharacterBehavior
         {
             if (modules.Player.NeedsRebind)
             {
-                Discard();
+                Discard(CharacterPlaybackEndSource.Rebind);
                 modules.Intent.InvalidateMotion();
                 // 资源重绑时保留持续需求及实例编号，清除上一次播放和姿态历史。
                 committedPlan = default;
@@ -435,7 +431,8 @@ namespace ThreeC.CharacterBehavior
                 modules.Resources.RefreshBindings();
                 modules.Poses.BindClips();
                 modules.Bindings.RebindGrantedEntries();
-                modules.Composer.ResetSelection();
+                modules.Composer.ResetSelection(modules.Resources.Ready
+                    ? CharacterPlaybackEndSource.Rebind : CharacterPlaybackEndSource.ResourceUnavailable);
                 reportedError = null;
                 if (modules.Resources.Ready)
                 {
@@ -465,17 +462,17 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 销毁播放图并释放该角色最后一次诊断结果。
-        public void Release()
+        public void Release(CharacterPlaybackEndSource source)
         {
 #if UNITY_EDITOR
             CharacterMatchDebugCapture.Clear(animator);
 #endif
             Join();
-            Discard();
+            Discard(source);
             steps.Clear();
             Ik.Dispose();
             modules.Player.Release();
-            modules.Composer.Reset();
+            modules.Composer.Reset(source);
         }
 
 #if UNITY_EDITOR

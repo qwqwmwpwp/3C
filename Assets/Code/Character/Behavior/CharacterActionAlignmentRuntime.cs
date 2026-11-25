@@ -13,29 +13,46 @@ namespace ThreeC.CharacterBehavior
         private long rejectedRequest;
         internal bool HasTarget => Target.Valid && Target.Request != rejectedRequest;
 
-        // 更新主线程冻结的输入，明确撤销、失效或跳变时立即终止本实例的修正。
-        internal bool SetTarget(in CharacterAlignmentTarget next, out long cancelled)
+        // 跟随实例只在活动窗口结束前需要预先发布与目标相符的轨迹。
+        internal readonly bool FollowsTargetAt(double time) => Plan != null &&
+            Plan.Settings.Tracking == CharacterAlignmentTracking.Follow && time < Plan.End;
+
+        // 接收已经变化的冻结目标与真实站位，返回应撤销的命令实例以及轨迹是否失效。
+        internal (long cancelled, bool refresh) RefreshChangedTarget(in CharacterAlignmentTarget next,
+            CharacterAlignmentOrigin? actual, in CharacterAttackState attack)
         {
-            cancelled = 0;
             var previous = Target;
-            if (!previous.Changed(next)) return false;
             Target = next;
-            if (Plan == null) return HasTarget || previous.Valid;
+            if (Plan == null && !HasTarget && !previous.Valid) return default;
+
+            long cancelled = Plan == null ? 0 : CheckTargetContinuity(previous, next);
+            var plan = Plan;
+            bool follows = plan != null && plan.Settings.Tracking == CharacterAlignmentTracking.Follow;
+            if (follows && actual.HasValue && !CharacterAlignmentPlan.Allows(plan.Settings, next, actual.Value))
+                cancelled = Stop(CharacterActionAlignmentStatus.OutOfRange);
+            bool refresh = cancelled != 0 || attack.BufferedMove != CharacterAttackMove.None ||
+                attack.Move != CharacterAttackMove.None && (plan == null || follows);
+            return (cancelled, refresh);
+        }
+
+        // 按当前实例的失效策略撤销更换、丢失或跳变的锚点。
+        private long CheckTargetContinuity(in CharacterAlignmentTarget previous, in CharacterAlignmentTarget next)
+        {
             var settings = Plan.Settings;
             if (previous.Request != next.Request)
-                cancelled = Stop(CharacterActionAlignmentStatus.Cancelled);
-            else if (!next.Valid)
+                return Stop(CharacterActionAlignmentStatus.Cancelled);
+            if (!next.Valid)
             {
                 if (settings.OnLost == CharacterAlignmentLoss.RequireNewRequest) rejectedRequest = next.Request;
-                cancelled = Stop(CharacterActionAlignmentStatus.TargetLost);
+                return Stop(CharacterActionAlignmentStatus.TargetLost);
             }
-            else if ((next.Position - previous.Position).magnitude > settings.JumpDistance ||
+            if ((next.Position - previous.Position).magnitude > settings.JumpDistance ||
                 Vector2.Angle(previous.Facing, next.Facing) > settings.JumpAngle)
             {
                 if (settings.OnJump == CharacterAlignmentLoss.RequireNewRequest) rejectedRequest = next.Request;
-                cancelled = Stop(CharacterActionAlignmentStatus.TargetJumped);
+                return Stop(CharacterActionAlignmentStatus.TargetJumped);
             }
-            return true;
+            return 0;
         }
 
         // 在实际裁决或预测副本发布命令时建立新实例或重定向剩余曲线；读取冻结命令不会调用这里。

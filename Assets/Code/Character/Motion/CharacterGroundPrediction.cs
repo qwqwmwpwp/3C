@@ -47,8 +47,8 @@ namespace ThreeC.CharacterBehavior
         internal CharacterGroundSamples Sample(float speedTime, float nearTime, float farTime)
         {
             if (brake.IsActive)
-                return new CharacterGroundSamples(brake.Apply(Velocity, speedTime), brake.Travel(Velocity, nearTime),
-                    brake.Travel(Velocity, farTime), 0f, 0f);
+                return new CharacterGroundSamples(brake.Apply(Velocity, speedTime), brake.Travel(Velocity, nearTime, fixedStep),
+                    brake.Travel(Velocity, farTime, fixedStep), 0f, 0f);
             if (steering.Active) return PredictSteering(speedTime, nearTime, farTime);
 
             float angle = CharacterGroundSteering.AngleTo(Facing, new Vector2(target.x, target.z));

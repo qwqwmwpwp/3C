@@ -14,11 +14,18 @@ namespace ThreeC.CharacterBehavior
         internal readonly GroundFeatureQuery Features;
         internal readonly GroundFeatureGroups Groups;
         internal readonly bool AllowPast, LegacyPelvis;
+#if UNITY_EDITOR
+        private readonly bool captureCosts;
+#endif
 
         // 固定一次搜索及其交还、续播比较所使用的输入。
         internal GroundSearchFrame(in CharacterFootObservation feet, in CharacterMatchTrajectory goal,
             GroundMatchCost profile, float speed, float startSpeed, CharacterGroundTrajectory trajectory, float clockScale,
-            GroundFeatureQuery features, GroundFeatureGroups groups, bool allowPast, bool legacyPelvis)
+            GroundFeatureQuery features, GroundFeatureGroups groups, bool allowPast, bool legacyPelvis
+#if UNITY_EDITOR
+            , bool captureCosts = false
+#endif
+            )
         {
             Feet = feet;
             Goal = goal;
@@ -31,11 +38,18 @@ namespace ThreeC.CharacterBehavior
             AllowPast = allowPast;
             LegacyPelvis = legacyPelvis;
             Trajectory = trajectory;
+#if UNITY_EDITOR
+            this.captureCosts = captureCosts;
+#endif
         }
 
         // 所有合法入点均缺少前史时，统一移除过去通道，再比较整组及当前续播。
         internal GroundSearchFrame WithoutHistory() => new GroundSearchFrame(Feet, Goal, Profile, Speed, StartSpeed,
-            Trajectory, ClockScale, Features, Groups, false, LegacyPelvis);
+            Trajectory, ClockScale, Features, Groups, false, LegacyPelvis
+#if UNITY_EDITOR
+            , captureCosts
+#endif
+            );
 
         // 使用候选真实入点、素材倍率和制动进度计算该姿势的分项贡献。
         internal GroundMatchCost Score(CharacterMotionTrack track, int index, GroundPlaybackPace pace,
@@ -65,7 +79,12 @@ namespace ThreeC.CharacterBehavior
             }
             rate = pace.Rate(Speed, StartSpeed, braking, out float excess);
             var cost = GroundMotionCost.Evaluate(track, time, sample, Feet, Goal, Speed, rate * ClockScale, excess, Profile, Features.Active, Groups, AllowPast, LegacyPelvis);
-            if (Features.Active) cost.Features = Features.Score(track, time, rate * ClockScale, Goal, Groups, AllowPast, out cost.MissingHistory);
+            if (Features.Active)
+                cost.Features = Features.Score(track, time, rate * ClockScale, Goal, Groups, AllowPast, out cost.MissingHistory
+#if UNITY_EDITOR
+                    , captureCosts, out cost.FeatureBreakdown
+#endif
+                    );
             return cost;
         }
     }
@@ -109,9 +128,6 @@ namespace ThreeC.CharacterBehavior
             var result = Scan(query, frame, out winner, out bool missingHistory, record);
             if (winner != null || !missingHistory) return result;
             frame = frame.WithoutHistory();
-#if UNITY_EDITOR
-            if (record && DebugFrame != null) DebugFrame.HistoryFallback = true;
-#endif
             return Scan(query, frame, out winner, out _, record);
         }
 
@@ -121,6 +137,9 @@ namespace ThreeC.CharacterBehavior
         {
             missingHistory = false;
             using var sample = marker.Auto();
+#if UNITY_EDITOR
+            if (record) DebugFrame?.StartScoring(frame);
+#endif
             var best = new CharacterMatchResult { Cost = float.PositiveInfinity };
             winner = null;
             var support = frame.Feet.Support;

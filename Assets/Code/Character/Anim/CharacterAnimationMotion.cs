@@ -80,7 +80,7 @@ namespace ThreeC.CharacterBehavior
     /// <summary>仅负责固定步采样和观测有效期；不选择走跑动作，也不依赖动画资源。</summary>
     internal sealed class CharacterAnimationMotionObserver
     {
-        private readonly float teleportDistanceSquared;
+        private float teleportDistanceSquared;
         private long lastFrameNumber;
         private int simulationVersion;
         private CharacterAnimationMotion motion;
@@ -89,11 +89,15 @@ namespace ThreeC.CharacterBehavior
         private Vector3 lastPosition;
         private bool discardNextStep, jumpAwaitingCommit;
 
+        // 记录角色位置来源，并按配置初始化瞬移阈值。
         public CharacterAnimationMotionObserver(Transform owner, float teleportDistance)
         {
             this.owner = owner;
-            teleportDistanceSquared = teleportDistance > 0f ? teleportDistance * teleportDistance : 0f;
+            ConfigureTeleport(teleportDistance);
         }
+
+        // 显式装配时更新瞬移门槛并保留最近一次物理观测。
+        internal void ConfigureTeleport(float distance) => teleportDistanceSquared = distance > 0f ? distance * distance : 0f;
 
         // 重建时恢复同代次最近固定步的地面投影或外部轨迹，下一步开始采样速度。
         public void Reset(CharacterControllerFrameResult latestFrame, int currentSimulationVersion,

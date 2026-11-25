@@ -22,7 +22,8 @@ namespace ThreeC.CharacterBehavior
             if (!(dt > 0f)) return;
             var config = owner.Configuration;
             var settings = config.ReadMovement();
-            var flow = owner.CreateBehaviorFlow();
+            var createSnapshot = config.CreateRehearsalFactory();
+            var flow = createSnapshot();
             flow.Reset(settings);
             var probe = new CharacterStepProbe(body, capsule);
             var geometry = new CharacterForecastGeometry(body, capsule, probe);
@@ -49,7 +50,7 @@ namespace ThreeC.CharacterBehavior
             bodyCommands.Write(flow.CaptureMotion(-dt, started, held, forwardXZ, groundVelocity, settings));
             flow.AdvanceTimeline(held, forwardXZ, dt, settings, groundVelocity);
             var behavior = flow.AdvanceTimeline(held, forwardXZ, 0f, settings, groundVelocity);
-            var predictor = new CharacterMovementPredictor(owner.CreateBehaviorFlow, geometry, () => config.CreateBehaviorFlow(snapshot: true));
+            var predictor = new CharacterMovementPredictor(createSnapshot, geometry, createSnapshot);
             var frame = new CharacterForecastFrame(0, 0d, origin, behavior, held, bodyCommands, dt, config, drive);
             predictor.SubmitFrame(frame, flow, threaded: false);
             Before = new CharacterMovementForecast();

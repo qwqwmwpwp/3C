@@ -43,6 +43,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterTransitionProfile Snapshot()
         {
             var copy = (CharacterTransitionProfile)MemberwiseClone();
+            copy.Bones = (HumanBodyBones[])Bones?.Clone();
             copy.boneMask = Bones == null || Bones.Length == 0 ? ulong.MaxValue : 0;
             if (Bones != null) foreach (var b in Bones) if ((int)b >= 0 && b < HumanBodyBones.LastBone) copy.boneMask |= 1UL << (int)b;
             copy.positionMask = PositionBones == null || PositionBones.Length == 0 ? 1UL << (int)HumanBodyBones.Spine : 0;
@@ -77,6 +78,15 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterTransitionProfile[] profiles;
         private readonly CharacterTransitionProfile fallback;
+        internal TransitionRegions Regions => fallback?.Regions ?? default;
+
+        // 向骨骼绑定提供本次装配已冻结的附加骨列表。
+        internal System.Collections.Generic.IEnumerable<HumanBodyBones> AdditionalBones()
+        {
+            foreach (var profile in profiles)
+                if (profile?.Bones != null)
+                    foreach (var bone in profile.Bones) yield return bone;
+        }
 
         // 保留没有专用策略的旧模块参数并生成不可变的匹配列表。
         internal CharacterTransitionProfiles(TransitionInertiaModule module)

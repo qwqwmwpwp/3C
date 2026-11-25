@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -18,6 +19,7 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterBehaviorStep step;
 
         public long FrameNumber { get; }
+        internal bool DurationCommitted => step.DurationCommitted;
         public Vector2 Displacement { get; }
         public CharacterDisplacementSource DisplacementSource { get; }
         public CharacterBehaviorId DisplacementProvider => step.DisplacementProvider;
@@ -29,6 +31,44 @@ namespace ThreeC.CharacterBehavior
         public CharacterBehaviorId WithdrawnBehaviors => step.Withdrawn;
         public CharacterAttackState Attack => step.Attack;
         public bool AttackMoveStarted => step.AttackMoveStarted;
+        public IReadOnlyList<CharacterBehaviorExecution> ExecutionChanges => step.ExecutionChanges ?? Array.Empty<CharacterBehaviorExecution>();
+        public IReadOnlyList<CharacterBehaviorDecision> Decisions => step.Decisions ?? Array.Empty<CharacterBehaviorDecision>();
+
+        // 查询本步活动或刚结束的执行，保留提交时身份、阶段和结束原因。
+        public bool TryGetExecution(CharacterBehaviorId id, out CharacterBehaviorExecution execution)
+        {
+            if (((step.Active | step.Ended | step.Executed) & id) != 0 && step.Executions != null)
+                for (int i = 0; i < step.Executions.Count; i++)
+                {
+                    var value = step.Executions[i];
+                    if (value.Id != id) continue;
+                    if (value.EndReason == default || EndedInThisStep(value))
+                    {
+                        execution = value;
+                        return true;
+                    }
+                }
+            execution = default;
+            return false;
+        }
+
+        // 基础移动许可可在待机生命周期内撤回，用本步边沿排除更早的陈旧终态。
+        private bool EndedInThisStep(CharacterBehaviorExecution value)
+        {
+            var changes = ExecutionChanges;
+            for (int i = changes.Count - 1; i >= 0; i--)
+                if (changes[i].Instance == value.Instance && changes[i].EndReason != default) return true;
+            return false;
+        }
+
+        // 无独立请求时返回 NoRequest；持续意图沿用原有身份并标为 AlreadyActive。
+        public CharacterBehaviorRequestStatus RequestStatus(CharacterBehaviorId id)
+        {
+            for (int i = Decisions.Count - 1; i >= 0; i--)
+                if (Decisions[i].Id == id) return Decisions[i].Status;
+            return (step.HeldRequests & id) != 0 ? CharacterBehaviorRequestStatus.AlreadyActive : CharacterBehaviorRequestStatus.NoRequest;
+        }
+
         internal CharacterActionMotion ActionMotion => step.Motion;
         internal Vector2 ActionDisplacement => step.ActionDisplacement;
         internal bool ActionMotionStarted => step.ActionMotionStarted;
@@ -154,6 +194,10 @@ namespace ThreeC.CharacterBehavior
         public double StartSeconds;
         public Dictionary<CharacterBehaviorId, double> GrantTimes;
         public bool SkipGrantHistory;
+        internal bool DurationCommitted;
+        internal IReadOnlyList<CharacterBehaviorDecision> Decisions;
+        internal IReadOnlyList<CharacterBehaviorExecution> Executions, ExecutionChanges;
+        internal CharacterBehaviorId HeldRequests;
         private bool copiedGrants;
 
         // 判断该行为的生命周期在当前阶段是否处于活动状态。
@@ -169,8 +213,10 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 释放参与者并同步许可，即使参与者的结束回调报错也撤销许可。
-        internal void End(CharacterBehaviorRule rule)
+        internal void End(CharacterBehaviorRule rule, CharacterBehaviorEndReason reason = CharacterBehaviorEndReason.Completed)
         {
+            // 阶段读取失败时尚未进入结束回调，保留原有活动位。
+            rule.Behavior.Journal?.End(rule.Behavior, reason);
             try
             {
                 rule.Behavior.Deactivate();

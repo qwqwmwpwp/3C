@@ -10,7 +10,7 @@ namespace ThreeC.CharacterBehavior
         [InspectorName("攻击片段（原速时钟）")] public AnimationClip Clip;
         [Range(0f, 1f), InspectorName("出招开始相位")] public float StrikeStart = 0.24f;
         [Range(0f, 1f), InspectorName("收招开始相位")] public float RecoveryStart = 0.58f;
-        [Min(0f), InspectorName("后摇转移动淡入（秒）"), Tooltip("收招中首次获准移动时开始计时；0 表示直接交给移动。")]
+        [Min(0f), InspectorName("后摇转移动淡入（秒）"), Tooltip("动画初始化或显式重新装配时读取。收招中首次获准移动时开始计时，0 表示直接交给移动。")]
         public float RecoveryMoveBlendSeconds = 0.16f;
         [Min(0f), InspectorName("起手转速（度/秒）")] public float StartupTurnSpeed = 180f;
         [Min(0.01f), InspectorName("起手制动（米/秒²）")] public float Braking = 28f;
@@ -41,11 +41,12 @@ namespace ThreeC.CharacterBehavior
     internal sealed class CharacterLightAttackSettings
     {
         [Header("准入与打断")]
-        [InspectorName("允许短突进打断的阶段")] public CharacterBehaviorPhase DashInterruptPhases =
+        [InspectorName("允许短突进打断的阶段"), Tooltip("角色装配行为时固定打断关系。")] public CharacterBehaviorPhase DashInterruptPhases =
             CharacterBehaviorPhase.Startup | CharacterBehaviorPhase.Recovery;
         [Header("执行参数")]
         [Min(0f), InspectorName("移动起手小步（米）")] public float OpeningStepDistance;
-        [SerializeField, InspectorName("招式参数")] internal CharacterAttackComboSettings Moves = new CharacterAttackComboSettings();
+        [SerializeField, InspectorName("招式参数"), Tooltip("起手获准时锁定本招时钟与位移。已接受的接续保留当时选定的招式及数值。")]
+        internal CharacterAttackComboSettings Moves = new CharacterAttackComboSettings();
 
         // 按有效片段的原速时长或允许的无片段时长解析招式。
         internal float DurationFor(CharacterAttackMove move, CharacterAttackMoveSettings definition)

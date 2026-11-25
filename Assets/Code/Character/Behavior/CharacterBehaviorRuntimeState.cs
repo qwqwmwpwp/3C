@@ -59,6 +59,7 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterStaminaBlackboard stamina = new CharacterStaminaBlackboard();
         private readonly CharacterDashBehavior dash;
+        internal bool IsPrediction;
         internal float StaminaRemaining => stamina.Remaining;
         internal float DashCooldownRemaining => dash.Cooldown;
 
@@ -75,7 +76,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterBehaviorContext CreateContext(CharacterInputSnapshot input, Vector2 facing, float seconds,
             CharacterMovementSettings settings, double simulationTime, Vector2 groundVelocity, bool separateBoundaries = false) =>
             new CharacterBehaviorContext(input, facing, seconds, settings, stamina.Read(settings), dash.Cooldown,
-                simulationTime, groundVelocity, separateBoundaries);
+                simulationTime, groundVelocity, separateBoundaries, IsPrediction);
 
         // 提交获准请求并刷新后续申请读取的上下文。
         internal CharacterBehaviorContext CommitStart(CharacterBehaviorStart request, CharacterBehaviorContext context)
