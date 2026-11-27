@@ -20,6 +20,7 @@ namespace ThreeC.CharacterBehavior
             foreach (CharacterProfile profile in targets) Check(profile);
         }
 
+        // 核对总表、可执行定义与角色动画映射。
         private static void Check(CharacterProfile profile)
         {
             bool found = false;
@@ -31,7 +32,7 @@ namespace ThreeC.CharacterBehavior
             CharacterAnimationConfiguration animation = null;
             try { animation = profile.BindAnimation(new CharacterModelBindings(), new CharacterProfileOverrides()); }
             catch (ArgumentException error) { Report(error.Message); }
-            CharacterComboValidation.Check(profile.LightAttack, profile.ComboRoutes, animation, Report);
+            CharacterComboValidation.Check(profile.AttackTable, animation, Report);
             if (!found) Debug.Log($"{profile.name}：连招路线和攻击映射检查通过。", profile);
         }
     }

@@ -1,65 +1,52 @@
-using UnityEngine;
-
 namespace ThreeC.CharacterBehavior
 {
-    // 维护一条行为映射的许可、播放归属及可续播的当前相位。
+    // 固定一条映射的规则与行为身份，只创建该触发方式使用的播放状态。
     internal sealed class CharacterBehaviorAnimationBinding
     {
-        public CharacterBehaviorAnimationMapping Source, Rule;
-        public bool Removed;
-        public CharacterActionHandoffSettings HandoffSettings;
-        public long ObservedGrant, CurrentGrant;
-        public bool IsPulse => CurrentGrant == 0 && Rule.Trigger == CharacterAnimationTrigger.OnStart;
-        public CharacterAnimationRequest Hold;
-        public string EntryAction, HoldAction;
-        public float GrantWeight;
-        public CharacterGrantedEntryRecovery EntryRecovery;
-        public bool Interrupted, Reported;
-        public CharacterActionPlayback Entry;
-        public CharacterActionHandoff Handoff;
-        public float? MoveStart;
-        public float? FirstPose;
-        public float LastPose, Duration;
-        public bool TimedActive, ResumeTimed, ResumedEntry;
-        public long AttackInstance, EntryAttackInstance;
-        public float AttackPhase;
-        public float AttackEntryPhase;
+        internal CharacterBehaviorAnimationMapping Source;
+        internal readonly CharacterBehaviorAnimationMapping Rule;
+        internal readonly CharacterActionHandoffSettings HandoffSettings;
+        internal readonly CharacterGrantedAnimationState Grant;
+        internal readonly CharacterPulseAnimationState Pulse;
+        internal readonly CharacterAttackAnimationBinding Attack;
+        internal bool IsPulse => Rule.Trigger == CharacterAnimationTrigger.OnStart;
+        internal bool Removed, Reported;
+        internal CharacterPlaybackOrigin Origin { get; private set; }
 
-        internal CharacterPlaybackOrigin Origin;
-        internal CharacterPlaybackStartSource NextEntryStart;
-        internal CharacterPlaybackEndSource GrantEnd;
-        internal bool ObservedActive;
+        // 冻结资源与交还规则，区分持续许可与单次触发的状态归属。
+        internal CharacterBehaviorAnimationBinding(CharacterBehaviorAnimationMapping rule, CharacterActionHandoffSettings settings,
+            CharacterBehaviorAnimationBindings animations)
+        {
+            Source = rule;
+            Rule = rule.Snapshot();
+            HandoffSettings = settings?.Snapshot();
+            if (rule.IsAttackState) Attack = new CharacterAttackAnimationBinding(this, animations);
+            else if (IsPulse) Pulse = new CharacterPulseAnimationState(this, animations);
+            else Grant = new CharacterGrantedAnimationState(this, animations);
+        }
 
-        // 固定本次行为帧中的请求、执行和招式身份，入队边沿随后独立保留这份值。
-        internal void CaptureOrigin(int stateVersion, in CharacterBehaviorObservation frame)
+        // 用当步身份与许可边沿更新当前触发方式的状态。
+        internal void Observe(int stateVersion, in CharacterBehaviorObservation frame, bool reconnect, bool seed)
         {
             var id = Rule.BehaviorId;
-            frame.Behavior.TryGetExecution(id, out var execution);
-            long move = id == CharacterBehaviorId.Attack ? frame.Behavior.Attack.InstanceId : 0;
+            var step = frame.Behavior;
+            step.TryGetExecution(id, out var execution);
+            long move = id == CharacterBehaviorId.Attack ? step.Attack.InstanceId : 0;
             Origin = new CharacterPlaybackOrigin(stateVersion, frame.SimulationVersion, id, execution.Instance, execution.RequestId, move);
+            bool active = id == CharacterBehaviorId.Move ? step.MoveApproved : (step.ActiveBehaviors & id) != 0;
+            bool began = id == CharacterBehaviorId.Move ? step.MoveStarted : (step.StartedBehaviors & id) != 0;
+            if (Attack != null) Attack.Observe(frame, active, seed);
+            else if (IsPulse) Pulse.Observe(step, frame.DeltaTime, active, began, reconnect, seed);
+            else Grant.Observe(step, active, began, reconnect && (seed || !began));
         }
 
-        // 只从确实开始的同一招式保留游标，重绑时跨过已发事件。
-        public void RememberAttackCursor()
+        // 在旧代播放已经撤回后清除身份与观察数据。
+        internal void ResetObservation()
         {
-            if (AttackInstance == 0 || EntryAttackInstance != AttackInstance || Entry?.HasStarted != true) return;
-            AttackPhase = Mathf.Max(AttackPhase, Mathf.Clamp01(Entry.LastObservedPhase));
-            if (AttackPhase == 0f) AttackPhase = 0.000001f; // 首帧事件已交付，恢复点越过零时刻。
-        }
-
-        // 将本次行为相位和移动许可转换成动作交还权重。
-        internal void SetHandoff(CharacterActionHandoff source, bool moveApproved, bool entering)
-        {
-            var settings = HandoffSettings;
-            if (entering) MoveStart = null;
-            if (!source.UsesRouteBlend && settings?.OverridePhases == true)
-            {
-                float releaseFrom = source.Valid ? Mathf.Max(source.ReleaseFrom, settings.ReleaseFrom) : settings.ReleaseFrom;
-                if (moveApproved && !MoveStart.HasValue && LastPose >= releaseFrom)
-                    MoveStart = Mathf.Max(FirstPose.GetValueOrDefault(), releaseFrom);
-                source = settings.Resolve(Duration, source, MoveStart);
-            }
-            Handoff = source;
+            Origin = default;
+            Attack?.Reset();
+            if (IsPulse) Pulse?.ResetObservation();
+            else Grant.ResetObservation();
         }
     }
 }

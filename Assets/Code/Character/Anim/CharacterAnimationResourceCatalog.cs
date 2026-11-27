@@ -7,7 +7,7 @@ namespace ThreeC.CharacterBehavior
     // 记录语义动作对应的片段、入点和淡入参数。
     internal readonly struct CharacterAnimationBinding
     {
-        public readonly string StateName;
+        public readonly string StateName, Library, Track;
         public readonly int StateHash;
         public readonly float Start;
         public readonly float Transition;
@@ -23,10 +23,12 @@ namespace ThreeC.CharacterBehavior
         public CharacterAnimationBinding(CharacterAnimationActionSettings action,
             CharacterLocomotionVariant variant = CharacterLocomotionVariant.None,
             CharacterLocomotionGaitPhase gait = default, float brakingClipSeconds = 0f, float stopExitPhase = 0.98f,
-            string stateOverride = null)
+            string stateOverride = null, int? playbackKey = null, CharacterMotionTrack source = null)
         {
             StateName = stateOverride ?? action.StateName;
-            StateHash = Animator.StringToHash(StateName ?? string.Empty);
+            StateHash = playbackKey ?? Animator.StringToHash(StateName ?? string.Empty);
+            Library = source?.LibraryLabel;
+            Track = source?.TrackLabel;
             Start = ClampUnit(action.StartNormalizedTime);
             Transition = ClampUnit(action.StateTransitionDuration);
             ExitTransition = ClampUnit(action.StateExitTransitionDuration);
@@ -41,7 +43,7 @@ namespace ThreeC.CharacterBehavior
 
         // 为收步片段设置制动标记和离开相位，优先读取烘焙值。
         public static CharacterAnimationBinding Stop(string state, CharacterLocomotionVariant side, float transition,
-            float brakingSeconds, CharacterMotionTrack track = null)
+            float brakingSeconds, CharacterMotionTrack track = null, int? playbackKey = null)
         {
             var settings = new CharacterAnimationActionSettings
             {
@@ -51,7 +53,7 @@ namespace ThreeC.CharacterBehavior
             };
             float exit = track != null && track.ExitSeconds > 0f && track.Seconds > 0f ? track.ExitSeconds / track.Seconds : 0.98f;
             return new CharacterAnimationBinding(settings, variant: side, brakingClipSeconds: track?.BrakeSeconds ?? brakingSeconds,
-                stopExitPhase: exit);
+                stopExitPhase: exit, playbackKey: playbackKey, source: track);
         }
 
         private static float ClampUnit(float value) => Mathf.Clamp01(InputMath.NonNegative(value, 0f));
@@ -65,36 +67,21 @@ namespace ThreeC.CharacterBehavior
         private readonly bool requiresMovement;
         private readonly CharacterClipPlayback clips;
         private readonly CharacterMotionDatabase playbackLibrary;
-        private readonly bool matchEnabled;
+        private readonly GroundSearchLibraries searchLibraries;
 
-        // 返回匹配模块的库绑定问题，调用方可继续使用常规步态规则。
+        // 检查已启用的地面匹配是否具备显式搜索库和可播放轨道。
         internal string ValidateMatchLibrary()
         {
+            if (searchLibraries?.Databases.Length == 0) return GroundSearchLibraries.NoDeclaredLibraries;
             if (!playbackLibrary) return "角色缺少动画播放库，将使用常规步态规则。";
-            if (groundTracks.Count == 0) return "当前烘焙库没有与片段对应的有效地面匹配轨道，将使用常规步态规则。";
+            if (groundTracks.Count == 0) return searchLibraries?.Issue ?? "当前范围没有与播放素材对应的有效地面轨道，使用常规步态规则。";
             return null;
         }
 
         private readonly HashSet<(int, CharacterMotionTrack)> groundTracks = new HashSet<(int, CharacterMotionTrack)>();
-        private readonly Dictionary<CharacterMotionTrack, CharacterMotionTrack> snapshots =
-            new Dictionary<CharacterMotionTrack, CharacterMotionTrack>();
-        // 深拷贝搜索所需的已烘焙特征与路径，后台规划只读取本角色的托管快照。
-        internal CharacterMotionTrack Snapshot(CharacterMotionTrack source)
-        {
-            if (!snapshots.TryGetValue(source, out var frozen))
-            {
-                frozen = source.CopyForBake();
-                frozen.Poses = (CharacterFootPose[])source.Poses?.Clone();
-                frozen.RootPath = (GroundPathKey[])source.RootPath?.Clone();
-                frozen.FeatureValues = (Vector3[])source.FeatureValues?.Clone();
-                frozen.Clip = null;
-                snapshots.Add(source, frozen);
-            }
-            return frozen;
-        }
-
         private readonly Dictionary<int, float?> lengths = new Dictionary<int, float?>();
         private readonly HashSet<string> oneShots = new HashSet<string>();
+        private readonly Dictionary<string, (int id, bool single)> oneShotClips = new Dictionary<string, (int, bool)>(StringComparer.Ordinal);
         private readonly float[] weights = new float[4];
         internal CharacterTransitionProfiles Transitions { get; set; }
         private float blendDelta;
@@ -133,7 +120,7 @@ namespace ThreeC.CharacterBehavior
             requiresMovement = config.HasGait;
             this.clips = clips;
             Transitions = config.Transitions;
-            matchEnabled = config.Modules.Match;
+            searchLibraries = config.SearchLibraries;
             playbackLibrary = config.PlaybackLibrary;
             Dictionary<string, CharacterLocomotionGaitPhase> gaitPhases = BuildGaitPhases(config.LocomotionGaitPhases, logContext);
             foreach (var pair in gaitPhases)
@@ -197,7 +184,7 @@ namespace ThreeC.CharacterBehavior
                     CharacterAnimationBodyRegion.LowerBody => CharacterAnimationSource.LowerBody,
                     _ => CharacterAnimationSource.FullBodyOverlay
                 };
-                var handoff = CharacterBehaviorAnimationBindings.ResolveHandoff(action, config);
+                var handoff = action.Handoff?.OverridePhases == true ? action.Handoff : null;
                 if (handoff != null && !handoff.Valid)
                 {
                     Debug.LogWarning($"动作 {action.Key} 的接管阶段无效，沿用普通播放。", logContext);
@@ -287,6 +274,7 @@ namespace ThreeC.CharacterBehavior
             groundTracks.Clear();
             lengths.Clear();
             oneShots.Clear();
+            oneShotClips.Clear();
             validBindings.Clear();
             validVariants.Clear();
             validMoving.Clear();
@@ -313,26 +301,22 @@ namespace ThreeC.CharacterBehavior
             foreach (var pair in validBindings)
             {
                 CacheLength(pair.Value.StateHash);
-                if (clips.CanPlayOnce(pair.Value.StateHash)) oneShots.Add(pair.Key);
+                if (clips.CanPlayOnce(pair.Value.StateHash))
+                {
+                    oneShots.Add(pair.Key);
+                    oneShotClips[pair.Key] = clips.OneShotIdentity(pair.Value.StateHash);
+                }
             }
             foreach (var value in validVariants.Values) CacheLength(value.StateHash);
             foreach (var key in validMoving) CacheLength(movingBindings[key].StateHash);
-            var tracks = matchEnabled && playbackLibrary ? playbackLibrary.BakedTracks : null;
-            if (tracks != null)
-                foreach (var track in tracks)
-                {
-                    if (track?.States == null || !track.ReadyForSearch) continue;
-                    foreach (var path in track.States)
-                    {
-                        if (string.IsNullOrWhiteSpace(path)) continue;
-                        int hash = Animator.StringToHash(path);
-                        if (clips.MatchesTrack(hash, track))
+            if (searchLibraries != null)
+                foreach (var entry in searchLibraries.Tracks)
+                    foreach (int hash in entry.Hashes)
+                        if (clips.MatchesTrack(hash, entry.Source))
                         {
-                            groundTracks.Add((hash, Snapshot(track)));
+                            groundTracks.Add((hash, entry.Frozen));
                             CacheLength(hash);
                         }
-                    }
-                }
             ready = Require(CharacterAnimationIntentConverter.IdleKey) &&
                 (!requiresMovement || Require(CharacterAnimationIntentConverter.MoveKey) && Require(CharacterAnimationIntentConverter.DashKey));
         }
@@ -370,7 +354,30 @@ namespace ThreeC.CharacterBehavior
 
         public bool CanSubmit(string key) => ready && key != null && externalKeys.Contains(key) && validBindings.ContainsKey(key);
 
+        // 查询主线程冻结的可播放单次素材，后台不读取资源对象。
         public bool CanPlayOnce(string key) => CanSubmit(key) && oneShots.Contains(key);
+
+        // 以实际资源标识核对已冻结的播放请求；不匹配时不得复用旧素材游标。
+        internal int OneShotClipId(string key, bool singleOnly = false) => key != null && oneShotClips.TryGetValue(key, out var clip) &&
+            (!singleOnly || clip.single) ? clip.id : 0;
+
+        // 主线程在每次帧采集和显式调用时核对实际素材，后台只查本批身份和值。
+        internal void CaptureOneShots()
+        {
+            foreach (string key in actionKeys)
+            {
+                if (validBindings.TryGetValue(key, out var binding) && clips.CanPlayOnce(binding.StateHash))
+                {
+                    oneShots.Add(key);
+                    oneShotClips[key] = clips.OneShotIdentity(binding.StateHash);
+                }
+                else
+                {
+                    oneShots.Remove(key);
+                    oneShotClips.Remove(key);
+                }
+            }
+        }
 
         public bool HasBinding(string key) => validBindings.ContainsKey(key);
 
@@ -402,12 +409,19 @@ namespace ThreeC.CharacterBehavior
         public float? StateSeconds(int state) => lengths.TryGetValue(state, out var length) ? length : null;
 
         // 在主线程捕获混合权重和推进时间，供规划使用。
-        public void CaptureWeights(float dt)
+        public void CaptureWeights(in CharacterPlaybackFrameStep step)
+        {
+            CaptureOneShots();
+            RefreshWeights(step);
+        }
+
+        // 尾段求值或新帧采集后，从真实覆盖与剩余图步长重新预测各层的接管。
+        internal void RefreshWeights(in CharacterPlaybackFrameStep step)
         {
             for (int i = 0; i < weights.Length; i++)
                 weights[i] = clips.LayerWeight((CharacterAnimationSource)i);
-            blendDelta = clips.LayerBlendDelta(dt);
-            PlaybackClockScale = dt > 0f ? blendDelta / dt : 0f;
+            blendDelta = step.GraphDelta;
+            PlaybackClockScale = step.FrameDelta > 0f ? blendDelta / step.FrameDelta : 0f;
         }
         public float LayerWeight(CharacterAnimationSource region) => weights[(int)region];
 

@@ -1,4 +1,5 @@
 using UnityEngine;
+using Output = ThreeC.CharacterBehavior.AnimationDecisionOutput;
 
 namespace ThreeC.CharacterBehavior
 {
@@ -24,17 +25,8 @@ namespace ThreeC.CharacterBehavior
         public const string WalkKey = "$behavior.walk";
         public const string SprintKey = "$behavior.sprint";
         public const string DashKey = "$behavior.dash";
-        private float idleEnterSpeed;
-        private float idleExitSpeed;
+        private CharacterLocomotionDecisions decisions;
         internal bool UsesMovingActionVariant { get; private set; }
-        private float runEnterSpeed;
-        private float runExitSpeed;
-        private float sprintEnterSpeed;
-        private float sprintExitSpeed;
-        private float startSeconds;
-        private float turnSeconds;
-        private float reverseDotThreshold;
-        private float minimumStopTravel;
 
         private string locomotionKey = IdleKey;
         private long generation;
@@ -60,31 +52,31 @@ namespace ThreeC.CharacterBehavior
         public CharacterLocomotionPhase Phase => dashRequest.InstanceId > 0 ? CharacterLocomotionPhase.Dash : groundPhase;
         public Vector3 StopEntryVelocity => IsReleasing ? stopEntryVelocity : Vector3.zero; // 跨固定步保留松键时的实速。
         public bool MainBrakeDue { get; private set; }
-        public string StopGait
-        {
-            get
-            {
-                float speed = stopEntryVelocity.magnitude;
-                if (speed <= runEnterSpeed) return WalkKey;
-                return speed >= sprintExitSpeed && (locomotionKey == SprintKey || groundRequest.SemanticKey == SprintKey)
-                    ? SprintKey : MoveKey;
-            }
-        }
+        public string StopGait => decisions.StopGait(DecisionState);
         public long ReverseReleaseStep { get; private set; }
         private Vector3 releaseDirection;
         public long DirectTurnStep { get; private set; }
         public float DirectTurnAngle { get; private set; }
         public float DirectTurnSpeed { get; private set; }
         public string DirectTurnGait { get; private set; }
-        private float directAngle;
         private Vector3 turnTarget;
+        internal GroundInputTurn InputTurn { get; private set; }
         private float directWindow;
         private float reverseWindow;
-        private float reverseWindowSeconds;
         private bool IsReleasing => groundPhase == CharacterLocomotionPhase.BrakeLeadIn || groundPhase == CharacterLocomotionPhase.Stopping;
 
         private bool hasGait, hasStartTurn, hasStop;
 
+        private LocomotionDecisionState DecisionState => new LocomotionDecisionState
+        {
+            LastGait = CharacterLocomotionDecisions.Gait(locomotionKey),
+            PlayingGait = CharacterLocomotionDecisions.Gait(groundRequest.SemanticKey),
+            Phase = groundPhase, PreviousDirection = previousExpectedDirection, PreviousVelocity = previousActualVelocity,
+            ReleaseDirection = releaseDirection, GroundTravel = groundedTravel, RemainingSeconds = remainingSeconds,
+            StopSpeed = stopEntryVelocity.magnitude, MainBrakeDue = MainBrakeDue
+        };
+
+        // 创建本角色的意图状态及判定程序工作区。
         public CharacterAnimationIntentConverter(CharacterAnimationConfiguration config) => Configure(config);
 
         // 应用步态模块配置，并取消被禁用模块仍在维持的短暂阶段。
@@ -101,34 +93,17 @@ namespace ThreeC.CharacterBehavior
             hasGait = config.HasGait;
             hasStartTurn = config.HasStartTurn;
             hasStop = config.HasStop;
-            idleEnterSpeed = InputMath.NonNegative(config.IdleEnterSpeed, 0.08f);
-            idleExitSpeed = Mathf.Max(idleEnterSpeed, InputMath.NonNegative(config.IdleExitSpeed, 0.15f));
-            runExitSpeed = Mathf.Max(idleExitSpeed, InputMath.NonNegative(config.RunExitSpeed, 3f));
-            runEnterSpeed = Mathf.Max(runExitSpeed, InputMath.NonNegative(config.RunEnterSpeed, 3.5f));
-            sprintExitSpeed = Mathf.Max(runEnterSpeed, InputMath.NonNegative(config.SprintExitSpeed, 5.6f));
-            sprintEnterSpeed = Mathf.Max(sprintExitSpeed, InputMath.NonNegative(config.SprintEnterSpeed, 6f));
-            directAngle = Mathf.Clamp(config.MatchTurnAngle, 15f, 180f);
-            startSeconds = InputMath.NonNegative(config.LocomotionStartSeconds, 0.22f);
-            turnSeconds = InputMath.NonNegative(config.LocomotionTurnSeconds, 0.32f);
-            float reverseAngle = Mathf.Clamp(InputMath.NonNegative(config.LocomotionReverseAngle, 120f), 90f, 180f);
-            reverseDotThreshold = Mathf.Cos(reverseAngle * Mathf.Deg2Rad);
-            reverseWindowSeconds = Mathf.Max(0.15f, InputMath.NonNegative(config.MatchReverseHold, 0.08f) + 0.1f);
-            minimumStopTravel = InputMath.NonNegative(config.MinimumStopTravel, 0.09f);
+            decisions = new CharacterLocomotionDecisions(config);
+            InputTurn = hasStartTurn ? GroundInputTurn.Bind(config, decisions.ReverseWindowSeconds) : null;
         }
 
         // 按固定步实速推进动作变体迟滞，瞬移暂存速度时沿用已有选择。
-        internal void ObserveActionVariantMotion(in CharacterAnimationMotion motion)
-        {
-            if (motion.IsValid)
-                UsesMovingActionVariant = motion.ActualSpeed > (UsesMovingActionVariant ? idleEnterSpeed : idleExitSpeed);
-            else if (!motion.RetainedStrideSpeed.HasValue)
-                UsesMovingActionVariant = false;
-        }
+        internal void ObserveActionVariantMotion(in CharacterAnimationMotion motion) =>
+            UsesMovingActionVariant = decisions.MovingAction(motion, UsesMovingActionVariant);
 
-        // 识别反向跨零时可能用预测保留步态的低速固定步。
+        // 只读预判本步是否需要发布预测，实际意图由固定步队列提交一次。
         internal bool MayUsePredictedGait(in CharacterAnimationMotion motion, in CharacterBehaviorFrameResult behavior) =>
-            hasGait && turnSeconds > 0f && motion.IsValid && motion.Trajectory.IsValid && !motion.IsBlocked &&
-            motion.ActualSpeed <= idleEnterSpeed && (behavior.MoveApproved || behavior.ActionMotion.RecoversMovement);
+            decisions.MayProject(motion, behavior);
 
         /// <summary>每个有效固定步提交后更新；同一模拟连续性内保留相邻实际与期望方向。</summary>
         public void Receive(CharacterAnimationMotion motion, CharacterBehaviorFrameResult behavior,
@@ -143,19 +118,24 @@ namespace ThreeC.CharacterBehavior
             frameNumber = motion.FrameNumber;
             RequestedGait = input.Gait;
 
-            // 用松键时的速度判断收步反向，并锁存结果供跨固定步的渲染帧读取。
-            if (IsReleasing && stopEntryVelocity.sqrMagnitude > idleExitSpeed * idleExitSpeed)
+            Vector3 expectedDirection = motion.ExpectedVelocity.normalized;
+            bool canStartMoving = behavior.MoveApproved && behavior.OrdinarySpeedLimit > 0f;
+            InputTurn?.Observe(motion, input, canStartMoving, previousActualVelocity, locomotionKey, stepSeconds);
+            if (expectedDirection == Vector3.zero && canStartMoving)
+                expectedDirection = new Vector3(input.Direction.x, 0f, input.Direction.y).normalized;
+            bool grounded = (motion.CollisionFlags & CollisionFlags.Below) != 0;
+            if (IsReleasing && stopEntryVelocity.sqrMagnitude > decisions.IdleExit * decisions.IdleExit)
                 releaseDirection = stopEntryVelocity.normalized;
-            bool reverseInput = hasStartTurn && behavior.MoveApproved && behavior.DisplacementSource == CharacterDisplacementSource.BasicMovement &&
-                (motion.CollisionFlags & CollisionFlags.Below) != 0 && !motion.IsBlocked && releaseDirection != Vector3.zero &&
-                Vector3.Dot(releaseDirection, motion.ExpectedVelocity.normalized) <= reverseDotThreshold + 0.000001f;
+            float signedTurn = Vector3.SignedAngle(previousActualVelocity, expectedDirection, Vector3.up);
+            var step = decisions.Step(motion, behavior, input, DecisionState, expectedDirection, signedTurn);
+            bool reverseInput = hasStartTurn && step.Flag(Output.ReverseInput);
             if (IsReleasing && reverseInput)
             {
                 ReverseReleaseStep = motion.FrameNumber;
                 ReverseAngle = Vector3.SignedAngle(releaseDirection, motion.ExpectedVelocity, Vector3.up);
                 ReverseSpeed = stopEntryVelocity.magnitude;
                 ReverseGait = StopGait;
-                reverseWindow = reverseWindowSeconds;
+                reverseWindow = decisions.ReverseWindowSeconds;
             }
             else reverseWindow = Mathf.Max(0f, reverseWindow - stepSeconds);
             if (!reverseInput || reverseWindow <= 0f)
@@ -174,36 +154,25 @@ namespace ThreeC.CharacterBehavior
                 return;
             }
 
-            Vector3 expectedDirection = motion.ExpectedVelocity.normalized;
-            bool canStartMoving = behavior.MoveApproved && behavior.OrdinarySpeedLimit > 0f;
-            if (expectedDirection == Vector3.zero && canStartMoving)
-                expectedDirection = new Vector3(input.Direction.x, 0f, input.Direction.y).normalized;
-            bool grounded = (motion.CollisionFlags & CollisionFlags.Below) != 0;
-            if ((!behavior.MoveApproved && !behavior.ActionMotion.RecoversMovement) || expectedDirection == Vector3.zero)
+            if (step.Flag(Output.ReleaseMotion))
             {
                 DirectTurnStep = 0;
-                ReceiveRelease(motion, behavior, input, grounded);
+                ReceiveRelease(motion, hasStop ? (DecisionRelease)step.Number(Output.ReleaseAction) : DecisionRelease.Idle);
                 return;
             }
             directWindow = Mathf.Max(0f, directWindow - stepSeconds);
-            if (hasStartTurn && grounded && !motion.IsBlocked && !IsReleasing && motion.HasAcceleration &&
-                previousExpectedDirection != Vector3.zero && previousActualVelocity.magnitude > idleExitSpeed &&
-                Vector3.Angle(previousExpectedDirection, expectedDirection) + 0.001f >= directAngle)
+            if (hasStartTurn && step.Flag(Output.DirectTurn))
             {
-                float angle = Vector3.SignedAngle(previousActualVelocity, expectedDirection, Vector3.up);
-                if (Mathf.Abs(angle) + 0.001f >= directAngle)
-                {
-                    DirectTurnStep = motion.FrameNumber;
-                    DirectTurnAngle = angle <= -179.999f ? 180f : angle;
-                    DirectTurnSpeed = previousActualVelocity.magnitude;
-                    DirectTurnGait = locomotionKey;
-                    turnTarget = expectedDirection;
-                    directWindow = reverseWindowSeconds;
-                }
+                DirectTurnStep = motion.FrameNumber;
+                DirectTurnAngle = signedTurn <= -179.999f ? 180f : signedTurn;
+                DirectTurnSpeed = previousActualVelocity.magnitude;
+                DirectTurnGait = locomotionKey;
+                turnTarget = expectedDirection;
+                directWindow = decisions.ReverseWindowSeconds;
             }
             if (directWindow <= 0f || !grounded || !motion.HasAcceleration || Vector3.Dot(turnTarget, expectedDirection) < 0.8f)
                 DirectTurnStep = 0;
-            bool resuming = IsReleasing && grounded && previousActualVelocity.magnitude > idleExitSpeed;
+            bool resuming = step.Flag(Output.ResumeStride);
             if (IsReleasing && !resuming)
             {
                 ClearDirections();
@@ -218,33 +187,10 @@ namespace ThreeC.CharacterBehavior
                 locomotionKey = groundRequest.SemanticKey;
             stopEntryVelocity = Vector3.zero;
             MainBrakeDue = false;
-            bool wasIdle = locomotionKey == IdleKey;
-            string lastGait = locomotionKey;
-            locomotionKey = ResolveGait(motion.ActualSpeed, input.Gait);
-            if (motion.IsBlocked)
-            {
-                ClearDirections();
-                SetBase(locomotionKey);
-                return;
-            }
-            // 保留反向跨零时的步态，再处理初次获准但刚体尚未提速的起步。
-            float forwardSpeed = Vector3.Dot(motion.Trajectory.FutureVelocity, expectedDirection);
-            bool reversing = IsReversal(expectedDirection);
-            if (locomotionKey == IdleKey && (groundPhase == CharacterLocomotionPhase.Turning || resuming && reversing) &&
-                motion.Trajectory.IsValid && forwardSpeed > idleExitSpeed)
-                locomotionKey = lastGait;
-            if (canStartMoving)
-            {
-                bool blendingFromStride = preserveEntryGait &&
-                    input.Gait != CharacterMoveGait.Walk;
-                if (blendingFromStride && lastGait == SprintKey && input.Gait == CharacterMoveGait.Sprint)
-                    locomotionKey = SprintKey;
-                else if (blendingFromStride && (lastGait == MoveKey || lastGait == SprintKey) && locomotionKey != SprintKey)
-                    locomotionKey = MoveKey;
-                else if (locomotionKey == IdleKey)
-                    locomotionKey = WalkKey; // 移动获准时即可迈步。
-            }
-            if (locomotionKey == IdleKey)
+            var stride = decisions.Stride(motion, behavior, DecisionState, input.Gait, expectedDirection,
+                resuming, canStartMoving, preserveEntryGait, followsDash);
+            locomotionKey = CharacterLocomotionDecisions.Key((DecisionGait)stride.Number(Output.GroundGait));
+            if (motion.IsBlocked || locomotionKey == IdleKey)
             {
                 ClearDirections();
                 SetBase(locomotionKey);
@@ -255,59 +201,46 @@ namespace ThreeC.CharacterBehavior
                 groundedTravel += motion.ActualSpeed * stepSeconds;
             else
                 groundedTravel = 0f;
-            bool runDuringAction = input.Gait == CharacterMoveGait.Run &&
-                (behavior.Attack.InstanceId != 0 || behavior.ActionMotion.RecoversMovement);
-            bool startsFromIdle = wasIdle && !followsDash && !runDuringAction && startSeconds > 0f;
-            if (reversing)
+            switch ((DecisionStride)stride.Number(Output.StrideAction))
             {
-                var turn = ResolveTurnVariant(motion.FacingDeltaDegrees, expectedDirection);
-                BeginTransient(CharacterLocomotionPhase.Turning, turn, turnSeconds);
-            }
-            else if (startsFromIdle)
-            {
-                BeginTransient(CharacterLocomotionPhase.Starting, CharacterLocomotionVariant.Start, startSeconds);
-            }
-            else if (remainingSeconds > 0f && !runDuringAction)
-            {
-                SetIntent(locomotionKey, groundPhase, groundRequest.LocomotionVariant); // 切换步态时保留当前转身实例。
-            }
-            else
-            {
-                SetBase(locomotionKey);
+                case DecisionStride.Turn when hasStartTurn && decisions.TurnSeconds > 0f:
+                    var turn = ResolveTurnVariant(motion.FacingDeltaDegrees, expectedDirection);
+                    BeginTransient(CharacterLocomotionPhase.Turning, turn, decisions.TurnSeconds);
+                    break;
+                case DecisionStride.Start when hasStartTurn && decisions.StartSeconds > 0f:
+                    BeginTransient(CharacterLocomotionPhase.Starting, CharacterLocomotionVariant.Start, decisions.StartSeconds);
+                    break;
+                case DecisionStride.Continue when hasStartTurn && remainingSeconds > 0f:
+                    SetIntent(locomotionKey, groundPhase, groundRequest.LocomotionVariant);
+                    break;
+                default:
+                    SetBase(locomotionKey);
+                    break;
             }
             previousExpectedDirection = expectedDirection;
             previousActualVelocity = motion.ActualVelocity;
         }
 
         // 在移动输入解除时延续制动、进入收步等待或回到待机。
-        private void ReceiveRelease(CharacterAnimationMotion motion, CharacterBehaviorFrameResult behavior,
-            CharacterInputSnapshot input, bool grounded)
+        private void ReceiveRelease(in CharacterAnimationMotion motion, DecisionRelease decision)
         {
-            bool obstructed = motion.Trajectory.IsBrakeObstructed;
-            bool released = hasStop && grounded && !obstructed && input.Direction == Vector2.zero &&
-                behavior.DisplacementProvider == CharacterBehaviorId.None;
-            if (released && IsReleasing)
+            switch (decision)
             {
-                previousActualVelocity = motion.ActualVelocity;
-                if (groundPhase == CharacterLocomotionPhase.Stopping || MainBrakeDue)
-                    return; // 双脚落稳之前，刚体速度可以先归零。
-                if (motion.Trajectory.IsBraking)
-                {
+                case DecisionRelease.Hold:
+                    previousActualVelocity = motion.ActualVelocity;
+                    return;
+                case DecisionRelease.Brake:
+                    previousActualVelocity = motion.ActualVelocity;
                     MainBrakeDue = !motion.Trajectory.IsBrakeLeadIn;
                     return;
-                }
-            }
-            else if (released && behavior.MoveEnded && locomotionKey != IdleKey && groundedTravel > 0f &&
-                groundedTravel >= minimumStopTravel && Vector3.Dot(previousExpectedDirection, previousActualVelocity) > 0f)
-            {
-                stopEntryVelocity = previousActualVelocity; // 主动位移达到门槛后才记录收步动量。
-                previousActualVelocity = motion.ActualVelocity;
-                groundedTravel = 0f;
-                // 固定步记录松键，渲染帧取得分层归属和播放状态后再选收步实例。
-                MainBrakeDue = !motion.Trajectory.IsBrakeLeadIn;
-                phaseBeforeRelease = groundPhase;
-                groundPhase = CharacterLocomotionPhase.BrakeLeadIn;
-                return;
+                case DecisionRelease.Begin:
+                    stopEntryVelocity = previousActualVelocity;
+                    previousActualVelocity = motion.ActualVelocity;
+                    groundedTravel = 0f;
+                    MainBrakeDue = !motion.Trajectory.IsBrakeLeadIn;
+                    phaseBeforeRelease = groundPhase;
+                    groundPhase = CharacterLocomotionPhase.BrakeLeadIn;
+                    return;
             }
             ClearDirections();
             locomotionKey = IdleKey;
@@ -368,6 +301,7 @@ namespace ThreeC.CharacterBehavior
         public void InvalidateMotion()
         {
             simulationVersion = null;
+            InputTurn?.Reset();
             ReverseReleaseStep = 0;
             releaseDirection = default;
             if (IsReleasing) locomotionKey = IdleKey;
@@ -380,6 +314,7 @@ namespace ThreeC.CharacterBehavior
         public void ResetGait(CharacterBehaviorFrameResult behavior)
         {
             simulationVersion = null;
+            InputTurn?.Reset();
             ReverseReleaseStep = 0;
             releaseDirection = default;
             locomotionKey = IdleKey;
@@ -393,33 +328,18 @@ namespace ThreeC.CharacterBehavior
         // 由本帧获准的冲刺实例立即接管基础动作；地面步态继续以实际求解步维护。
         internal void ObserveDash(in CharacterBehaviorFrameResult behavior)
         {
-            if (!hasGait || !behavior.DashActive)
+            if (!decisions.TakeDash(behavior))
                 dashRequest = default;
             else if (behavior.DashStarted || dashRequest.InstanceId == 0)
                 dashRequest = new CharacterAnimationRequest(DashKey, ++generation);
         }
 
-        private string ResolveGait(float speed, CharacterMoveGait gait)
-        {
-            if (speed <= (locomotionKey == IdleKey ? idleExitSpeed : idleEnterSpeed))
-                return IdleKey;
-            if (gait == CharacterMoveGait.Walk) return WalkKey;
-            if (gait == CharacterMoveGait.Sprint && speed >= (locomotionKey == SprintKey ? sprintExitSpeed : sprintEnterSpeed))
-                return SprintKey; // 同步检查输入档与实速，排除短突进余速。
-            bool wasRunning = locomotionKey == MoveKey || locomotionKey == SprintKey;
-            return (wasRunning ? speed > runExitSpeed : speed > runEnterSpeed) ? MoveKey : WalkKey;
-        }
+#if UNITY_EDITOR
+        // 输出本角色基础意图程序最近已求值的分支和输入。
+        internal void AppendDecisionTrace(System.Text.StringBuilder text) => decisions.AppendTrace(text);
+#endif
 
-        private bool IsReversal(Vector3 expectedDirection)
-        {
-            // 请求方向与实际速度都须反向，排除擦墙引发的转身。
-            float threshold = reverseDotThreshold + 0.000001f;
-            return turnSeconds > 0f && previousExpectedDirection != Vector3.zero &&
-                previousActualVelocity != Vector3.zero &&
-                Vector3.Dot(previousExpectedDirection, expectedDirection) <= threshold &&
-                Vector3.Dot(previousActualVelocity.normalized, expectedDirection) <= threshold;
-        }
-
+        // 从有符号朝向差和相邻方向确定实际播放的左右变体。
         private CharacterLocomotionVariant ResolveTurnVariant(float facingDelta, Vector3 expectedDirection)
         {
             // 朝向已对齐时用相邻请求推断转向，正反向等距时沿用驱动器的右转约定。

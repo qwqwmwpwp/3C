@@ -2,11 +2,6 @@ using UnityEngine;
 using UnityEngine.Animations;
 using System.Collections.Generic;
 
-#if UNITY_EDITOR
-using UnityEditor;
-using UnityEditor.Animations;
-#endif
-
 [System.Serializable]
 public class DefaultEventConfig
 {
@@ -27,212 +22,6 @@ public class RenameAttribute : PropertyAttribute
     public string NewName { get; private set; }
     public RenameAttribute(string name) { NewName = name; }
 }
-
-#if UNITY_EDITOR
-    [CustomPropertyDrawer(typeof(ReadOnlyAttribute))]
-public class ReadOnlyDrawer : PropertyDrawer
-{
-    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-    {
-        GUI.enabled = false;
-        
-        // Inherit [Rename] attribute text if present to prevent drawer conflicts
-        object[] renameAttributes = fieldInfo.GetCustomAttributes(typeof(RenameAttribute), true);
-        if (renameAttributes.Length > 0)
-        {
-            label.text = ((RenameAttribute)renameAttributes[0]).NewName;
-        }
-        else if (property.name == "name")
-        {
-            label.text = "Source Name";
-        }
-        
-        EditorGUI.PropertyField(position, property, label, true);
-        GUI.enabled = true;
-    }
-
-    public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-    {
-        return EditorGUI.GetPropertyHeight(property, label, true);
-    }
-}
-
-[CustomPropertyDrawer(typeof(RenameAttribute))]
-public class RenameDrawer : PropertyDrawer
-{
-    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-    {
-        label.text = (attribute as RenameAttribute).NewName;
-        EditorGUI.PropertyField(position, property, label, true);
-    }
-
-    public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-    {
-        return EditorGUI.GetPropertyHeight(property, label, true);
-    }
-}
-
-[CustomPropertyDrawer(typeof(DefaultEventConfig))]
-public class DefaultEventConfigDrawer : PropertyDrawer
-{
-    private bool layerFoldout = false;
-
-    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-    {
-        SerializedProperty enabledProp = property.FindPropertyRelative("enabled");
-        SerializedProperty eventNameProp = property.FindPropertyRelative("eventName");
-        SerializedProperty monitoredLayersProp = property.FindPropertyRelative("monitoredLayers");
-
-        // Resolve label
-        object[] renameAttrs = fieldInfo.GetCustomAttributes(typeof(RenameAttribute), true);
-        if (renameAttrs.Length > 0)
-            label.text = ((RenameAttribute)renameAttrs[0]).NewName;
-        else
-            label.text = "Default Event String";
-
-        float lineHeight = EditorGUIUtility.singleLineHeight;
-        float spacing = EditorGUIUtility.standardVerticalSpacing;
-
-        // Get Animator for layer names
-        Animator animator = null;
-        var targetObj = property.serializedObject.targetObject as Component;
-        if (targetObj != null) animator = targetObj.GetComponent<Animator>();
-
-        int animLayerCount = 0;
-        if (animator != null)
-        {
-            var animSO = new UnityEditor.SerializedObject(animator);
-            var ctrlProp = animSO.FindProperty("m_Controller");
-            if (ctrlProp != null && ctrlProp.objectReferenceValue is AnimatorController controller)
-            {
-                animLayerCount = controller.layers.Length;
-            }
-        }
-
-        // Sync monitoredLayers list size with actual Animator layer count
-        if (animLayerCount > 0)
-        {
-            while (monitoredLayersProp.arraySize < animLayerCount)
-            {
-                monitoredLayersProp.InsertArrayElementAtIndex(monitoredLayersProp.arraySize);
-                monitoredLayersProp.GetArrayElementAtIndex(monitoredLayersProp.arraySize - 1).boolValue = (monitoredLayersProp.arraySize == 1);
-            }
-            while (monitoredLayersProp.arraySize > animLayerCount)
-                monitoredLayersProp.DeleteArrayElementAtIndex(monitoredLayersProp.arraySize - 1);
-        }
-
-        // Main Foldout header
-        Rect foldoutRect = new Rect(position.x, position.y, position.width, lineHeight);
-        property.isExpanded = EditorGUI.Foldout(foldoutRect, property.isExpanded, label, true);
-
-        if (property.isExpanded)
-        {
-            EditorGUI.indentLevel++;
-            float y = position.y + lineHeight + spacing;
-
-            // 1st: Enable toggle (always interactable)
-            Rect enableRect = new Rect(position.x, y, position.width, lineHeight);
-            EditorGUI.PropertyField(enableRect, enabledProp, new GUIContent("Enable"));
-            y += lineHeight + spacing;
-
-            // Gray out when disabled
-            bool prevEnabled = GUI.enabled;
-            GUI.enabled = enabledProp.boolValue;
-
-            // 2nd: Event String Name
-            Rect eventNameRect = new Rect(position.x, y, position.width, lineHeight);
-            EditorGUI.PropertyField(eventNameRect, eventNameProp, new GUIContent("Event String Name"));
-            y += lineHeight + spacing;
-
-            // 3rd: Target Layer (sub-foldout)
-            Rect layerFoldRect = new Rect(position.x, y, position.width, lineHeight);
-            layerFoldout = EditorGUI.Foldout(layerFoldRect, layerFoldout, "Target Layer", true);
-            y += lineHeight + spacing;
-
-            if (layerFoldout && animLayerCount > 0)
-            {
-                EditorGUI.indentLevel++;
-                for (int i = 0; i < animLayerCount; i++)
-                {
-                    string layerName = "Layer " + i;
-                    var animSO = new UnityEditor.SerializedObject(animator);
-                    var ctrlProp = animSO.FindProperty("m_Controller");
-                    if (ctrlProp != null && ctrlProp.objectReferenceValue is AnimatorController controller)
-                    {
-                        if (i < controller.layers.Length) layerName = controller.layers[i].name;
-                    }
-                    
-                    Rect toggleRect = new Rect(position.x, y, position.width, lineHeight);
-                    SerializedProperty elem = monitoredLayersProp.GetArrayElementAtIndex(i);
-                    elem.boolValue = EditorGUI.Toggle(toggleRect, layerName, elem.boolValue);
-                    y += lineHeight + spacing;
-                }
-                EditorGUI.indentLevel--;
-            }
-            else if (layerFoldout && animLayerCount == 0)
-            {
-                Rect warnRect = new Rect(position.x, y, position.width, lineHeight);
-                EditorGUI.LabelField(warnRect, "  No Animator found on this GameObject.");
-                y += lineHeight + spacing;
-            }
-
-            GUI.enabled = prevEnabled;
-            EditorGUI.indentLevel--;
-        }
-    }
-
-    public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-    {
-        float lineHeight = EditorGUIUtility.singleLineHeight;
-        float spacing = EditorGUIUtility.standardVerticalSpacing;
-
-        if (!property.isExpanded)
-            return lineHeight;
-
-        // Header + Enable + EventName + TargetLayer foldout
-        float height = lineHeight + (lineHeight + spacing) * 3;
-
-        if (layerFoldout)
-        {
-            Animator animator = null;
-            var targetObj = property.serializedObject.targetObject as Component;
-            if (targetObj != null) animator = targetObj.GetComponent<Animator>();
-            int count = 1;
-            if (animator != null)
-            {
-                var animSO = new UnityEditor.SerializedObject(animator);
-                var ctrlProp = animSO.FindProperty("m_Controller");
-                if (ctrlProp != null && ctrlProp.objectReferenceValue is AnimatorController controller)
-                {
-                    count = controller.layers.Length;
-                }
-            }
-            height += (lineHeight + spacing) * count;
-        }
-
-        return height;
-    }
-}
-
-[CustomPropertyDrawer(typeof(WeaponSlot))]
-public class WeaponSlotDrawer : PropertyDrawer
-{
-    public override void OnGUI(Rect position, SerializedProperty property, GUIContent label)
-    {
-        SerializedProperty nameProp = property.FindPropertyRelative("name");
-        
-        // Use the name field value as the foldout header
-        string displayName = (!string.IsNullOrEmpty(nameProp.stringValue)) ? nameProp.stringValue : label.text;
-        
-        EditorGUI.PropertyField(position, property, new GUIContent(displayName), true);
-    }
-
-    public override float GetPropertyHeight(SerializedProperty property, GUIContent label)
-    {
-        return EditorGUI.GetPropertyHeight(property, label, true);
-    }
-}
-#endif
 
 [System.Serializable]
 public class SocketSetting
@@ -316,6 +105,7 @@ public class SupportIKConfig
     [HideInInspector] public float targetWeight = 0f;
 }
 
+// 根据动画事件切换武器挂点，并在配置启用时监听控制器状态。
 public class Character_Weapon_Controller : MonoBehaviour
 {
     [ReadOnly]
@@ -342,7 +132,9 @@ public class Character_Weapon_Controller : MonoBehaviour
     // Internal Variables
     private Animator animator;
     private int[] lastStateHashes;
+    private RuntimeAnimatorController monitoredController;
 
+    // 缓存武器刚体，并为可用的控制器记录初始状态。
     private void Awake()
     {
         animator = GetComponent<Animator>();
@@ -356,14 +148,9 @@ public class Character_Weapon_Controller : MonoBehaviour
             }
         }
         
-        if (animator != null)
-        {
-            lastStateHashes = new int[animator.layerCount];
-            for (int i = 0; i < lastStateHashes.Length; i++)
-            {
-                lastStateHashes[i] = animator.GetCurrentAnimatorStateInfo(i).fullPathHash;
-            }
-        }
+        var controller = GetMonitoredController();
+        if (controller != null)
+            RecordLayerStates(controller, animator.layerCount);
     }
 
     /// <summary>
@@ -425,13 +212,44 @@ public class Character_Weapon_Controller : MonoBehaviour
         }
     }
 
-    private void Update()
+    // 只有默认事件已配置且 Animator 就绪时才能读取控制器层。
+    private RuntimeAnimatorController GetMonitoredController()
     {
-        if (defaultEventSetting == null || !defaultEventSetting.enabled || string.IsNullOrEmpty(defaultEventSetting.eventName) || animator == null) return;
+        if (defaultEventSetting == null || !defaultEventSetting.enabled || string.IsNullOrEmpty(defaultEventSetting.eventName))
+            return null;
 
-        int layerCount = animator.layerCount;
+        return animator != null && animator.isActiveAndEnabled && animator.isInitialized
+            ? animator.runtimeAnimatorController
+            : null;
+    }
+
+    // 记录当前控制器的各层状态，作为后续比较的起点。
+    private void RecordLayerStates(RuntimeAnimatorController controller, int layerCount)
+    {
+        monitoredController = controller;
         if (lastStateHashes == null || lastStateHashes.Length != layerCount)
             lastStateHashes = new int[layerCount];
+
+        for (int i = 0; i < layerCount; i++)
+            lastStateHashes[i] = animator.GetCurrentAnimatorStateInfo(i).fullPathHash;
+    }
+
+    // 监听配置选中的动画层，在状态切换时按需复位武器挂点。
+    private void Update()
+    {
+        var controller = GetMonitoredController();
+        if (controller == null)
+        {
+            monitoredController = null;
+            return;
+        }
+
+        int layerCount = animator.layerCount;
+        if (controller != monitoredController || lastStateHashes.Length != layerCount)
+        {
+            RecordLayerStates(controller, layerCount);
+            return;
+        }
 
         bool stateChanged = false;
 

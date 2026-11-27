@@ -16,7 +16,6 @@ namespace ThreeC.CharacterBehavior
         [SerializeField, InspectorName("允许持物"), Tooltip("初始化时为角色注册持物行为。")] private bool allowGuard;
         [SerializeField, Tooltip("提供相机的水平移动方向。未配置或方向不可用时沿世界 XZ 轴移动。")]
         private CameraControlSource cameraControlSource;
-        [SerializeField, InspectorName("动作目标对齐")] private CharacterActionAlignmentBinding actionAlignment = new CharacterActionAlignmentBinding();
 
         [Header("共享角色配置")]
         [SerializeField, Tooltip("在配置资产中编辑共享参数。角色初始化时绑定此资产。")] private CharacterProfile profile;
@@ -34,6 +33,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterMotorSettings Motor => Configuration.Motor;
 
         private readonly CharacterRigidbodyMotor rigidbodyMotor = new CharacterRigidbodyMotor();
+        private CharacterLifecycleCoordinator lifecycle;
         private CharacterMotorSuspension suspension; // 脚本热重载后仍能归还刚体控制和暂停前速度。
         // 读取来自当前角色配置的有效行为数值。
         internal CharacterMovementSettings ReadMovement() => Configuration.ReadMovement();
@@ -47,7 +47,11 @@ namespace ThreeC.CharacterBehavior
         public bool IsExternallyControlled => handoff.HasHolder;
 
         // 内置表现层先于任何公开通知消费刚体与时间线已共同提交的边界。
-        internal event Action<CharacterMotionBoundaryKind, int> MotionBoundaryCommitted;
+        internal event Action<CharacterMotionBoundaryKind, int> MotionBoundaryCommitted
+        {
+            add => handoff.Committed += value;
+            remove => handoff.Committed -= value;
+        }
 
         /// <summary>同步标记真实运动边界及中断前的模拟代次，供表现层清除旧姿态并读取结束回执。</summary>
         public event Action<CharacterMotionBoundaryKind, int> MotionDiscontinuity
@@ -105,32 +109,6 @@ namespace ThreeC.CharacterBehavior
         private CharacterPhysicsExecution physics;
         /// <summary>最近一次行为裁决的角色时刻，单位为秒。暂停期间冻结，重生从零开始，可作为轨迹采样的 now。</summary>
         public double CharacterTime => timeline.Time;
-        /// <summary>最近一次攻击对齐实例的状态；到达和受阻由真实物理求解提交。</summary>
-        public CharacterActionAlignmentStatus ActionAlignmentStatus => behaviorFlow?.Alignment.Status ?? CharacterActionAlignmentStatus.None;
-        /// <summary>状态所属的攻击实例序号，可与行为帧的 Attack.InstanceId 对照。</summary>
-        public long ActionAlignmentInstance => behaviorFlow?.Alignment.Instance ?? 0;
-
-        /// <summary>主线程指定角色要到达的锚点；站位使用锚点局部坐标，朝向为锚点前向加世界竖轴偏角。</summary>
-        public void SetActionAlignmentTarget(Transform target, Vector3 localOffset = default, float yawDegrees = 0f)
-        {
-            actionAlignment.Set(target, localOffset, yawDegrees);
-            RefreshAlignmentTarget();
-        }
-
-        /// <summary>撤销当前锚点，并从下一次尚未提交的运动区间恢复原招式曲线。</summary>
-        public void ClearActionAlignmentTarget() => SetActionAlignmentTarget(null);
-
-        // 主线程读取锚点并撤销过期命令及在途预测，后台只收到冻结的值。
-        private void RefreshAlignmentTarget()
-        {
-            if (behaviorFlow == null || handoff.HasHolder) return;
-            var target = actionAlignment.Capture();
-            if (!behaviorFlow.Alignment.Target.Changed(target)) return;
-            var change = behaviorFlow.Alignment.RefreshChangedTarget(target, rigidbodyMotor.ReadAlignmentOrigin(), LatestBehavior.Behavior.Attack);
-            blackboard.Rigidbody.CancelAlignment(change.cancelled);
-            if (change.refresh) forecast?.InvalidateAlignment();
-        }
-
         /// <summary>在主线程按帧号读取当前渲染帧的裁决与外部边界，跨渲染帧或重生后重新读取列表。</summary>
         public IReadOnlyList<CharacterBehaviorObservation> BehaviorUpdates => timeline.Updates;
         /// <summary>最近一次逐帧裁决，含实际行为时长和模拟代次。</summary>
@@ -219,14 +197,19 @@ namespace ThreeC.CharacterBehavior
             behaviorFlow = CreateBehaviorFlow();
             behaviorFlow.HistoryEnabled = recordBehaviorHistory;
             var geometry = new CharacterForecastGeometry(body, capsule, rigidbodyMotor.Steps);
-            var source = new CharacterMovementPredictor(blackboard.Configuration.CreateForecastFlow, geometry, blackboard.Configuration.CreateForecastFlow, continuity);
+            var source = new CharacterMovementPredictor(blackboard.Configuration.CreateForecastFlow, geometry,
+                blackboard.Configuration.CaptureForecastFactory, continuity);
             forecast = new CharacterForecastSource(blackboard, rigidbodyMotor, timeline, behaviorFlow, source);
             forecast.CaptureBaseline();
-            physics = new CharacterPhysicsExecution(blackboard, rigidbodyMotor, behaviorFlow, forecast, frameListeners, this);
+            physics = new CharacterPhysicsExecution(blackboard, rigidbodyMotor, forecast, frameListeners, this);
             predictor.Suppress(blackboard.Simulation.PredictionSuppressed);
             playerInput = new CharacterPlayerInputAdapter(blackboard.Input, CanCapturePlayerInput,
                 predictor.RequestRefresh);
-            continuity.Bind(behaviorFlow, ApplyReset, SynchronizeSimulation, ReadMovement());
+            lifecycle = new CharacterLifecycleCoordinator(this, blackboard, timeline, behaviorFlow, rigidbodyMotor, physics,
+                forecast, continuity, handoff, committedGrants, frameListeners);
+            var initialMovement = ReadMovement();
+            continuity.Bind(behaviorFlow, () => lifecycle.ApplyReset(ref suspension),
+                () => lifecycle.SynchronizeSimulation(ref suspension), () => lifecycle.InitializeBehavior(initialMovement));
         }
 
         // 依据当前装配的行为集合与打断关系创建独立流程。
@@ -261,8 +244,6 @@ namespace ThreeC.CharacterBehavior
             physics.Commit();
             if (this == null || version != SimulationVersion || !IsSimulating) return;
             var config = Configuration;
-            RefreshAlignmentTarget();
-            if (this == null || version != SimulationVersion || !IsSimulating) return;
             double remainder = Math.Max(0d, Time.timeAsDouble - Time.fixedTimeAsDouble);
             double end = blackboard.Rigidbody.SubmittedThrough + remainder;
             var movement = config.ReadMovement();
@@ -283,9 +264,6 @@ namespace ThreeC.CharacterBehavior
             if (this == null || version != SimulationVersion || continuity.Pending) return;
             if (predictor.HasFrameAssumptions)
                 forecast.CheckAssumptions(config, movement);
-            // 连续跟随可能每帧撤回上一条预测；在本帧动画采集之前，用已发布的行为输入补齐当前目标的轨迹。
-            if (this != null && version == SimulationVersion && behaviorFlow.Alignment.FollowsTargetAt(CharacterTime) && !predictor.Output.Available)
-                SubmitForecastFrame(beforeAnimation: true);
         }
 
         // 从相机读取本帧已发布的水平操作基底。
@@ -306,8 +284,6 @@ namespace ThreeC.CharacterBehavior
             if (!RefreshSimulation()) return;
             int version = SimulationVersion;
             physics.Commit();
-            if (this == null || version != SimulationVersion || !IsSimulating) return;
-            RefreshAlignmentTarget();
             if (this == null || version != SimulationVersion || !IsSimulating) return;
             using (continuity.Protect())
                 physics.Submit(Configuration, Time.fixedDeltaTime, continuity);
@@ -351,47 +327,29 @@ namespace ThreeC.CharacterBehavior
             if (lastForecastRenderFrame == renderFrame) return;
             lastForecastRenderFrame = renderFrame;
             if (!CanSubmitForecast) return;
-            int version = SimulationVersion;
-            RefreshAlignmentTarget();
-            if (this == null || version != SimulationVersion) return;
-            SubmitForecastFrame(beforeAnimation: false);
+            try { forecast.Submit(Configuration); }
+            finally { continuity.Flush(); }
         }
 
         // 只允许连续模拟从最近一次可信实测起点提交预测。
         private bool CanSubmitForecast => IsSimulating && blackboard.Simulation.Running &&
             forecast != null && !forecast.NeedsSolvedOrigin && !blackboard.Simulation.PredictionSuppressed;
 
-        // 早期补发和正常帧末提交共用有效性、快照与发布入口；无新变化的帧末提交复用已有结果。
-        private void SubmitForecastFrame(bool beforeAnimation)
+        // 将外部运动请求与可热重载的刚体暂停记录交给同一生命周期事务。
+        private bool ApplyMotionBoundary(in CharacterMotionBoundary request) =>
+            lifecycle != null && lifecycle.ApplyMotionBoundary(request, ref suspension);
+
+        internal bool ReceivesPlayerInput => receivePlayerInput;
+
+        // 保存最近一次重生前的两个代次，供动画查询旧行为的结束回执。
+        internal void RecordBehaviorReset()
         {
-            if (!CanSubmitForecast) return;
-            try { forecast.Submit(Configuration, beforeAnimation); }
-            finally { continuity.Flush(); }
+            LastBehaviorResetVersion = StateVersion;
+            LastBehaviorResetSimulationVersion = SimulationVersion;
         }
 
-        // 在主线程结算旧物理步后中断旧行为，再切换刚体写权限并发布新基线。
-        private bool ApplyMotionBoundary(in CharacterMotionBoundary request)
-        {
-            if (continuity.InCallback || continuity.Pending || forecast == null || !rigidbodyMotor.Bound || !request.Valid() || !handoff.CanApply(request, StateVersion) ||
-                request.Kind == CharacterMotionBoundaryKind.Knockback && !IsSimulating) return false;
-            int previous = SimulationVersion;
-            physics?.FinishPending(publishSolved: true);
-            if (this == null || previous != SimulationVersion || !handoff.CanApply(request, StateVersion)) return false;
-            int revision = continuity.Revision;
-            using (continuity.Protect())
-                CharacterMotionHandoff.Interrupt(request, blackboard, timeline, behaviorFlow, ReadMovement(),
-                    committedGrants, actionAlignment, receivePlayerInput);
-            if (this == null || revision != continuity.Revision) return false;
-            handoff.ApplyBody(request, rigidbodyMotor, ref suspension, blackboard.Simulation.CanSimulate(this, rigidbodyMotor));
-            blackboard.Simulation.Running = IsSimulating;
-            if (request.Kind != CharacterMotionBoundaryKind.Knockback) CameraCutVersion++;
-            forecast.CaptureBaseline(boundary: true);
-            int current = SimulationVersion;
-            var change = predictor.PrepareBoundary(blackboard.Simulation.PredictionSuppressed || handoff.HasHolder,
-                blackboard.Rigidbody.KnockbackUntil, blackboard.Rigidbody.KnockbackBraking, request.Kind);
-            handoff.Publish(request.Kind, previous, current, this, blackboard.Simulation, predictor.Output, change, MotionBoundaryCommitted);
-            return true;
-        }
+        // 发布相机可独立观察的位姿切换代次。
+        internal void MarkCameraCut() => CameraCutVersion++;
 
         /// <summary>设置角色级游戏暂停，冻结行为、体力与冷却，并清空按下事件及连招预输入。</summary>
         public void SetPaused(bool paused)
@@ -402,54 +360,6 @@ namespace ThreeC.CharacterBehavior
         /// <summary>重生或复用时用当前体力初值重置行为、逻辑步和结果，保留装配好的行为关系和暂停设置。</summary>
         public void ResetState() => continuity.Request(true);
 
-        // 完成单次重生，由同一次重生回调提出的重复请求在生命周期入口合并。
-        private void ApplyReset()
-        {
-            physics?.FinishPending(publishSolved: false);
-            if (handoff.Revoke())
-                rigidbodyMotor.ResumeOwnership(CharacterVelocityPolicy.Clear, default, ref suspension, IsSimulating);
-            blackboard.Simulation.Running = IsSimulating;
-            LastBehaviorResetVersion = StateVersion;
-            LastBehaviorResetSimulationVersion = SimulationVersion;
-            behaviorFlow?.Reset(ReadMovement());
-            blackboard.Simulation.PredictionSuppressed = false;
-            blackboard.PhysicsStep.ResetFrame();
-            committedGrants.Reset();
-            blackboard.Rigidbody.Reset();
-            timeline.Reset(Time.realtimeSinceStartupAsDouble);
-            rigidbodyMotor.ResetMotion(ref suspension);
-            forecast?.CaptureBaseline();
-            CameraCutVersion++;
-            blackboard.Simulation.AdvanceReset();
-            EndInputContinuity();
-            blackboard.Simulation.Running = IsSimulating;
-            rigidbodyMotor.SetSuspended(!blackboard.Simulation.Running, ref suspension);
-            int current = SimulationVersion;
-            var change = predictor.PrepareBoundary(false, double.NegativeInfinity, 0f, CharacterMotionBoundaryKind.Recovery);
-            frameListeners.PublishReset(this, blackboard.Simulation);
-            if (this != null && current == SimulationVersion) predictor.Output.Notify(change);
-        }
-
-        // 连续性边界交付最后已求解步，未进入求解的提交归还给运动黑板。
-        private void SynchronizeSimulation()
-        {
-            int version = SimulationVersion;
-            physics?.FinishPending(publishSolved: true);
-            if (this == null || continuity.Pending) return;
-            // 回调可以重生或再次暂停。仅在内层已同步实际运行开关时跳过这次边界。
-            if (version != SimulationVersion && blackboard.Simulation.Running == IsSimulating &&
-                blackboard.Input.WasReceivingPlayerInput == receivePlayerInput) return;
-            EndInputContinuity();
-            if (continuity.Pending) return;
-            blackboard.Simulation.Running = IsSimulating;
-            if (!handoff.HasHolder)
-            {
-                rigidbodyMotor.SetSuspended(!blackboard.Simulation.Running, ref suspension);
-                if (blackboard.Simulation.Running) forecast?.CaptureBaseline();
-            }
-            predictor?.EndContinuity();
-        }
-
         // 发现模拟开关或输入归属变化时同步连续性，并返回当前运行状态。
         private bool RefreshSimulation()
         {
@@ -457,14 +367,6 @@ namespace ThreeC.CharacterBehavior
             if (blackboard.Simulation.Running != IsSimulating || blackboard.Input.WasReceivingPlayerInput != receivePlayerInput)
                 continuity.Request(false);
             return !continuity.Pending && blackboard.Simulation.Running;
-        }
-
-        // 在同一回调保护内收束行为、输入和运动连续性。
-        private void EndInputContinuity()
-        {
-            using (continuity.Protect())
-                CharacterSimulationContinuity.EndInput(blackboard, timeline, behaviorFlow, rigidbodyMotor, ReadMovement(),
-                    !handoff.HasHolder, receivePlayerInput);
         }
 
         private void OnApplicationFocus(bool hasFocus)

@@ -32,6 +32,10 @@ namespace ThreeC.CharacterBehavior
     [CreateAssetMenu(menuName = "3C/地面匹配特征布局")]
     public sealed class GroundFeatureSchema : ScriptableObject
     {
+#if UNITY_EDITOR
+        // 标记已装配的角色搜索范围，使编辑器修改在下一批次重新生效。
+        private void OnValidate() => GroundSearchLibraries.InvalidateBindings();
+#endif
         [SerializeField, InspectorName("匹配通道")] internal GroundFeatureChannel[] Channels;
     }
 

@@ -14,15 +14,6 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterFrozenMotion frozen;
         private readonly double executedUntil;
         private readonly bool isExecutedInterval;
-        private double? alignmentCancelledAt;
-
-        // 仅撤回指定实例尚未提交的修正，保留已提交区间供预测重新读取。
-        internal void CancelAlignment(long instance, double from)
-        {
-            if (frozen is CharacterFrozenAlignedMotion aligned && aligned.Plan.Instance == instance)
-                alignmentCancelledAt = Math.Min(alignmentCancelledAt ?? from, from);
-        }
-
         // 按值锁定已获准的普通移动目标速度，冻结动作规则由行为层提供。
         internal CharacterMotionCommand(double time, CharacterBehaviorFrameResult result, CharacterInputSnapshot input,
             CharacterMovementSettings settings, CharacterBehaviorId provider, CharacterFrozenMotion frozen)
@@ -82,17 +73,11 @@ namespace ThreeC.CharacterBehavior
             double end = executed ? Math.Min(limit, executedUntil) : limit;
 
             CharacterMotionSample sample = default;
-            var sampler = frozen;
-            if (alignmentCancelledAt.HasValue && sampler is CharacterFrozenAlignedMotion aligned)
-            {
-                if (start >= alignmentCancelledAt.Value) sampler = aligned.Original;
-                else limit = Math.Min(limit, alignmentCancelledAt.Value);
-            }
-            if (sampler != null)
+            if (frozen != null)
             {
                 double localStart = start - Time;
-                end = ResolveFrozenEnd(sampler, start, limit, localStart, out double localEnd);
-                sample = sampler.Sample(localStart, localEnd);
+                end = ResolveFrozenEnd(frozen, start, limit, localStart, out double localEnd);
+                sample = frozen.Sample(localStart, localEnd);
             }
             float dt = (float)(end - start);
             if (!(dt > 0f) || float.IsInfinity(dt))
@@ -107,7 +92,7 @@ namespace ThreeC.CharacterBehavior
             var frame = behavior.WithMotion(action.Displacement + ordinaryVelocity * ordinary, action.Displacement,
                 action.Motion, source, ordinary, move, false);
             var token = sample.StartInstance.HasValue ? new MotionStartToken(provider, sample.StartInstance.Value) : default;
-            return new CharacterMotionSlice(start, end, frame, input, token, sample.Alignment);
+            return new CharacterMotionSlice(start, end, frame, input, token);
         }
 
         // 旧行为的位移、转角和普通移动时间沿用已执行总量的比例分配。

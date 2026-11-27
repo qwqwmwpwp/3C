@@ -7,7 +7,6 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterBlackboard blackboard;
         private readonly CharacterRigidbodyMotor rigidbodyMotor;
-        private readonly CharacterBehaviorFlow behaviorFlow;
         private readonly CharacterForecastSource forecast;
         private readonly CharacterFrameSubscriptions frameListeners;
         private readonly Behaviour owner;
@@ -15,11 +14,10 @@ namespace ThreeC.CharacterBehavior
 
         // 绑定固定步的命令来源、真实马达和求解结果的订阅者。
         internal CharacterPhysicsExecution(CharacterBlackboard board, CharacterRigidbodyMotor motor,
-            CharacterBehaviorFlow flow, CharacterForecastSource forecast, CharacterFrameSubscriptions listeners, Behaviour owner)
+            CharacterForecastSource forecast, CharacterFrameSubscriptions listeners, Behaviour owner)
         {
             blackboard = board;
             rigidbodyMotor = motor;
-            behaviorFlow = flow;
             this.forecast = forecast;
             frameListeners = listeners;
             this.owner = owner;
@@ -49,12 +47,6 @@ namespace ThreeC.CharacterBehavior
             var frame = steps.LatestFrame;
             blackboard.Rigidbody.MarkSolved();
             forecast.StoreBaseline(actual);
-            long finished = rigidbodyMotor.ObserveAlignment(ref behaviorFlow.Alignment, actual);
-            if (finished != 0)
-            {
-                blackboard.Rigidbody.CancelAlignment(finished);
-                forecast.InvalidateAlignment();
-            }
             if (owner == null || frame.SimulationVersion != SimulationVersion) return;
             forecast.Predictor.ObserveSolvedStep(forecast.Origin);
             if (owner != null && frame.SimulationVersion == SimulationVersion)

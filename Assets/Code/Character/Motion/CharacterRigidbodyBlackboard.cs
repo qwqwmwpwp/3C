@@ -10,18 +10,16 @@ namespace ThreeC.CharacterBehavior
         internal readonly CharacterBehaviorFrameResult Behavior;
         internal readonly CharacterInputSnapshot Input;
         internal readonly MotionStartToken StartToken;
-        internal readonly CharacterAlignmentPlan Alignment;
 
         // 将运动请求、持续输入和起步身份绑定到相同的半开区间。
         internal CharacterMotionSlice(double start, double end, CharacterBehaviorFrameResult behavior,
-            CharacterInputSnapshot input, MotionStartToken startToken = default, CharacterAlignmentPlan alignment = null)
+            CharacterInputSnapshot input, MotionStartToken startToken = default)
         {
             Start = start;
             End = end;
             Behavior = behavior;
             Input = input;
             StartToken = startToken;
-            Alignment = alignment;
         }
 
         // 根据执行域的游标解析首次起步，保留旧行为已执行输出中的起步标记。
@@ -32,7 +30,7 @@ namespace ThreeC.CharacterBehavior
             if (starts == Behavior.ActionMotionStarted) return this;
             var frame = Behavior.WithMotion(Behavior.Displacement, Behavior.ActionDisplacement, Behavior.ActionMotion,
                 Behavior.DisplacementProvider, Behavior.OrdinaryMovementSeconds, Behavior.MoveApproved, starts);
-            return new CharacterMotionSlice(Start, End, frame, Input, StartToken, Alignment);
+            return new CharacterMotionSlice(Start, End, frame, Input, StartToken);
         }
     }
 
@@ -40,7 +38,6 @@ namespace ThreeC.CharacterBehavior
     internal sealed class CharacterRigidbodyBlackboard
     {
         private readonly List<CharacterMotionCommand> commands = new List<CharacterMotionCommand>();
-        private readonly List<CharacterMotionSlice> alignmentProjection = new List<CharacterMotionSlice>();
         private MotionStartToken previousStartCursor;
         private double previousThrough;
         internal MotionStartToken StartCursor { get; private set; }
@@ -63,30 +60,6 @@ namespace ThreeC.CharacterBehavior
             StartCursor = previousStartCursor = default;
             KnockbackUntil = double.NegativeInfinity;
             KnockbackBraking = 0f;
-        }
-
-        // 对齐参考起点从当前实测刚体沿尚未执行的获准切片外推，已提交区间不会重复积分。
-        internal CharacterAlignmentOrigin ProjectAlignmentOrigin(double time, in CharacterAlignmentOrigin actual, float turnSpeed)
-        {
-            var origin = actual;
-            if (time <= actual.Time) return origin;
-            var cursor = StartCursor;
-            Read(actual.Time, time, ref cursor, alignmentProjection);
-            foreach (var slice in alignmentProjection) origin.Advance(slice, turnSpeed);
-            alignmentProjection.Clear();
-            return origin;
-        }
-
-        // 在下次物理提交点撤销队列内该实例的剩余修正，已经交给求解器的命令仍按原值记录。
-        internal void CancelAlignment(long instance)
-        {
-            if (instance == 0) return;
-            for (int i = 0; i < commands.Count; i++)
-            {
-                var command = commands[i];
-                command.CancelAlignment(instance, SubmittedThrough);
-                commands[i] = command;
-            }
         }
 
         // 同一时刻的最后裁决覆盖零长命令，已提交区间由马达游标保护。

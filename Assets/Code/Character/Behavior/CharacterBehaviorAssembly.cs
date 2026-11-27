@@ -29,8 +29,8 @@ namespace ThreeC.CharacterBehavior
             Locomotion = new CharacterBehaviorLocomotion(movement, (CharacterMoveBehavior)movement.Behavior);
         }
 
-        // 所有角色流程均从本次注册描述实例化，工厂在主线程的装配阶段执行。
-        private CharacterBehaviorAssembly(CharacterBehaviorRegistration registration, bool snapshot)
+        // 在主线程按注册描述装配，各流程独占行为实例，可选的冻结攻击表仅供本次预测读取。
+        private CharacterBehaviorAssembly(CharacterBehaviorRegistration registration, bool snapshot, CharacterAttackLookup sharedAttack)
         {
             var descriptors = registration.Descriptors;
             var movement = descriptors[0].Create(snapshot);
@@ -38,7 +38,7 @@ namespace ThreeC.CharacterBehavior
             var relations = new List<CharacterBehaviorInterrupt>(descriptors[0].Interrupts);
             for (int i = 1; i < descriptors.Length; i++)
             {
-                actions[i - 1] = descriptors[i].Create(snapshot);
+                actions[i - 1] = descriptors[i].Create(snapshot, sharedAttack);
                 relations.AddRange(descriptors[i].Interrupts);
             }
             var dash = (CharacterDashBehavior)actions[0].Behavior;
@@ -48,7 +48,8 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 保存完整装配，使真实、预演和预测沿用同一描述中的编号及关系。
-        internal static CharacterBehaviorFlow ForCharacter(CharacterBehaviorRegistration registration, bool snapshot = false) =>
-            new CharacterBehaviorFlow(new CharacterBehaviorAssembly(registration, snapshot), snapshot);
+        internal static CharacterBehaviorFlow ForCharacter(CharacterBehaviorRegistration registration, bool snapshot = false,
+            CharacterAttackLookup sharedAttack = null) =>
+            new CharacterBehaviorFlow(new CharacterBehaviorAssembly(registration, snapshot, sharedAttack), snapshot);
     }
 }

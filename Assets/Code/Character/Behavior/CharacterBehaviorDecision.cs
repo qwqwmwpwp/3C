@@ -10,7 +10,7 @@ namespace ThreeC.CharacterBehavior
     public enum CharacterBehaviorRejectReason
     {
         None, Cooldown, InsufficientResource, InvalidConfiguration, StateCondition, Gate,
-        Conflict, PhaseRestriction, LegacyEvaluation, OutsideWindow, NoRoute
+        Conflict, PhaseRestriction, LegacyEvaluation, OutsideWindow, NoRoute, RequiresFixedDuration
     }
     /// <summary>区分一次行为执行离开活动状态的实际原因。</summary>
     public enum CharacterBehaviorEndReason { None, Completed, Withdrawn, Interrupted, Reset, ExternalControl, Teleport, Knockback }

@@ -20,19 +20,29 @@ namespace ThreeC.CharacterBehavior
     internal readonly struct CharacterDebugClipMix
     {
         public readonly string Target, Outgoing;
+        public readonly AnimationClip PrimaryClip, SecondaryClip, OutgoingPrimaryClip, OutgoingSecondaryClip;
         public readonly float TargetWeight, OutgoingWeight, Phase;
+        public readonly double Seconds;
+        public readonly float Rate;
         public readonly int OtherCount;
 
-        // 保存片段源的实际时间和混合权重。
+        // 保存已接入播放图的素材、逻辑时钟和混合权重。
         public CharacterDebugClipMix(string target, float targetWeight, string outgoing, float outgoingWeight,
-            int otherCount, float phase)
+            int otherCount, in CharacterClipProgress progress, float rate, AnimationClip primaryClip,
+            AnimationClip secondaryClip, AnimationClip outgoingPrimaryClip, AnimationClip outgoingSecondaryClip)
         {
             Target = target;
             TargetWeight = targetWeight;
             Outgoing = outgoing;
             OutgoingWeight = outgoingWeight;
             OtherCount = otherCount;
-            Phase = phase;
+            Phase = progress.normalizedTime;
+            Seconds = progress.Seconds;
+            Rate = rate;
+            PrimaryClip = primaryClip;
+            SecondaryClip = secondaryClip;
+            OutgoingPrimaryClip = outgoingPrimaryClip;
+            OutgoingSecondaryClip = outgoingSecondaryClip;
         }
     }
 
@@ -74,6 +84,7 @@ namespace ThreeC.CharacterBehavior
     {
         public readonly CharacterAnimationDebugStatus Status;
         public readonly string Error;
+        public readonly bool SentBaselinePlayback;
         public readonly CharacterAnimationDebugLayer UpperBody, LowerBody;
         public readonly CharacterDebugBodyMix Mix;
         internal readonly VisualRootDebug Root;
@@ -93,6 +104,7 @@ namespace ThreeC.CharacterBehavior
         {
             UpperBody = new CharacterAnimationDebugLayer(plan.UpperOwner, emission);
             LowerBody = new CharacterAnimationDebugLayer(plan.LowerOwner, emission);
+            SentBaselinePlayback = emission.FullBody;
             Mix = mix;
             Root = root;
         }

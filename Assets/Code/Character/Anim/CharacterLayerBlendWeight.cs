@@ -63,11 +63,21 @@ namespace ThreeC.CharacterBehavior
                 .Apply(startWeight, startSpeed, target, out velocity);
         }
 
+        // 从本层实际覆盖量按动作时钟推进权重，并记录下一帧承接的速度。
         private float AdvanceAction(float current, in CharacterAnimationDemand demand, float dt)
         {
             var timing = demand.Timing;
+            if (timing.Sample.Valid)
+            {
+                actionKey = demand.Key;
+                actionInstance = demand.InstanceId;
+                duration = timedSeconds = 0f;
+                float sampledWeight = timing.Sample.Weight(demand.EntryCoverage, out float slope);
+                velocity = slope * demand.MaximumWeight;
+                return sampledWeight * demand.MaximumWeight;
+            }
             var handoff = timing.Handoff;
-            float sample = timing.SamplePhase.GetValueOrDefault();
+            float sample = timing.WeightPhase.GetValueOrDefault();
             bool sameAction = actionKey == demand.Key && actionInstance == demand.InstanceId;
             float phaseRate = sameAction && dt > 0f ? Mathf.Max(0f, (sample - phase) / dt) : 1f / handoff.Duration;
             if (!sameAction)
@@ -76,7 +86,7 @@ namespace ThreeC.CharacterBehavior
                 actionInstance = demand.InstanceId;
                 // 起点在上一帧的播放边界；当前帧的行为相位可能已经走过一小段前摇。
                 entryPhase = Mathf.Max(0f, sample - dt * phaseRate);
-                bool inherit = !handoff.UsesRouteBlend && velocity != 0f && demand.MaximumWeight > 0f && !timing.StartAtZero &&
+                bool inherit = velocity != 0f && demand.MaximumWeight > 0f && !timing.StartAtZero &&
                     !timing.Resumed && sample < handoff.FullFrom;
                 Begin(current, inherit ? (handoff.FullFrom - entryPhase) * handoff.Duration : 0f);
             }

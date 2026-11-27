@@ -5,92 +5,93 @@ using ThreeC.Player;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 检查状态总表、可执行的状态参数及其与角色动画配置的引用关系。
     internal static class CharacterComboValidation
     {
-        internal static void Check(CharacterLightAttackSettings settings, CharacterComboRoutes routes,
-            CharacterAnimationConfiguration animation, Action<string> report)
+        // 在主线程核对片段、逻辑定义与实际装配的动画动作键。
+        internal static void Check(CharacterAttackTable table, CharacterAnimationConfiguration animation, Action<string> report)
         {
-            var ids = new HashSet<CharacterAttackMove> {
-                CharacterAttackMove.None, CharacterAttackMove.LightOne, CharacterAttackMove.LightTwo, CharacterAttackMove.Heavy
-            };
-            if (settings?.Moves?.Additional != null)
-                foreach (var row in settings.Moves.Additional)
-                    if (!ids.Add(row.Id)) report($"追加招式参数 {row.Id} 占用了保留编号或与已有参数重复。");
-
-            CheckRoutes(routes, report, Usable);
+            CheckTable(table, true, report);
             if (animation?.BehaviorAnimations == null) return;
-            var keys = new HashSet<string>(StringComparer.Ordinal);
+            var actions = new Dictionary<string, CharacterAnimationActionSettings>(StringComparer.Ordinal);
             foreach (var action in animation.Actions ?? Array.Empty<CharacterAnimationActionSettings>())
-                if (action != null) keys.Add(action.Key);
+                if (!string.IsNullOrWhiteSpace(action?.Key)) actions[action.Key] = action;
             for (int i = 0; i < animation.BehaviorAnimations.Length; i++)
             {
                 var row = animation.BehaviorAnimations[i];
                 if (row == null || row.BehaviorId != CharacterBehaviorId.Attack) continue;
-                if (!row.HasValidTrigger)
-                    report($"第 {i + 1} 条攻击动画映射 {row.AttackMove} 缺少有效的触发动作键。");
-                if (row.Trigger == CharacterAnimationTrigger.OnStart && row.AttackMove != CharacterAttackMove.None && !Usable(row.AttackMove))
-                    report($"第 {i + 1} 条攻击动画映射 {row.AttackMove} 缺少可执行的招式参数。");
-                CheckKey(i, row.AttackMove, row.EntryAction);
-                CheckKey(i, row.AttackMove, row.HoldAction);
+                if (!row.HasValidTrigger) report($"第 {i + 1} 条攻击动画映射缺少有效的触发动作键。");
+                if (row.AttackStateId != 0 && table?.Find(row.AttackStateId) == null)
+                    report($"第 {i + 1} 条攻击动画映射引用了缺失的状态 {row.AttackStateId}。");
+                if (row.IsAttackState && table?.Find(row.AttackStateId) is CharacterAttackMoveSettings attack &&
+                    !string.IsNullOrWhiteSpace(row.EntryAction) && actions.TryGetValue(row.EntryAction, out var entry))
+                    CheckMappedClip(attack, entry, animation.PlaybackLibrary, report);
+                foreach (string key in new[] { row.EntryAction, row.HoldAction })
+                    if (!string.IsNullOrWhiteSpace(key) && !actions.ContainsKey(key))
+                        report($"第 {i + 1} 条攻击动画映射引用了缺失的动作 {key}。");
             }
-
-            void CheckKey(int index, CharacterAttackMove move, string key)
-            {
-                if (!string.IsNullOrWhiteSpace(key) && !keys.Contains(key))
-                    report($"第 {index + 1} 条攻击动画映射 {move} 缺少动作定义 {key}。");
-            }
-
-            bool Usable(CharacterAttackMove move) => settings != null && settings.DurationFor(move, settings.Moves?.Move(move)) > 0f;
         }
 
-        internal static void CheckRoutes(CharacterComboRoutes routes, Action<string> report,
-            Func<CharacterAttackMove, bool> usable = null)
+        // 核对攻击的进入动作键在当前播放库实际使用同一个非循环片段。
+        private static void CheckMappedClip(CharacterAttackMoveSettings attack, CharacterAnimationActionSettings action,
+            CharacterMotionDatabase library, Action<string> report)
         {
-            if (routes == null) return;
-            CheckLinks("起手", routes.Openers);
-            var ids = new HashSet<CharacterAttackMove> { CharacterAttackMove.None };
-            foreach (var id in new[] { CharacterAttackMove.LightOne, CharacterAttackMove.LightTwo,
-                CharacterAttackMove.Heavy, CharacterAttackMove.SkillTwo })
-            {
-                ids.Add(id);
-                CheckSource(id, routes.ForMove(id));
-            }
-            if (routes.Additional == null) return;
-            foreach (var row in routes.Additional)
-            {
-                if (!ids.Add(row.Id)) report($"追加路线 {row.Id} 占用了保留编号或与已有路线重复。");
-                if (row.Routes == null) report($"追加路线 {row.Id} 缺少路线配置。");
-                CheckSource(row.Id, row.Routes);
-            }
+            var states = library ? library.Playback?.States : null;
+            var state = Array.Find(states ?? Array.Empty<CharacterClipState>(), item => item != null && item.Path == action.StateName);
+            if (state == null || !state.Clip || state.Clip != attack.Clip)
+                report($"{attack.Name} 的动作 {action.Key} 与播放库状态 {action.StateName} 的片段不一致。");
+            else if (state.Blend.Second || state.Clip.isLooping || !(state.Clip.length > 0f) || !(state.Speed > 0f))
+                report($"{attack.Name} 的动作 {action.Key} 需要可正向播放的非循环单片段。");
+        }
 
-            void CheckSource(CharacterAttackMove source, CharacterComboMoveRoutes row)
+        // 检查四个固定状态的参数与路线，自动校验时避开只能从主线程读取的动画资产。
+        internal static void CheckTable(CharacterAttackTable table, bool checkExecution, Action<string> report)
+        {
+            if (table == null) { report("缺少攻击状态表。"); return; }
+            foreach (CharacterAttackMove move in Enum.GetValues(typeof(CharacterAttackMove)))
             {
-                if (row?.Links == null || row.Links.Length == 0) return;
-                if (usable != null && !usable(source)) report($"路线来源 {source} 缺少可执行参数。");
-                if (!row.HasValidWindow) report($"{source}：请填写有效接续时间，提前秒数须非负，开放比例须小于等于关闭比例，关闭比例须大于零。");
-                CheckLinks(source.ToString(), row.Links);
+                if (move == CharacterAttackMove.None) continue;
+                var definition = table.Find((int)move);
+                if (definition == null) { report($"状态 {move} 缺少配置。"); continue; }
+                if (string.IsNullOrWhiteSpace(definition.Name)) report($"状态 {move} 缺少显示名称。");
+                if (checkExecution && !definition.IsUsable) report($"状态 {move} 的三段时长或技能冷却无效。");
+                if (checkExecution && definition is CharacterAttackMoveSettings moveSettings &&
+                    (!moveSettings.Clip || moveSettings.Clip.isLooping || !(moveSettings.Clip.length > 0f)))
+                    report($"状态 {move} 需要非循环且非空的攻击片段。");
+                if (definition is CharacterAttackMoveSettings moveTiming && !moveTiming.HasValidAnimationDuration)
+                    report($"状态 {move} 的动画持续时间必须是大于零的有限秒数。");
+                CheckLinks(table, definition.Links, definition.Name, false, report);
             }
+            CheckLinks(table, table.Openers, "起手", true, report);
+        }
 
-            void CheckLinks(string source, CharacterAttackLink[] links)
+        // 逐条检查目标、触发方式、首招条件、窗口与同键遮蔽。
+        private static void CheckLinks(CharacterAttackTable table, CharacterAttackLink[] links, string source,
+            bool opener, Action<string> report)
+        {
+            if (links == null) return;
+            for (int i = 0; i < links.Length; i++)
             {
-                if (links == null) return;
-                for (int i = 0; i < links.Length; i++)
+                var link = links[i];
+                string prefix = $"{source} 第 {i + 1} 条路线";
+                if (table.Find(link.TargetId) == null) report($"{prefix} 的目标 {link.To} 没有对应的状态配置。");
+                if (!Enum.IsDefined(typeof(CharacterComboOpeningCondition), link.OpeningCondition)) report($"{prefix} 的首招条件无效。");
+                if (!Enum.IsDefined(typeof(CharacterAttackTrigger), link.Trigger) || opener && link.Trigger != CharacterAttackTrigger.Input)
+                    report($"{prefix} 的触发方式无效。");
+                if (link.Trigger == CharacterAttackTrigger.Time && !link.HasValidTime) report($"{prefix} 的触发进度无效。");
+                if (link.Trigger == CharacterAttackTrigger.Result && link.Result == 0) report($"{prefix} 缺少状态结果编号。");
+                if (link.Trigger != CharacterAttackTrigger.Input) continue;
+                if (link.Button == AttackButton.None || !Enum.IsDefined(typeof(AttackButton), link.Button)) report($"{prefix} 缺少有效按键。");
+                if (!opener && !link.HasValidWindow) report($"{prefix} 的输入窗口无效。");
+                for (int j = 0; j < i; j++)
                 {
-                    var link = links[i];
-                    if (link.Button == AttackButton.None || link.To == CharacterAttackMove.None)
-                        report($"{source} 第 {i + 1} 条路线缺少按键或下一招。");
-                    else if (usable != null && !usable(link.To))
-                        report($"{source} 第 {i + 1} 条路线的目标 {link.To} 缺少可执行参数。");
-                    if (!link.HasValidBlend) report($"{source} 第 {i + 1} 条路线的缓入结束比例须小于等于缓出开始比例。");
-                    for (int j = 0; j < i; j++)
-                    {
-                        var earlier = links[j];
-                        if (earlier.Button != link.Button || !(earlier.OpeningCondition == link.OpeningCondition ||
-                            earlier.OpeningCondition == CharacterComboOpeningCondition.Any ||
-                            link.OpeningCondition == CharacterComboOpeningCondition.Any)) continue;
-                        report($"{source} 第 {j + 1}、{i + 1} 条路线条件重叠，优先采用首条匹配。");
-                        break;
-                    }
+                    var earlier = links[j];
+                    if (!opener && (earlier.LinkStart != link.LinkStart || earlier.LinkEnd != link.LinkEnd || earlier.EarlySeconds != link.EarlySeconds)) continue;
+                    if (earlier.Trigger != link.Trigger || earlier.Button != link.Button ||
+                        earlier.OpeningCondition != link.OpeningCondition && earlier.OpeningCondition != CharacterComboOpeningCondition.Any &&
+                        link.OpeningCondition != CharacterComboOpeningCondition.Any) continue;
+                    report($"{prefix} 与第 {j + 1} 条按键条件重叠，优先采用首条可准入路线。");
+                    break;
                 }
             }
         }

@@ -8,7 +8,7 @@ namespace ThreeC.CharacterBehavior
     public sealed class CharacterProfile : ScriptableObject
     {
         [SerializeField, InspectorName("01 角色行为")] private CharacterBehaviorConfig behaviorConfig;
-        [SerializeField, InspectorName("02 连招表")] private CharacterComboTable comboTable;
+        [SerializeField, InspectorName("02 攻击状态表")] private CharacterComboTable comboTable;
         [SerializeField, InspectorName("03 移动与物理")] private CharacterMovementConfig movementConfig;
         [SerializeField, InspectorName("04 动画表现")] private CharacterAnimationConfig animationConfig;
         [SerializeField, InspectorName("05 移动预测")] private CharacterForecastConfig forecastConfig;
@@ -19,8 +19,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterMotorSettings Motor => movementConfig ? movementConfig.Motor : null;
         internal CharacterAnimationConfig AnimationConfig => animationConfig;
         internal CharacterMotionDatabase EffectivePlayback => animationConfig ? animationConfig.PlaybackLibrary : null;
-        internal CharacterLightAttackSettings LightAttack => behaviorConfig ? behaviorConfig.Attack : null;
-        internal CharacterComboRoutes ComboRoutes => comboTable ? comboTable.Routes : null;
+        internal CharacterAttackTable AttackTable => comboTable ? comboTable.Data : null;
         internal CharacterBehaviorDefinition[] AdditionalBehaviors => behaviorConfig ? behaviorConfig.Additional : null;
         internal CharacterGuardSettings Guard => behaviorConfig ? behaviorConfig.Guard : null;
         internal CharacterMoveGait DefaultGait => behaviorConfig ? behaviorConfig.DefaultGait : CharacterMoveGait.Run;
@@ -56,7 +55,7 @@ namespace ThreeC.CharacterBehavior
             AnimationModuleAssembly modules = null)
         {
             if (!animationConfig) throw new ArgumentException($"角色配置 {name} 缺少动画表现配置。");
-            return animationConfig.Bind(model, overrides, LightAttack, modules);
+            return animationConfig.Bind(model, overrides, AttackTable, modules);
         }
 
         // 从基础步态的跑步循环读取半周期步距，没有有效轨道时使用物理默认值。

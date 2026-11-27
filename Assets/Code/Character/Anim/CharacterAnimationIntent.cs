@@ -156,9 +156,9 @@ namespace ThreeC.CharacterBehavior
         internal float MaximumWeight => weight;
         public CharacterActionTiming Timing { get; private set; }
         public float EntryCoverage { get; private set; }
-        internal bool HasHandoff => Source != CharacterAnimationSource.Baseline && Timing.Handoff.Valid;
+        internal bool HasHandoff => Source != CharacterAnimationSource.Baseline && Timing.HasWeight;
         internal float Coverage => HasHandoff
-            ? Timing.Handoff.WeightAt(Timing.SamplePhase.GetValueOrDefault(), EntryCoverage) : 1f;
+            ? Timing.WeightAt(EntryCoverage) : 1f;
         public float Weight => weight * Coverage;
         public float? StartNormalizedTime { get; }
         public CharacterAnimationInterruptionPolicy InterruptionPolicy => Rule.InterruptionPolicy;

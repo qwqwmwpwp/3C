@@ -7,8 +7,8 @@ namespace ThreeC.CharacterBehavior
     // 在主线程装配时保存动作及映射内容，使资源原地编辑后仍能识别受影响的实例。
     internal sealed class AnimationBindingDefinitions
     {
-        internal readonly Dictionary<string, (string action, string handoff)> Actions =
-            new Dictionary<string, (string, string)>(StringComparer.Ordinal);
+        internal readonly Dictionary<string, string> Actions =
+            new Dictionary<string, string>(StringComparer.Ordinal);
         internal readonly Dictionary<CharacterBehaviorAnimationMapping, string> Mappings =
             new Dictionary<CharacterBehaviorAnimationMapping, string>();
 
@@ -17,8 +17,7 @@ namespace ThreeC.CharacterBehavior
         {
             foreach (var action in config.Actions)
             {
-                var handoff = CharacterBehaviorAnimationBindings.ResolveHandoff(action, config);
-                Actions.Add(action.Key, (JsonUtility.ToJson(action), handoff == null ? null : JsonUtility.ToJson(handoff)));
+                Actions.Add(action.Key, JsonUtility.ToJson(action));
             }
             foreach (var mapping in config.BehaviorAnimations) Mappings[mapping] = JsonUtility.ToJson(mapping);
         }
@@ -54,7 +53,7 @@ namespace ThreeC.CharacterBehavior
             var old = before.Modules;
             var next = after.Modules;
             ResetGait = old.Gait != next.Gait;
-            GroundChanged = refreshContents || ResetGait || old.StartTurn != next.StartTurn || old.Stop != next.Stop || old.Match != next.Match;
+            GroundChanged = refreshContents || before.Decisions != after.Decisions || ResetGait || old.StartTurn != next.StartTurn || old.Stop != next.Stop || old.Match != next.Match;
             IkChanged = GroundChanged || old.VisualRoot != next.VisualRoot || old.TransitionInertia != next.TransitionInertia ||
                 before.Orientation != after.Orientation || before.PoseInertia != after.PoseInertia ||
                 before.SamplesFeet != after.SamplesFeet || !SameChannels(before.IkChannels, after.IkChannels);

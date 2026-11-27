@@ -46,6 +46,7 @@ namespace ThreeC.CharacterBehavior
     internal sealed class CharacterLocomotionPoseSelector
     {
         private readonly CharacterAnimationResourceCatalog resources;
+        private readonly AnimationDecisionEvaluator releaseDecisions;
         private readonly AnimationClip runStartClip;
         private readonly float walkToRunBlend;
         private float? runStartSeconds;
@@ -53,16 +54,18 @@ namespace ThreeC.CharacterBehavior
         // 缓存配置中的起步素材长度，供切换走跑时补齐未配置的库状态时长。
         internal void BindClips() => runStartSeconds = runStartClip ? runStartClip.length : (float?)null;
 
+        // 绑定播放库并为当前角色建立收步时机的求值工作区。
         public CharacterLocomotionPoseSelector(CharacterAnimationResourceCatalog resources, CharacterAnimationConfiguration config)
         {
             this.resources = resources;
+            releaseDecisions = new AnimationDecisionEvaluator(config.Decisions, AnimationDecisionStage.ReleaseTiming);
             runStartClip = config.RunStartClip;
             walkToRunBlend = InputMath.NonNegative(config.WalkToRunBlendSeconds, 0.14f);
         }
 
         // 规划下身和全身接管的交接，判断双脚是否可以参与匹配。
         public CharacterPoseOwners SelectOwners(in CharacterAnimationComposition owners, in CharacterPlaybackObservation seen,
-            in CharacterAnimationPlaybackPlan previous, bool attackReturning, bool useMovingVariant)
+            in CharacterAnimationPlaybackPlan previous, bool useMovingVariant)
         {
             var lower = SelectLayer(owners.LowerBody, seen.Lower, previous.LowerBody, useMovingVariant);
             float overlayWeight = resources.LayerWeight(CharacterAnimationSource.FullBodyOverlay);
@@ -70,10 +73,10 @@ namespace ThreeC.CharacterBehavior
             var overlay = owners.Overlay;
             var timing = overlay.Timing;
             bool coversFeet = overlay.IsValid || overlayWeight > 0f || projectedLower > 0f;
-            bool matchRecovery = attackReturning && seen.Overlay.Ready && overlay.Playback == previous.Overlay.Demand.Playback &&
+            bool matchRecovery = timing.Sample.Valid && seen.Overlay.Ready && overlay.Playback == previous.Overlay.Demand.Playback &&
                 overlayWeight < 1f && owners.FullBody.IsLocomotion && !owners.LowerBody.IsValid && projectedLower <= 0f &&
                 resources.LayerWeight(CharacterAnimationSource.LowerBody) <= 0f &&
-                overlay.HasHandoff && timing.Handoff.MoveStart.HasValue && timing.SamplePhase >= timing.Handoff.ReleaseFrom;
+                timing.Sample.Fading;
             return new CharacterPoseOwners(owners, lower, coversFeet, matchRecovery);
         }
 
@@ -82,10 +85,14 @@ namespace ThreeC.CharacterBehavior
             CharacterMotionMatcher matcher, in CharacterPresentationInput input, in CharacterPlaybackObservation seen,
             in CharacterAnimationPlaybackPlan committedPlan)
         {
+#if UNITY_EDITOR
+            releaseDecisions.ClearTrace();
+#endif
             var fullBody = owners.Selection.FullBody;
+            matcher.Input = input;
             matcher.PrepareReturn(input.Forecast, input.Time, fullBody, owners.LowerCoversFeet, owners.MatchRecovery, input.Motion, input.Feet,
                 input.Behavior, intent.Phase);
-            var release = DecideRelease(intent, fullBody, owners.LowerCoversFeet, seen, committedPlan);
+            var release = DecideRelease(intent, fullBody, owners.LowerCoversFeet, seen, committedPlan, input.Motion.ActualSpeed);
             var match = matcher.Evaluate(intent, fullBody, owners.LowerCoversFeet, owners.MatchRecovery, seen, committedPlan,
                 input.Motion, input.Feet, input.DeltaTime, input.Behavior);
             if (intent.Phase == CharacterLocomotionPhase.BrakeLeadIn)
@@ -98,9 +105,10 @@ namespace ThreeC.CharacterBehavior
             return new CharacterPoseCandidate(owners, release, match);
         }
 
+        // 按实际部位归属、播放游标和当前阶段确定收步结果。
         private CharacterReleaseDecision DecideRelease(CharacterAnimationIntentConverter intent,
             CharacterAnimationDemand fullBody, bool lowerCoversFeet, in CharacterPlaybackObservation seen,
-            in CharacterAnimationPlaybackPlan last)
+            in CharacterAnimationPlaybackPlan last, float speed)
         {
             bool pending = intent.Phase == CharacterLocomotionPhase.BrakeLeadIn;
             if (!pending && intent.Phase != CharacterLocomotionPhase.Stopping)
@@ -114,11 +122,7 @@ namespace ThreeC.CharacterBehavior
                 return CharacterReleaseDecision.FeetOverridden;
             if (!seen.Full.Ready) return CharacterReleaseDecision.WaitForEvaluation;
             if (pending)
-            {
-                if (intent.MainBrakeDue) return CharacterReleaseDecision.EnterOnBraking;
-                return last.FullBody.Demand.IsLocomotion && seen.EarlyStance
-                    ? CharacterReleaseDecision.EnterOnContact : CharacterReleaseDecision.ContinueStride;
-            }
+                return DecideReleaseTiming(intent.MainBrakeDue, last.FullBody.Demand.IsLocomotion, seen.EarlyStance, speed);
             if (last.FullBody.Demand.InstanceId == intent.Current.InstanceId &&
                 last.FullBody.Demand.LocomotionVariant == CharacterLocomotionVariant.Stop)
             {
@@ -130,6 +134,25 @@ namespace ThreeC.CharacterBehavior
             }
             return CharacterReleaseDecision.FollowStop;
         }
+
+        // 只在有效落脚时允许策略提前收步，物理制动到期后必须推进收步阶段。
+        private CharacterReleaseDecision DecideReleaseTiming(bool mainBrakeDue, bool lastLocomotion, bool earlyStance, float speed)
+        {
+            releaseDecisions.Begin(AnimationDecisionStage.ReleaseTiming);
+            releaseDecisions.Set(AnimationDecisionInput.MainBrakeDue, mainBrakeDue);
+            releaseDecisions.Set(AnimationDecisionInput.LastLocomotion, lastLocomotion);
+            releaseDecisions.Set(AnimationDecisionInput.EarlyStance, earlyStance);
+            releaseDecisions.Set(AnimationDecisionInput.Speed, speed);
+            bool startStop = releaseDecisions.Flag(AnimationDecisionOutput.StartStop);
+            if (mainBrakeDue) return CharacterReleaseDecision.EnterOnBraking;
+            return startStop && lastLocomotion && earlyStance
+                ? CharacterReleaseDecision.EnterOnContact : CharacterReleaseDecision.ContinueStride;
+        }
+
+#if UNITY_EDITOR
+        // 将当前试选的收步时机表达式记录交给动画诊断。
+        internal void AppendDecisionTrace(System.Text.StringBuilder trace) => releaseDecisions.AppendTrace(trace);
+#endif
 
         // 生成各播放源的最终指令，并计算步频和收步调速参数。
         public CharacterAnimationPlaybackPlan Select(in CharacterPoseCandidate candidate, bool useMovingVariant,
@@ -214,7 +237,7 @@ namespace ThreeC.CharacterBehavior
             bool matchedEntry = match.HasEntry && stopping == match.Binding.IsStop;
             if (matchedEntry)
                 binding = match.Binding;
-            else if (stopping && previous.Demand.LocomotionVariant == CharacterLocomotionVariant.Stop &&
+            else if (stopping && !match.RejectPreviousStop && previous.Demand.LocomotionVariant == CharacterLocomotionVariant.Stop &&
                 previous.Demand.InstanceId == demand.InstanceId)
                 binding = previous.Binding;
             else if (stopping)
@@ -222,7 +245,7 @@ namespace ThreeC.CharacterBehavior
             else
                 binding = resources.ResolveBinding(demand, useMovingVariant);
 
-            float? requestedStart = demand.StartNormalizedTime ?? demand.Timing.StartPhase;
+            float? requestedStart = demand.StartNormalizedTime ?? demand.Timing.StartClipPhase;
             float start = requestedStart ?? binding.Start;
             bool resumeLoop = !matchedEntry && previous.Demand.Playback != null && demand.IsLocomotion &&
                 binding.Variant == CharacterLocomotionVariant.None && !requestedStart.HasValue;
@@ -265,18 +288,18 @@ namespace ThreeC.CharacterBehavior
             }
             demand = PrepareHandoff(demand, previous, binding.StateHash, start);
             var timing = demand.Timing;
-            bool routeBlend = demand.HasHandoff && timing.Handoff.UsesRouteBlend;
-            if (routeBlend)
-                blend = CharacterBlendDuration.Seconds(timing.Handoff.Duration * Mathf.Max(0f, timing.Handoff.FullFrom - start));
+            bool clockBlend = timing.Sample.Valid;
+            if (clockBlend)
+                blend = CharacterBlendDuration.Seconds(timing.Sample.RemainingEntry);
             var command = ChooseCommand(demand, binding, previous, blend.Value > 0f, out var reason);
             if (sync) reason = CharacterAnimationPlaybackReason.SynchronizeGait;
             if (command == CharacterAnimationPlaybackCommand.CrossFade && demand.HasHandoff)
             {
                 var handoff = timing.Handoff;
-                if (!routeBlend)
+                if (!clockBlend)
                 {
                     float sourceSeconds = layer.SourceLength > 0f ? layer.SourceLength : previous.Demand.Timing.Handoff.Duration;
-                    float untilFull = handoff.Duration * (handoff.FullFrom - (timing.SamplePhase ?? start));
+                    float untilFull = handoff.Duration * (handoff.FullFrom - (timing.WeightPhase ?? start));
                     blend = CharacterBlendDuration.Seconds(Mathf.Min(normalizedBlend * sourceSeconds, Mathf.Max(0f, untilFull)));
                 }
                 float? clipLength = resources.StateSeconds(binding.StateHash);
@@ -327,7 +350,7 @@ namespace ThreeC.CharacterBehavior
         {
             bool continuing = demand.Playback != null && demand.Playback == previous.Demand.Playback;
             var settings = demand.Rule.Handoff;
-            if (demand.Playback != null && !demand.Timing.SamplePhase.HasValue && settings != null)
+            if (demand.Playback != null && !demand.Timing.HasWeight && !demand.Timing.WeightPhase.HasValue && settings != null)
             {
                 var handoff = continuing ? previous.Demand.Timing.Handoff : default;
                 if (!handoff.Valid) handoff = settings.Resolve(resources.StateSeconds(stateHash) ?? settings.Duration);
@@ -335,6 +358,8 @@ namespace ThreeC.CharacterBehavior
                 demand = demand.WithTiming(new CharacterActionTiming(null, phase, handoff, settings.StartAtZero, false, followClip: true));
             }
             if (!demand.HasHandoff) return demand;
+            if (demand.Timing.Sample.Valid && demand.Playback?.EntryCoverage is float captured)
+                return demand.WithEntryCoverage(captured);
             if (continuing) return demand.WithEntryCoverage(previous.Demand.EntryCoverage);
             float applied = previous.HasState || previous.LayerBlendSeconds > 0f ? resources.LayerWeight(demand.Source) : 0f;
             float coverage = demand.Timing.StartAtZero || demand.MaximumWeight <= 0f ? 0f : applied / demand.MaximumWeight;

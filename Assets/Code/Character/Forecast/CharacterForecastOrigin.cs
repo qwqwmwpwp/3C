@@ -22,7 +22,7 @@ namespace ThreeC.CharacterBehavior
             Time = time;
             Number = stepNumber;
             StartCursor = startCursor;
-            Pose = new CharacterForecastSample(actual.Position, actual.Velocity, actual.Rotation, solvedBehavior, actual.Contacts, gait);
+            Pose = new CharacterForecastSample(actual.Position, actual.Velocity, actual.Rotation, solvedBehavior, actual.Contacts, gait, time);
             Motor = motor;
             Ground = actual.Ground;
             Steep = actual.Steep;
@@ -34,7 +34,6 @@ namespace ThreeC.CharacterBehavior
     internal readonly struct CharacterForecastObservation
     {
         internal readonly int Generation;
-        internal readonly long AlignmentRevision;
         internal readonly double Time;
         internal readonly float DirectionTolerance;
         internal readonly CharacterForecastOrigin Origin;
@@ -44,7 +43,7 @@ namespace ThreeC.CharacterBehavior
         internal readonly CharacterForecastTuning Tuning;
 
         // 捕获持续输入、实际求解基线、采样窗口和当前有效参数，不复制待执行命令或行为流程。
-        internal CharacterForecastObservation(int generation, long alignmentRevision, double time,
+        internal CharacterForecastObservation(int generation, double time,
             in CharacterForecastOrigin origin, in CharacterBehaviorFrameResult behavior, in CharacterInputSnapshot held,
             float fixedDelta, in CharacterRuntimeConfiguration config, CharacterMovementSettings movement, in CharacterDriveParameters drive)
         {
@@ -53,7 +52,6 @@ namespace ThreeC.CharacterBehavior
             if (!settings.Enabled || !CharacterForecastValidity.TryReadWindow(fixedDelta, settings, config.Overrides, out var window))
                 return;
             Generation = generation;
-            AlignmentRevision = alignmentRevision;
             Time = time;
             Origin = origin;
             Behavior = behavior;
@@ -84,10 +82,10 @@ namespace ThreeC.CharacterBehavior
         // 编辑器预演从给定角色配置直接取得一份完整快照。
         internal CharacterForecastFrame(int generation, double time, in CharacterForecastOrigin origin,
             in CharacterBehaviorFrameResult behavior, in CharacterInputSnapshot held, CharacterRigidbodyBlackboard commands,
-            float fixedDelta, in CharacterRuntimeConfiguration config, in CharacterDriveParameters drive, long alignmentRevision = 0)
+            float fixedDelta, in CharacterRuntimeConfiguration config, in CharacterDriveParameters drive)
         {
             var movement = config.ReadMovement();
-            var observation = new CharacterForecastObservation(generation, alignmentRevision, time, origin, behavior, held,
+            var observation = new CharacterForecastObservation(generation, time, origin, behavior, held,
                 fixedDelta, config, movement, drive);
             this = new CharacterForecastFrame(observation, commands, movement, drive);
         }

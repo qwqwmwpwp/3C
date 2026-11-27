@@ -80,7 +80,7 @@ namespace ThreeC.CharacterBehavior
         private byte sampled, waitForLanding;
 
         // 在平台局部坐标中建立足底锁点，跨台阶或水平锚点超出腿长时受控释放。
-        public static void Place(ref CharacterIkState state, in CharacterFootPlantFrame frame, CharacterIkLimb limb,
+        public static void Place(ref CharacterGroundIkState state, in CharacterFootPlantFrame frame, CharacterIkLimb limb,
             in CharacterGroundFootHit ground, Vector3 ankle, float gate, float positionWeight, float dt, in CharacterFootReach reach, ref Pose target)
         {
             ref var history = ref state.FootPlant;

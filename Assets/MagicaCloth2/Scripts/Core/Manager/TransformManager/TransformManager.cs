@@ -2,16 +2,14 @@
 // Copyright (c) 2023 MagicaSoft.
 // https://magicasoft.jp
 using System.Text;
-using Unity.Burst;
-using Unity.Collections;
-using Unity.Jobs;
 using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.Jobs;
 
 namespace MagicaCloth2
 {
-    public class TransformManager : IManager, IValid
+    // 管理布料使用的变换槽位和对应的原生数据。
+    public partial class TransformManager : IManager, IValid
     {
         // フラグ
         internal const byte Flag_Read = 0x01;
@@ -69,7 +67,7 @@ namespace MagicaCloth2
 
         /// <summary>
         /// 読み込み用トランスフォームアクセス配列
-        /// この配列は上記の配列グループとインデックが同期している
+        /// 已写入的槽与数值数组索引一致，未绑定的尾部槽可暂不加入作业数组。
         /// </summary>
         internal TransformAccessArray transformAccessArray;
 
@@ -158,7 +156,7 @@ namespace MagicaCloth2
 
         //=========================================================================================
         /// <summary>
-        /// VirtualMeshのTransformDataを追加する
+        /// 按虚拟网格中的顺序注册变换和初始数据。
         /// </summary>
         /// <param name="tdata"></param>
         /// <returns></returns>
@@ -186,32 +184,14 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.AddRange(cnt, (short)teamId);
 
-            // トランスフォーム
-            int nowcnt = transformAccessArray.length;
-
-            // データチャンクの開始まで埋める
-            int start = c.startIndex;
-            while (nowcnt < start)
-            {
-                transformAccessArray.Add(null);
-                nowcnt++;
-            }
-
             for (int i = 0; i < cnt; i++)
-            {
-                Transform t = cmesh.GetTransformFromIndex(i);
-                int index = c.startIndex + i;
-                if (index < nowcnt)
-                    transformAccessArray[index] = t;
-                else
-                    transformAccessArray.Add(t);
-            }
+                SetAccessSlot(c.startIndex + i, cmesh.GetTransformFromIndex(i));
 
             return c;
         }
 
         /// <summary>
-        /// Transformの領域のみ追加する
+        /// 为碰撞体预留逻辑槽，真实变换在绑定时写入。
         /// </summary>
         /// <param name="count"></param>
         /// <returns></returns>
@@ -234,32 +214,15 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.AddRange(count, (short)teamId);
 
-            // トランスフォームはすべてnullで登録する
-            int nowcnt = transformAccessArray.length;
-
-            // データチャンクの開始まで埋める
-            int start = c.startIndex;
-            while (nowcnt < start)
-            {
-                transformAccessArray.Add(null);
-                nowcnt++;
-            }
-
-            for (int i = 0; i < count; i++)
-            {
-                Transform t = null;
-                int index = c.startIndex + i;
-                if (index < nowcnt)
-                    transformAccessArray[index] = t;
-                else
-                    transformAccessArray.Add(t);
-            }
+            // 复用区间时清理已有引用，新分配的尾部只需保留逻辑索引。
+            for (int i = c.startIndex; i < c.startIndex + count && i < transformAccessArray.length; i++)
+                SetAccessSlot(i, null);
 
             return c;
         }
 
         /// <summary>
-        /// Transform１つを追加する
+        /// 注册单个变换和对应的初始姿态。
         /// </summary>
         /// <param name="t"></param>
         /// <param name="flag"></param>
@@ -283,19 +246,13 @@ namespace MagicaCloth2
             // チームID
             teamIdArray.Add((short)teamId);
 
-            // トランスフォーム
-            int nowcnt = transformAccessArray.length;
-            int index = c.startIndex;
-            if (index < nowcnt)
-                transformAccessArray[index] = t;
-            else
-                transformAccessArray.Add(t);
+            SetAccessSlot(c.startIndex, t);
 
             return c;
         }
 
         /// <summary>
-        /// Transform情報を書き換える
+        /// 绑定或清除指定槽的变换，并同步姿态数据和标志。
         /// </summary>
         /// <param name="t"></param>
         /// <param name="flag"></param>
@@ -318,19 +275,19 @@ namespace MagicaCloth2
                 localPositionArray[index] = t.localPosition;
                 localRotationArray[index] = t.localRotation;
                 teamIdArray[index] = (short)teamId;
-                transformAccessArray[index] = t;
+                SetAccessSlot(index, t);
             }
             else
             {
                 // データクリア（無効化）
                 flagArray[index] = default;
-                transformAccessArray[index] = null;
+                SetAccessSlot(index, null);
                 teamIdArray[index] = 0;
             }
         }
 
         /// <summary>
-        /// Transform情報をコピーする
+        /// 把源槽的姿态、变换引用和团队信息复制到目标槽。
         /// </summary>
         /// <param name="fromIndex"></param>
         /// <param name="toIndex"></param>
@@ -348,12 +305,12 @@ namespace MagicaCloth2
             scaleArray[toIndex] = scaleArray[fromIndex];
             localPositionArray[toIndex] = localPositionArray[fromIndex];
             localRotationArray[toIndex] = localRotationArray[fromIndex];
-            transformAccessArray[toIndex] = transformAccessArray[fromIndex];
+            SetAccessSlot(toIndex, GetAccessSlot(fromIndex));
             teamIdArray[toIndex] = teamIdArray[fromIndex];
         }
 
         /// <summary>
-        /// トランスフォームを削除する
+        /// 释放分块数据并清除已写入作业数组的变换引用。
         /// </summary>
         /// <param name="c"></param>
         internal void RemoveTransform(DataChunk c)
@@ -378,73 +335,34 @@ namespace MagicaCloth2
             for (int i = 0; i < c.dataLength; i++)
             {
                 int index = c.startIndex + i;
-                transformAccessArray[index] = null;
+                SetAccessSlot(index, null);
             }
         }
 
-        /// <summary>
-        /// トランスフォームの有効状態を切り替える
-        /// </summary>
-        /// <param name="c"></param>
-        /// <param name="sw">true=有効, false=無効</param>
-        internal void EnableTransform(DataChunk c, bool sw)
+        // 已预留但尚未绑定的尾部槽视为空引用。
+        Transform GetAccessSlot(int index)
         {
-            if (isValid == false)
-                return;
-            if (c.IsValid == false)
-                return;
-
-            var job = new EnableTransformJob()
-            {
-                chunk = c,
-                sw = sw,
-                flagList = flagArray.GetNativeArray(),
-            };
-            job.Run();
+            return index < transformAccessArray.length ? transformAccessArray[index] : null;
         }
 
-        [BurstCompile]
-        struct EnableTransformJob : IJob
+        // 只有实际绑定的变换才延长数组，并保留中间空槽的逻辑索引。
+        void SetAccessSlot(int index, Transform target)
         {
-            public DataChunk chunk;
-            public bool sw;
-            public NativeArray<ExBitFlag8> flagList;
-
-            public void Execute()
+            if (index < transformAccessArray.length)
             {
-                for (int i = 0; i < chunk.dataLength; i++)
-                {
-                    int index = chunk.startIndex + i;
-
-                    var flag = flagList[index];
-                    if (flag.Value == 0)
-                        continue;
-
-                    flag.SetFlag(Flag_Enable, sw);
-                    flagList[index] = flag;
-                }
+                transformAccessArray[index] = target;
+                return;
             }
+
+            if (target == null)
+                return;
+
+            while (transformAccessArray.length < index)
+                transformAccessArray.Add(null);
+            transformAccessArray.Add(target);
         }
 
-        /// <summary>
-        /// トランスフォームの有効状態を切り替える
-        /// </summary>
-        /// <param name="index"></param>
-        /// <param name="sw">true=有効, false=無効</param>
-        internal void EnableTransform(int index, bool sw)
-        {
-            if (isValid == false)
-                return;
-            if (index < 0)
-                return;
-
-            var flag = flagArray[index];
-            if (flag.Value == 0)
-                return;
-            flag.SetFlag(Flag_Enable, sw);
-            flagArray[index] = flag;
-        }
-
+        // 扩展逻辑槽并在分块迁移时同步已有变换。
         internal DataChunk Expand(DataChunk c, int newLength)
         {
             if (isValid == false)
@@ -467,262 +385,14 @@ namespace MagicaCloth2
             // トランスフォームアクセス配列の拡張
             if (c.startIndex != nc.startIndex)
             {
-                while (transformAccessArray.length < (nc.startIndex + nc.dataLength))
-                    transformAccessArray.Add(null);
-
                 for (int i = 0; i < c.dataLength; i++)
                 {
-                    Transform t = transformAccessArray[c.startIndex + i];
-                    transformAccessArray[nc.startIndex + i] = t;
-                    transformAccessArray[c.startIndex + i] = null;
+                    SetAccessSlot(nc.startIndex + i, GetAccessSlot(c.startIndex + i));
+                    SetAccessSlot(c.startIndex + i, null);
                 }
             }
 
             return nc;
-        }
-
-        //=========================================================================================
-        /// <summary>
-        /// Transformを初期姿勢で復元させるジョブを発行する
-        /// </summary>
-        /// <param name="count"></param>
-        /// <param name="jobHandle"></param>
-        /// <returns></returns>
-        public JobHandle RestoreTransform(JobHandle jobHandle)
-        {
-            if (Count > 0)
-            {
-                //Debug.Log("RestoreTransform");
-                var job = new RestoreTransformJob()
-                {
-                    flagList = flagArray.GetNativeArray(),
-                    localPositionArray = initLocalPositionArray.GetNativeArray(),
-                    localRotationArray = initLocalRotationArray.GetNativeArray(),
-                    teamIdArray = teamIdArray.GetNativeArray(),
-
-                    teamDataArray = MagicaManager.Team.teamDataArray.GetNativeArray(),
-                };
-                jobHandle = job.Schedule(transformAccessArray, jobHandle);
-            }
-
-            return jobHandle;
-        }
-
-        [BurstCompile]
-        struct RestoreTransformJob : IJobParallelForTransform
-        {
-            [Unity.Collections.ReadOnly]
-            public NativeArray<ExBitFlag8> flagList;
-
-            [Unity.Collections.ReadOnly]
-            public NativeArray<float3> localPositionArray;
-            [Unity.Collections.ReadOnly]
-            public NativeArray<quaternion> localRotationArray;
-            [Unity.Collections.ReadOnly]
-            public NativeArray<short> teamIdArray;
-
-            // team
-            [Unity.Collections.ReadOnly]
-            public NativeArray<TeamManager.TeamData> teamDataArray;
-
-
-            public void Execute(int index, TransformAccess transform)
-            {
-                if (transform.isValid == false)
-                    return;
-                var flag = flagList[index];
-                if (flag.IsSet(Flag_Enable) == false)
-                    return;
-                if (flag.IsSet(Flag_Restore) == false)
-                    return;
-
-                // Keepカリング時はスキップする
-                int teamId = teamIdArray[index];
-                var tdata = teamDataArray[teamId];
-                if (tdata.IsCullingInvisible && tdata.IsCullingKeep)
-                    return;
-
-                transform.localPosition = localPositionArray[index];
-                transform.localRotation = localRotationArray[index];
-            }
-        }
-
-        //=========================================================================================
-        /// <summary>
-        /// トランスフォームを読み込むジョブを発行する
-        /// </summary>
-        /// <param name="jobHandle"></param>
-        /// <returns></returns>
-        public JobHandle ReadTransform(JobHandle jobHandle)
-        {
-            if (Count > 0)
-            {
-                // todo:未来予測などがあると色々複雑化するところ
-
-                var job = new ReadTransformJob()
-                {
-                    flagList = flagArray.GetNativeArray(),
-                    positionArray = positionArray.GetNativeArray(),
-                    rotationArray = rotationArray.GetNativeArray(),
-                    scaleList = scaleArray.GetNativeArray(),
-                    localPositionArray = localPositionArray.GetNativeArray(),
-                    localRotationArray = localRotationArray.GetNativeArray(),
-                    inverseRotationArray = inverseRotationArray.GetNativeArray(),
-
-                    teamIdArray = teamIdArray.GetNativeArray(),
-
-                    teamDataArray = MagicaManager.Team.teamDataArray.GetNativeArray(),
-                };
-                jobHandle = job.ScheduleReadOnly(transformAccessArray, 8, jobHandle);
-            }
-
-            return jobHandle;
-        }
-
-        [BurstCompile]
-        struct ReadTransformJob : IJobParallelForTransform
-        {
-            [Unity.Collections.ReadOnly]
-            public NativeArray<ExBitFlag8> flagList;
-
-            [Unity.Collections.WriteOnly]
-            public NativeArray<float3> positionArray;
-            [Unity.Collections.WriteOnly]
-            public NativeArray<quaternion> rotationArray;
-            [Unity.Collections.WriteOnly]
-            public NativeArray<float3> scaleList;
-            [Unity.Collections.WriteOnly]
-            public NativeArray<float3> localPositionArray;
-            [Unity.Collections.WriteOnly]
-            public NativeArray<quaternion> localRotationArray;
-            [Unity.Collections.WriteOnly]
-            public NativeArray<quaternion> inverseRotationArray;
-
-            [Unity.Collections.ReadOnly]
-            public NativeArray<short> teamIdArray;
-
-            // team
-            [Unity.Collections.ReadOnly]
-            public NativeArray<TeamManager.TeamData> teamDataArray;
-
-            public void Execute(int index, TransformAccess transform)
-            {
-                if (transform.isValid == false)
-                    return;
-                var flag = flagList[index];
-                if (flag.IsSet(Flag_Enable) == false)
-                    return;
-                if (flag.IsSet(Flag_Read) == false)
-                    return;
-
-                // カリング時は書き込まない
-                int teamId = teamIdArray[index];
-                var tdata = teamDataArray[teamId];
-                if (tdata.IsCullingInvisible)
-                    return;
-
-                var pos = transform.position;
-                var rot = transform.rotation;
-                float4x4 LtoW = transform.localToWorldMatrix;
-
-                positionArray[index] = pos;
-                rotationArray[index] = rot;
-                localPositionArray[index] = transform.localPosition;
-                localRotationArray[index] = transform.localRotation;
-
-                // マトリックスから正確なスケール値を算出する（これはTransform.lossyScaleと等価）
-                var irot = math.inverse(rot);
-                var m2 = math.mul(new float4x4(irot, float3.zero), LtoW);
-                var scl = new float3(m2.c0.x, m2.c1.y, m2.c2.z);
-                scaleList[index] = scl;
-
-                // ワールド->ローカル変換用の逆クォータニオン
-                inverseRotationArray[index] = math.inverse(rot);
-            }
-        }
-
-        //=========================================================================================
-        /// <summary>
-        /// Transformを書き込むジョブを発行する
-        /// </summary>
-        /// <param name="count"></param>
-        /// <param name="jobHandle"></param>
-        /// <returns></returns>
-        public JobHandle WriteTransform(JobHandle jobHandle)
-        {
-            var job = new WriteTransformJob()
-            {
-                flagList = flagArray.GetNativeArray(),
-                worldPositions = positionArray.GetNativeArray(),
-                worldRotations = rotationArray.GetNativeArray(),
-                localPositions = localPositionArray.GetNativeArray(),
-                localRotations = localRotationArray.GetNativeArray(),
-
-                teamIdArray = teamIdArray.GetNativeArray(),
-
-                teamDataArray = MagicaManager.Team.teamDataArray.GetNativeArray(),
-            };
-            jobHandle = job.Schedule(transformAccessArray, jobHandle);
-
-            return jobHandle;
-        }
-
-        [BurstCompile]
-        struct WriteTransformJob : IJobParallelForTransform
-        {
-            [Unity.Collections.ReadOnly]
-            public NativeArray<ExBitFlag8> flagList;
-
-            [Unity.Collections.ReadOnly]
-            public NativeArray<float3> worldPositions;
-            [Unity.Collections.ReadOnly]
-            public NativeArray<quaternion> worldRotations;
-            [Unity.Collections.ReadOnly]
-            public NativeArray<float3> localPositions;
-            [Unity.Collections.ReadOnly]
-            public NativeArray<quaternion> localRotations;
-
-            [Unity.Collections.ReadOnly]
-            public NativeArray<short> teamIdArray;
-
-            // team
-            [Unity.Collections.ReadOnly]
-            public NativeArray<TeamManager.TeamData> teamDataArray;
-
-            public void Execute(int index, TransformAccess transform)
-            {
-                if (transform.isValid == false)
-                    return;
-                var flag = flagList[index];
-                if (flag.IsSet(Flag_Enable) == false)
-                    return;
-
-                // カリング時は書き込まない
-                int teamId = teamIdArray[index];
-                var tdata = teamDataArray[teamId];
-                if (tdata.IsCullingInvisible)
-                    return;
-
-                // 書き込み停止中ならスキップ
-                if (tdata.flag.IsSet(TeamManager.Flag_SkipWriting))
-                    return;
-
-                if (flag.IsSet(Flag_WorldRotWrite))
-                {
-                    // ワールド回転
-                    transform.rotation = worldRotations[index];
-
-                    // BoneSpringのみワールド座標を書き込む
-                    if (tdata.IsSpring)
-                        transform.position = worldPositions[index];
-                }
-                else if (flag.IsSet(Flag_LocalPosRotWrite))
-                {
-                    // ローカル座標・回転を書き込む
-                    transform.localPosition = localPositions[index];
-                    transform.localRotation = localRotations[index];
-                }
-            }
         }
 
         //=========================================================================================

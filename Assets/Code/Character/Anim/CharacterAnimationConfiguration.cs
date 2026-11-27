@@ -5,6 +5,7 @@ namespace ThreeC.CharacterBehavior
     /// <summary>动画入口的序列化配置快照，在创建流水线时交给各阶段。</summary>
     internal sealed class CharacterAnimationConfiguration
     {
+        internal CompiledAnimationDecisions Decisions { get; }
         public AnimationModuleAssembly Modules { get; }
         public CharacterMatchMode MatchMode;
         internal GroundMatchTuning MatchCosts = new GroundMatchTuning();
@@ -15,10 +16,10 @@ namespace ThreeC.CharacterBehavior
         public bool HasGait => Modules.Gait;
         public bool HasStartTurn => Modules.StartTurn;
         public bool HasStop => Modules.Stop;
-        public bool SamplesFeet => MatchDatabase || HasStop;
+        internal GroundSearchLibraries SearchLibraries;
+        public bool SamplesFeet => Modules.Match || HasStop;
         public CharacterMotionDatabase PlaybackLibrary { get; }
-        public CharacterMotionDatabase MatchDatabase => Modules.Match ? PlaybackLibrary : null;
-        public CharacterLightAttackSettings AttackSettings;
+        public CharacterAttackTable AttackTable;
         // 保留普通转向使用的角度与续播窗口，安装匹配模块时可覆盖。
         public float MatchMargin = 0.12f;
         public float MatchReverseHold = 0.08f;
@@ -74,6 +75,7 @@ namespace ThreeC.CharacterBehavior
         // 固定本次绑定所使用的模块组合，空组合也拥有独立装配。
         internal CharacterAnimationConfiguration(AnimationModuleAssembly modules, CharacterMotionDatabase library)
         {
+            Decisions = modules.BindDecisions();
             Modules = modules;
             PlaybackLibrary = library;
         }

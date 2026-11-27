@@ -1,0 +1,126 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26ed6494d5154152ad6e2151831258ef, type: 3}
+  m_Name: 持盾急转动画组
+  m_EditorClassIdentifier:
+  Schema: {fileID: 11400000, guid: 04796e8c8bb74eeabc8f655623e95f86, type: 2}
+  Layers:
+  - Mask: {fileID: 31900000, guid: 0da4119d6955e5f488cf931257435553, type: 2}
+    Additive: 0
+    Weight: 0
+    DefaultState: Lower Body.guard_pivot_idle
+  - Mask: {fileID: 31900000, guid: 8f4bf6e2231166d48a49f4f53dec9997, type: 2}
+    Additive: 0
+    Weight: 0
+    DefaultState: Upper Body.guard_pivot_idle
+  Bindings:
+  - Path: Lower Body.guard_pivot_idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 0
+    Speed: 1
+  - Path: Upper Body.guard_pivot_idle
+    Clip: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
+    Layer: 1
+    Speed: 1
+  Groups:
+  - Name: 左转180度·左脚承重
+    GroupId: dd88bc7b6cb0440587cabe0727493445
+    First: {fileID: -3385256625208390612, guid: ca6f79d298735da4998557faf3007f9d, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - States:
+      - Lower Body.run_pivot180_left_l
+      Use: 3
+      Gait: 2
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 3.5
+      MaximumSpeed: 5.5
+      FirstEntrySeconds: 0
+      LastEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 2
+      ReferenceSpeed: 4.72
+  - Name: 左转180度·右脚承重
+    GroupId: d1bb887e2bd14570a352a00d36c3bd3e
+    First: {fileID: -3385256625208390612, guid: d3a2884f9fe35c1ba2d2ab748f0acbf1, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - States:
+      - Lower Body.run_pivot180_left_r
+      Use: 3
+      Gait: 2
+      TurnDegrees: 180
+      Side: 1
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 3.5
+      MaximumSpeed: 5.5
+      FirstEntrySeconds: 0
+      LastEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 2
+      ReferenceSpeed: 4.72
+  - Name: 右转180度·左脚承重
+    GroupId: df6bf8de7633428390c49ce70d9bae7e
+    First: {fileID: 855038537665776665, guid: 97337ce441ed53808eb697cc6bdc7887, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - States:
+      - Lower Body.run_pivot180_right_l
+      Use: 3
+      Gait: 2
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 3.5
+      MaximumSpeed: 5.5
+      FirstEntrySeconds: 0
+      LastEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 2
+      ReferenceSpeed: 4.72
+  - Name: 右转180度·右脚承重
+    GroupId: b8ca3ad7c616403d8f488386d60b987a
+    First: {fileID: 855038537665776665, guid: 2887a12e8fc756afbaf32bbb344e39d4, type: 3}
+    Second: {fileID: 0}
+    Weights: {x: 0, y: 0, z: 0}
+    FirstRate: 1
+    SecondRate: 1
+    Variants:
+    - States:
+      - Lower Body.run_pivot180_right_r
+      Use: 3
+      Gait: 2
+      TurnDegrees: 180
+      Side: 2
+      Loop: 0
+      Blend: 0.08
+      MinimumSpeed: 3.5
+      MaximumSpeed: 5.5
+      FirstEntrySeconds: 0
+      LastEntrySeconds: 0
+      ExitSeconds: 0
+      PathSource: 2
+      ReferenceSpeed: 4.72

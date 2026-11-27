@@ -1,0 +1,92 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 422156cae20141a180b72df8cdc94980, type: 3}
+  m_Name: 连招攻击
+  m_EditorClassIdentifier:
+  actions:
+  - Key: full.light_attack
+    Region: 0
+    Priority: 80
+    StateName: Lower Body.Actions.light_attack
+    StartNormalizedTime: 0
+    StateTransitionDuration: 0.14
+    StateExitTransitionDuration: 0.18
+    LayerBlendSeconds: 0
+    InterruptionPolicy: 1
+    InertiaSuppression:
+      Chest: 1
+      LeftArm: 1
+      RightArm: 1
+  - Key: full.light_attack_2
+    Region: 0
+    Priority: 80
+    StateName: Lower Body.Actions.light_attack_2
+    StartNormalizedTime: 0
+    StateTransitionDuration: 0.10
+    StateExitTransitionDuration: 0.14
+    LayerBlendSeconds: 0
+    InterruptionPolicy: 1
+    InertiaSuppression:
+      Chest: 1
+      LeftArm: 1
+      RightArm: 1
+  - Key: full.heavy_attack
+    Region: 0
+    Priority: 80
+    StateName: Lower Body.Actions.heavy_attack
+    StartNormalizedTime: 0
+    StateTransitionDuration: 0.10
+    StateExitTransitionDuration: 0.12
+    LayerBlendSeconds: 0
+    InterruptionPolicy: 1
+    InertiaSuppression:
+      Chest: 1
+      LeftArm: 1
+      RightArm: 1
+  - Key: full.skill_2
+    Region: 0
+    Priority: 80
+    StateName: Lower Body.Actions.skill_2
+    StartNormalizedTime: 0
+    StateTransitionDuration: 0.10
+    StateExitTransitionDuration: 0.12
+    LayerBlendSeconds: 0
+    InterruptionPolicy: 1
+    InertiaSuppression:
+      Chest: 1
+      LeftArm: 1
+      RightArm: 1
+  mappings:
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 1
+    EntryAction: full.light_attack
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 2
+    EntryAction: full.light_attack_2
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 3
+    EntryAction: full.heavy_attack
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 4
+    EntryAction: full.skill_2
+    HoldAction:
+    Weight: 1

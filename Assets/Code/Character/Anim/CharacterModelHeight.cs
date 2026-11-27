@@ -1,10 +1,9 @@
 using Unity.Collections;
 using UnityEngine;
-using UnityEngine.Animations;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>用上一帧承重腿的可达范围，在本次动画求值之前仅平移模型子节点。</summary>
+    /// <summary>根据上一次求值的承重腿可达范围，在本次动画求值前平移模型子节点。</summary>
     internal sealed class CharacterModelHeight
     {
         private const float Speed = 0.4f; // 世界米/秒，下沉与回零共用。
@@ -29,12 +28,13 @@ namespace ThreeC.CharacterBehavior
             return new CharacterModelHeight(animator.transform, limit);
         }
 
+        // 根据上次求值发布的各腿需求推进本段模型高度。
         public void Advance(NativeArray<CharacterIkState> states, bool grounded, float deltaTime)
         {
             float target = 0f;
             if (grounded)
                 for (int i = 0; i < states.Length; i++)
-                    target = Mathf.Max(target, states[i].RequiredModelDrop);
+                    target = Mathf.Max(target, states[i].Ground.RequiredModelDrop);
             SetDrop(Mathf.MoveTowards(Drop, Mathf.Min(target, limit), Speed * Mathf.Max(0f, deltaTime)));
         }
 
@@ -53,20 +53,14 @@ namespace ThreeC.CharacterBehavior
         // 同一坡面条件同时约束锁脚可用的竖直余量与实际模型降高。
         internal static bool AllowsDrop(in CharacterGroundFootHit ground) => ground.Platform != 0 && ground.Normal.y < 0.99985f;
 
-        // 从未降模的髋位置求承重脚所需竖直行程，交给下一帧的限高处理。
-        public static float RequiredDrop(AnimationStream stream, in CharacterIkBinding leg, in CharacterIkState state,
-            in CharacterGroundFootHit ground, in CharacterFootObservation feet, float appliedDrop)
+        // 从未降模的髋位置计算承重脚所需竖直行程，供下一段求值前调整模型高度。
+        public static float RequiredDrop(Vector3 hip, float length, CharacterIkLimb limb, in CharacterGroundIkState state,
+            in CharacterIkPlan plan, in CharacterGroundFootHit ground, in CharacterFootObservation feet, float gate, float appliedDrop)
         {
-            if (!state.Locked || state.Source != CharacterIkSource.Ground ||
-                !AllowsDrop(ground) || state.Plan.PositionWeight <= 0f) return 0f;
-
-            float support = feet.SupportWeight(leg.Limb, state.Gate) * state.Plan.PositionWeight;
+            if (!state.Locked || !AllowsDrop(ground) || plan.PositionWeight <= 0f) return 0f;
+            float support = feet.SupportWeight(limb, gate) * plan.PositionWeight;
             if (support <= 0f) return 0f;
-
-            Vector3 hip = leg.Root.GetPosition(stream);
-            Vector3 knee = leg.Mid.GetPosition(stream);
-            float length = Vector3.Distance(hip, knee) + Vector3.Distance(knee, leg.Tip.GetPosition(stream));
-            Vector3 gap = hip + Vector3.up * appliedDrop - state.Target.position; // 还原未补偿髋高，避免反馈累加。
+            Vector3 gap = hip + Vector3.up * appliedDrop - plan.Target.position; // 还原未补偿髋高，避免反馈累加。
             float verticalReachSquared = length * length - gap.x * gap.x - gap.z * gap.z;
             if (verticalReachSquared <= 0f) return 0f; // 纯竖直补偿无法接住水平范围外的锁点。
             return support * Mathf.Max(0f, gap.y - Mathf.Sqrt(verticalReachSquared));

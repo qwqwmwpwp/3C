@@ -42,11 +42,12 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    // 管理角色马达的唯一租约，并在物理归属改变时清除旧行为和未提交运动。
+    // 管理角色马达的唯一租约、刚体写入权及边界提交后的通知顺序。
     internal sealed class CharacterMotionHandoff
     {
         private CharacterExternalControlToken holder;
         internal bool HasHolder => holder != null;
+        internal event Action<CharacterMotionBoundaryKind, int> Committed;
         internal event Action<CharacterMotionBoundaryKind, int> Discontinuity;
 
         // 检查交接通知后该凭据是否仍为当前持有者。
@@ -94,10 +95,9 @@ namespace ThreeC.CharacterBehavior
 
         // 内置消费者先清理旧动作，随后才允许公开预测及运动观察者重入下一轮交接。
         internal void Publish(CharacterMotionBoundaryKind kind, int previous, int current, Behaviour owner,
-            CharacterSimulationBlackboard simulation, CharacterMovementForecast output, CharacterForecastRevision change,
-            Action<CharacterMotionBoundaryKind, int> internalListeners)
+            CharacterSimulationBlackboard simulation, CharacterMovementForecast output, CharacterForecastRevision change)
         {
-            Deliver(internalListeners, kind, previous, current, owner, simulation);
+            Deliver(Committed, kind, previous, current, owner, simulation);
             if (owner == null || current != simulation.LifecycleVersion) return;
             output.Notify(change);
             if (owner != null && current == simulation.LifecycleVersion)
@@ -115,31 +115,6 @@ namespace ThreeC.CharacterBehavior
                 catch (Exception error) { Debug.LogException(error, owner); }
                 if (owner == null || current != simulation.LifecycleVersion) return;
             }
-        }
-
-        // 外部边界保留资源与角色时钟，撤销前一代输入、对齐、命令和持续许可。
-        internal static void Interrupt(in CharacterMotionBoundary request, CharacterBlackboard board,
-            CharacterBehaviorTimeline timeline, CharacterBehaviorFlow flow, CharacterMovementSettings movement,
-            CharacterCommittedBehaviorGrants grants, CharacterActionAlignmentBinding binding, bool receivesInput)
-        {
-            timeline.AdvanceExternal(flow, movement, board.Rigidbody.SubmittedThrough);
-            if (flow.DispatchCancelled) return;
-            var reason = request.Kind == CharacterMotionBoundaryKind.Teleport ? CharacterBehaviorEndReason.Teleport :
-                request.Kind == CharacterMotionBoundaryKind.Knockback ? CharacterBehaviorEndReason.Knockback : CharacterBehaviorEndReason.ExternalControl;
-            var result = flow.InterruptAll(reason, movement);
-            if (flow.DispatchCancelled) return;
-            binding.Set(null, default, 0f);
-            flow.Alignment = default;
-            CharacterPlayerInputAdapter.EndContinuity(board.Input, receivesInput);
-            board.Simulation.AdvanceContinuity();
-            int version = board.Simulation.LifecycleVersion;
-            double deviceNow = Time.realtimeSinceStartupAsDouble;
-            timeline.EndContinuity(deviceNow);
-            timeline.PublishExternal(result, version, deviceNow);
-            grants.Observe(result, version);
-            board.Rigidbody.ClearCommands();
-            if (request.Kind == CharacterMotionBoundaryKind.Knockback)
-                board.Rigidbody.BeginKnockback(board.Rigidbody.SubmittedThrough, request.Duration, request.Braking);
         }
     }
 }

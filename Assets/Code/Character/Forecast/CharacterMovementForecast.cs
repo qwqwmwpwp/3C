@@ -26,22 +26,31 @@ namespace ThreeC.CharacterBehavior
         public readonly Vector3 Position, Velocity;
         public readonly Quaternion Rotation;
         public readonly CharacterBehaviorId Behaviors;
-        public readonly CharacterAttackMove Attack;
+        public readonly int AttackStateId;
+#pragma warning disable CS0618 // 旧预测属性仍以历史枚举类型公开。
+        [Obsolete("请使用 AttackStateId。")]
+        public CharacterAttackMove Attack => (CharacterAttackMove)AttackStateId;
+#pragma warning restore CS0618
         public readonly CharacterBehaviorPhase AttackPhase;
         public readonly float AttackProgress;
+        private readonly CharacterPlaybackClock playback;
+        private readonly double sampleTime;
+        internal bool HasAttackPose => (Behaviors & CharacterBehaviorId.Attack) != 0 && !ExternallyControlled &&
+            playback.Valid && sampleTime >= playback.Start && sampleTime < playback.End;
+        internal float AttackClipPhase => playback.Sample(sampleTime).Phase;
         public readonly long AttackInstance;
-        internal readonly CharacterAttackMove BufferedMove;
+        internal readonly int BufferedStateId;
         internal readonly float LinkAtSeconds, Stamina;
         internal readonly Vector2 DashDirection;
         public readonly CharacterMoveGait Gait;
         public readonly bool MoveApproved, ExternallyControlled;
         internal bool AnticipatesMovementReturn => !ExternallyControlled &&
-            (Behaviors & (CharacterBehaviorId.Dash | CharacterBehaviorId.Attack)) != 0;
+            (Behaviors & CharacterBehaviorId.Dash) != 0;
         public readonly CollisionFlags Contacts;
 
         // 保存同一时刻的物理样本和动作假设，供动画查询及慢任务回验。
         internal CharacterForecastSample(Vector3 position, Vector3 velocity, Quaternion rotation,
-            CharacterBehaviorFrameResult behavior, CollisionFlags contacts, CharacterMoveGait gait, bool externallyControlled = false)
+            CharacterBehaviorFrameResult behavior, CollisionFlags contacts, CharacterMoveGait gait, double time, bool externallyControlled = false)
         {
             Position = position;
             Velocity = velocity;
@@ -49,11 +58,13 @@ namespace ThreeC.CharacterBehavior
             ExternallyControlled = externallyControlled;
             Gait = gait;
             Behaviors = behavior.ActiveBehaviors;
-            Attack = behavior.Attack.Move;
+            AttackStateId = behavior.Attack.StateId;
             AttackPhase = behavior.Attack.Phase;
             AttackProgress = behavior.Attack.Progress;
+            sampleTime = time;
+            playback = behavior.Attack.Presentation.Schedule(behavior.Attack.StartedAt);
             AttackInstance = behavior.Attack.InstanceId;
-            BufferedMove = behavior.Attack.BufferedMove;
+            BufferedStateId = behavior.Attack.BufferedStateId;
             LinkAtSeconds = behavior.Attack.LinkAtSeconds;
             Stamina = behavior.StaminaRemaining;
             DashDirection = behavior.DashDirection;
@@ -62,20 +73,23 @@ namespace ThreeC.CharacterBehavior
         }
 
         internal CharacterForecastSample UnderExternalControl() =>
-            new CharacterForecastSample(Position, Velocity, Rotation, default, Contacts, Gait, true);
+            new CharacterForecastSample(Position, Velocity, Rotation, default, Contacts, Gait, sampleTime, true);
 
-        private CharacterForecastSample(in CharacterForecastSample a, in CharacterForecastSample b, float fraction)
+        // 在同一招式实例内插值状态；跨招时沿前一样本的片段时钟推进到其可见终点。
+        private CharacterForecastSample(in CharacterForecastSample a, in CharacterForecastSample b, float fraction, float stepSeconds)
         {
             this = a;
             Position = Vector3.Lerp(a.Position, b.Position, fraction);
             Velocity = Vector3.Lerp(a.Velocity, b.Velocity, fraction);
             Rotation = Quaternion.Slerp(a.Rotation, b.Rotation, fraction);
-            if (a.Attack == b.Attack && a.AttackInstance == b.AttackInstance)
+            sampleTime = a.sampleTime + (double)stepSeconds * fraction;
+            if (a.AttackStateId == b.AttackStateId && a.AttackInstance == b.AttackInstance)
                 AttackProgress = Mathf.Lerp(a.AttackProgress, b.AttackProgress, fraction);
         }
 
-        internal static CharacterForecastSample Between(in CharacterForecastSample a, in CharacterForecastSample b, float t)
-            => new CharacterForecastSample(a, b, t);
+        // 按已发布的采样步长生成两个预测点之间的观测。
+        internal static CharacterForecastSample Between(in CharacterForecastSample a, in CharacterForecastSample b, float t, float stepSeconds)
+            => new CharacterForecastSample(a, b, t, stepSeconds);
     }
 
     internal enum ForecastRefreshReason
@@ -205,10 +219,11 @@ namespace ThreeC.CharacterBehavior
             double offset = Math.Max(0d, elapsed / step);
             int index = Math.Min(count - 1, (int)Math.Floor(offset + 0.00001));
             sample = index == count - 1 ? samples[index] : CharacterForecastSample.Between(samples[index],
-                samples[index + 1], Mathf.Clamp01((float)(offset - index)));
+                samples[index + 1], Mathf.Clamp01((float)(offset - index)), step);
             return true;
         }
 
+        // 在突进结束后查找最早获准普通移动的样本。
         internal bool TryReturnToMovement(double now, out float ahead, out CharacterForecastSample next)
         {
             ahead = 0f;
@@ -220,8 +235,7 @@ namespace ThreeC.CharacterBehavior
                 var candidate = samples[i];
                 ahead = (float)(StartTime - now + i * (double)step);
                 if (ahead > Horizon) break;
-                if (candidate.MoveApproved && (candidate.Behaviors & CharacterBehaviorId.Dash) == 0 &&
-                    (candidate.Attack == CharacterAttackMove.None || candidate.AttackPhase == CharacterBehaviorPhase.Recovery))
+                if (candidate.MoveApproved && (candidate.Behaviors & CharacterBehaviorId.Dash) == 0)
                 {
                     next = candidate;
                     ahead = Mathf.Max(0f, ahead);

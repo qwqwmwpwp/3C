@@ -1,4 +1,6 @@
 #if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
@@ -30,31 +32,93 @@ namespace ThreeC.CharacterBehavior
     // 保存诊断候选的状态、片段内时间、实际倍率和分项代价。
     internal struct CharacterMatchDebugEntry
     {
-        public string State;
+        public string State, Library, Track;
         public float Time, Rate;
         public GroundMatchCost Cost;
+        internal int SourceRank;
+    }
+
+    // 统计一次诊断按原因淘汰的轨道和入点，以及实际评分次数。
+    internal struct GroundMatchDebugCounts
+    {
+        public int Use, Gait, Resource, Speed, Support, Window, Group, History, Evaluated;
+
+        // 按实际过滤原因累计一次淘汰。
+        internal void Reject(GroundMatchFilter reason)
+        {
+            switch (reason)
+            {
+                case GroundMatchFilter.History: History++; break;
+                case GroundMatchFilter.Group: Group++; break;
+                case GroundMatchFilter.Use: Use++; break;
+                case GroundMatchFilter.Gait: Gait++; break;
+                case GroundMatchFilter.Resource: Resource++; break;
+                case GroundMatchFilter.Speed: Speed++; break;
+                case GroundMatchFilter.Support: Support++; break;
+                case GroundMatchFilter.Window: Window++; break;
+            }
+        }
     }
 
     // 保存一次最终查询的候选排序及筛选数量。
     internal sealed class CharacterMatchDebugFrame
     {
-        public string Query, Reason, Choice;
-        public int UseRejected, GaitRejected, ResourceRejected, SpeedRejected, SupportRejected, WindowRejected, GroupRejected, Evaluated;
+        private IReadOnlyList<string> libraryNames;
+        private GroundMatchDebugCounts[] libraryCounts = Array.Empty<GroundMatchDebugCounts>();
+        public string Query, Reason, Choice, Rule, Libraries, CompatibilityIssue;
+        public GroundMatchDebugCounts Counts;
         public CharacterMatchDebugEntry Chosen, Continuing;
         public readonly CharacterMatchDebugEntry[] Top = new CharacterMatchDebugEntry[3];
-        public int TopCount, HistoryRejected;
+        public int TopCount;
         public GroundMatchScoring Scoring;
         public bool HistoryFallback;
+        public int LibraryCount => libraryNames?.Count ?? 0;
 
         // 清空本次试算结果，重新选择时覆盖同帧第一次试算。
         internal void Reset()
         {
-            Query = Reason = Choice = null;
+            Query = Reason = Choice = Rule = Libraries = CompatibilityIssue = null;
             Scoring = GroundMatchScoring.None;
             HistoryFallback = false;
-            HistoryRejected = 0;
-            UseRejected = GaitRejected = ResourceRejected = SpeedRejected = SupportRejected = WindowRejected = GroupRejected = Evaluated = TopCount = 0;
+            Array.Clear(libraryCounts, 0, LibraryCount);
+            libraryNames = null;
+            Counts = default;
+            TopCount = 0;
             Chosen = Continuing = default;
+        }
+
+        // 绑定已在主线程生成且装配期间保持不变的库名列表。
+        internal void SetLibraries(IReadOnlyList<string> names)
+        {
+            libraryNames = names;
+            if (libraryCounts.Length < LibraryCount) Array.Resize(ref libraryCounts, LibraryCount);
+        }
+
+        // 取得声明顺序上此库的标识和过滤统计。
+        internal GroundMatchDebugCounts ReadLibrary(int index, out string name)
+        {
+            name = libraryNames[index];
+            return libraryCounts[index];
+        }
+
+        // 把已发布结果复制到窗口缓冲，使重绘使用同一份查询数据。
+        internal void CopyFrom(CharacterMatchDebugFrame source)
+        {
+            Query = source.Query;
+            Reason = source.Reason;
+            Choice = source.Choice;
+            Rule = source.Rule;
+            Libraries = source.Libraries;
+            CompatibilityIssue = source.CompatibilityIssue;
+            Scoring = source.Scoring;
+            HistoryFallback = source.HistoryFallback;
+            Counts = source.Counts;
+            Chosen = source.Chosen;
+            Continuing = source.Continuing;
+            TopCount = source.TopCount;
+            Array.Copy(source.Top, Top, TopCount);
+            SetLibraries(source.libraryNames);
+            Array.Copy(source.libraryCounts, libraryCounts, LibraryCount);
         }
 
         // 记录本轮评分采用的布局和历史范围，后续回退会覆盖先前的范围。
@@ -65,33 +129,26 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 区分整条轨道的淘汰与逐采样点的入场过滤。
-        internal void Reject(GroundMatchFilter reason)
+        internal void Reject(GroundMatchFilter reason, int libraryIndex = -1)
         {
-            switch (reason)
-            {
-                case GroundMatchFilter.History: HistoryRejected++; break;
-                case GroundMatchFilter.Group: GroupRejected++; break;
-                case GroundMatchFilter.Use: UseRejected++; break;
-                case GroundMatchFilter.Gait: GaitRejected++; break;
-                case GroundMatchFilter.Resource: ResourceRejected++; break;
-                case GroundMatchFilter.Speed: SpeedRejected++; break;
-                case GroundMatchFilter.Support: SupportRejected++; break;
-                case GroundMatchFilter.Window: WindowRejected++; break;
-            }
+            Counts.Reject(reason);
+            if ((uint)libraryIndex < LibraryCount) libraryCounts[libraryIndex].Reject(reason);
         }
 
-        // 按稳定代价顺序维护前三个有效入点。
-        internal void Candidate(in CharacterMatchDebugEntry entry)
+        // 按代价与规则来源优先级记录前三个入点，库内同分沿用样本扫描顺序。
+        internal void Candidate(in CharacterMatchDebugEntry entry, int libraryIndex, int sourceRank)
         {
-            Evaluated++;
+            Counts.Evaluated++;
+            if ((uint)libraryIndex < LibraryCount) libraryCounts[libraryIndex].Evaluated++;
             float total = entry.Cost.Total;
             if (float.IsNaN(total) || float.IsInfinity(total)) return;
             int i = 0;
-            while (i < TopCount && Top[i].Cost.Total <= total) i++;
+            while (i < TopCount && !GroundPoseSearch.Precedes(total, sourceRank, Top[i].Cost.Total, Top[i].SourceRank)) i++;
             if (i == Top.Length) return;
             TopCount = Mathf.Min(TopCount + 1, Top.Length);
             for (int j = TopCount - 1; j > i; j--) Top[j] = Top[j - 1];
             Top[i] = entry;
+            Top[i].SourceRank = sourceRank;
         }
     }
 

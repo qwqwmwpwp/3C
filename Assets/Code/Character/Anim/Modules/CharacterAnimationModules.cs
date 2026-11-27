@@ -18,7 +18,7 @@ namespace ThreeC.CharacterBehavior
         internal CharacterPlaybackObserver Playback { get; private set; }
         internal CharacterLocomotionPoseSelector Poses { get; private set; }
         internal CharacterBehaviorAnimationBindings Bindings { get; }
-        internal CharacterAnimationIk Ik { get; private set; }
+        internal CharacterPosePipeline Pose { get; private set; }
 
         // 以当前行为许可初始化动作模块，物理观测由流水线单独接收。
         internal CharacterAnimationModules(Animator animator, CharacterBehaviorAnimator owner,
@@ -36,15 +36,15 @@ namespace ThreeC.CharacterBehavior
 #if UNITY_EDITOR
             Composer.Trace = owner.ActionTrace;
 #endif
-            Bindings = new CharacterBehaviorAnimationBindings(config.BehaviorAnimations, Composer, Resources, owner) { StateVersion = stateVersion };
+            Bindings = new CharacterBehaviorAnimationBindings(config, Composer, Resources, owner) { StateVersion = stateVersion };
             if (seed.FrameNumber != 0) Bindings.Observe(seed, seed: true);
-            Ik = CreateIk(config);
+            Pose = CreatePose(config);
         }
 
         // 按本次组合创建姿态校正、惯性与肢体求解。
-        private CharacterAnimationIk CreateIk(CharacterAnimationConfiguration next) =>
-            new CharacterAnimationIk(animator, Player, clips, owner.transform, next.IkChannels, next.WalkableSlope,
-                next.Orientation, next.PoseInertia, next.InertiaBones, next, owner.modelDropLimit, Ik);
+        private CharacterPosePipeline CreatePose(CharacterAnimationConfiguration next) =>
+            new CharacterPosePipeline(animator, Player, clips, owner.transform, next.IkChannels, next.WalkableSlope,
+                next.Orientation, next.PoseInertia, next.InertiaBones, next, owner.modelDropLimit, Pose);
 
         // 在同一个播放图上装配地面资源、观测与选姿。
         private void BindGround(CharacterAnimationConfiguration next)
@@ -54,6 +54,32 @@ namespace ThreeC.CharacterBehavior
             Playback = new CharacterPlaybackObserver(animator, Resources, clips);
             Poses = new CharacterLocomotionPoseSelector(Resources, next);
         }
+
+        // 重绑 Animator 时重新校验选姿与持续动作，标记当前尚无可用资源的需求。
+        internal void RefreshPlayback()
+        {
+            Player.BindPlayback();
+            Resources.RefreshBindings();
+            Poses.BindClips();
+            Bindings.RebindGrantedEntries();
+            if (!Resources.Ready) return;
+            Composer.RebindPlayback(Resources);
+            foreach (var key in Composer.ActiveKeys)
+                if (!Resources.HasBinding(key))
+                    Debug.LogWarning($"当前动画资源缺少动作 {key}，持续请求将在资源恢复后参与选择。", owner);
+        }
+
+#if UNITY_EDITOR
+        // 按需汇总当前角色的最近判定；没有观测的阶段尚未执行。
+        internal string ReadDecisionTrace()
+        {
+            var text = new System.Text.StringBuilder("动画判定程序（各入口最近一次采样）\n");
+            Intent.AppendDecisionTrace(text);
+            Poses.AppendDecisionTrace(text);
+            Matcher.AppendDecisionTrace(text);
+            return text.ToString();
+        }
+#endif
 
         // 在旧装配仍可用时校验新配置并固定所有受影响的绑定。
         internal AnimationModuleChanges Prepare(CharacterAnimationConfiguration next, bool refreshContents) =>
@@ -65,8 +91,9 @@ namespace ThreeC.CharacterBehavior
             foreach (string key in changes.ActionKeys) Composer.WithdrawKey(key);
             if (changes.GroundChanged)
             {
-                BindGround(next);
+                Player.ResetGround();
                 clips.ConfigurePaces(next);
+                BindGround(next);
                 Resources.RefreshBindings();
                 Poses.BindClips();
                 Composer.RebindRules(Resources);
@@ -76,12 +103,12 @@ namespace ThreeC.CharacterBehavior
             else if (changes.ActionKeys.Count != 0 || changes.MappingsChanged)
                 Resources.ReplaceActions(next, owner);
 
-            Bindings.Reconfigure(next.BehaviorAnimations, Resources, seed, changes);
+            Bindings.Reconfigure(next, Resources, seed, changes);
             if (changes.IkChanged)
             {
-                var previous = Ik;
-                Ik = CreateIk(next);
-                Ik.TakeOver(previous);
+                var previous = Pose;
+                Pose = CreatePose(next);
+                Pose.TakeOver(previous);
             }
             Resources.Transitions = next.Transitions;
             definitions = changes.Definitions;

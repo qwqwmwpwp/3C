@@ -12,7 +12,6 @@ namespace ThreeC.CharacterBehavior
         internal readonly CharacterMovementPredictor Predictor;
         internal CharacterForecastOrigin Origin { get; private set; }
         internal bool NeedsSolvedOrigin;
-        private long alignmentRevision;
 
         // 绑定逐帧裁决与实测状态，两者在捕获快照前由主线程读取。
         internal CharacterForecastSource(CharacterBlackboard board, CharacterRigidbodyMotor motor,
@@ -23,13 +22,6 @@ namespace ThreeC.CharacterBehavior
             this.timeline = timeline;
             this.flow = flow;
             Predictor = predictor;
-        }
-
-        // 作废旧目标的发布结果和在途请求，并更新随后冻结的目标修订号。
-        internal void InvalidateAlignment()
-        {
-            alignmentRevision++;
-            Predictor.RequestRefresh(ForecastRefreshReason.ExternalState);
         }
 
         // 在恢复时读取真实刚体；外部边界的旧已求解行为不可作为新位姿的来源。
@@ -68,15 +60,14 @@ namespace ThreeC.CharacterBehavior
             return Predictor.PublishedForAnimation(config.Forecast);
         }
 
-        // 使用最近已解物理起点和最新已发布行为，提交动画前补发或帧末预测。
-        internal void Submit(in CharacterRuntimeConfiguration config, bool beforeAnimation)
+        // 使用最近已解物理起点和最新已发布行为，提交帧末预测。
+        internal void Submit(in CharacterRuntimeConfiguration config)
         {
             var drive = motor.Parameters(config);
             var movement = config.ReadMovement();
-            var current = new CharacterForecastObservation(board.Simulation.LifecycleVersion, alignmentRevision,
+            var current = new CharacterForecastObservation(board.Simulation.LifecycleVersion,
                 timeline.Time, Origin, timeline.Latest.Behavior, timeline.Held, Time.fixedDeltaTime, config, movement, drive);
-            Predictor.SubmitObservation(current, board.Rigidbody, movement, drive, flow, config.UseWorkerThreads,
-                flow.Alignment.FollowsTargetAt(timeline.Time), frameEnd: !beforeAnimation);
+            Predictor.SubmitObservation(current, board.Rigidbody, movement, drive, flow, config.UseWorkerThreads);
         }
     }
 }

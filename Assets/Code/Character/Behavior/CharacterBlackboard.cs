@@ -179,13 +179,17 @@ namespace ThreeC.CharacterBehavior
 
         internal CharacterBehaviorFlow CreateForecastFlow() => CharacterBehaviorFlow.ForCharacter(registration, snapshot: true);
 
+        // 从本角色的注册捕获一次任务工厂，已复用的帧末流程只提供运行状态。
+        internal Func<CharacterBehaviorFlow> CaptureForecastFactory(bool allowSharedAttack) =>
+            registration.CaptureForecastFactory(allowSharedAttack);
+
         internal CharacterBehaviorRegistration ResolveRegistration(CharacterProfile source, bool allowGuard) =>
             registration ?? ReadRegistration(source, allowGuard);
 
         // 从角色资产读取内置与追加行为定义，固定属于本次装配的规则集合。
         private static CharacterBehaviorRegistration ReadRegistration(CharacterProfile source, bool allowGuard) =>
-            source ? new CharacterBehaviorRegistration(allowGuard, source.LightAttack, source.ComboRoutes, source.Guard, source.AdditionalBehaviors)
-                : new CharacterBehaviorRegistration(allowGuard, null, null, null);
+            source ? new CharacterBehaviorRegistration(allowGuard, source.AttackTable, source.Guard, source.AdditionalBehaviors)
+                : new CharacterBehaviorRegistration(allowGuard, null, null);
 
         // 读取当前行为步的参数，主线程复用同一对象，任务只能持有其独立快照。
         internal CharacterMovementSettings ReadMovement(CharacterProfile source)

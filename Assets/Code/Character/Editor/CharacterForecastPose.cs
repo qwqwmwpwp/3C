@@ -33,11 +33,11 @@ namespace ThreeC.CharacterBehavior
             if (config == null) return null;
             string path = null;
             float rate = 1f;
-            bool attack = pose.Attack != CharacterAttackMove.None && !pose.ExternallyControlled;
+            bool attack = pose.HasAttackPose;
             AnimationClip fallback = pose.ExternallyControlled ? settings.KnockbackPreview : null;
             if (attack)
             {
-                path = AttackPath(pose.Attack);
+                path = AttackPath(pose.AttackStateId);
                 attack = path != null;
             }
             if (!attack && !pose.ExternallyControlled)
@@ -69,18 +69,20 @@ namespace ThreeC.CharacterBehavior
                 var blend = groupState?.Blend ?? default;
                 float length = blend.Second ? blend.Seconds : clip.length;
                 bool loop = blend.Second ? blend.Loop : clip.isLooping;
-                if (length > 0f) seconds = attack ? Mathf.Clamp01(pose.AttackProgress) * length :
+                if (length > 0f) seconds = attack ? pose.AttackClipPhase * length :
                     loop ? clipTime % length : System.Math.Min(clipTime, length);
             }
             return clip;
         }
 
-        private string AttackPath(CharacterAttackMove move)
+        // 按稳定状态编号解析预测姿态应使用的动作路径。
+        private string AttackPath(int stateId)
         {
             if (config.BehaviorAnimations == null || config.Actions == null) return null;
             foreach (var binding in config.BehaviorAnimations)
             {
-                if (binding == null || binding.BehaviorId != CharacterBehaviorId.Attack || (binding.AttackMove != CharacterAttackMove.None && binding.AttackMove != move)) continue;
+                if (binding == null || binding.BehaviorId != CharacterBehaviorId.Attack ||
+                    (binding.AttackStateId != 0 && binding.AttackStateId != stateId)) continue;
                 foreach (var action in config.Actions)
                     if (action != null && action.Key == binding.EntryAction) return action.StateName;
             }

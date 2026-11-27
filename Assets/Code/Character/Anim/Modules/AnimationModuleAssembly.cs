@@ -18,6 +18,10 @@ namespace ThreeC.CharacterBehavior
         private readonly Dictionary<string, ActionSetModule> owners = new Dictionary<string, ActionSetModule>(StringComparer.Ordinal);
         private readonly HashSet<CharacterIkLimb> limbs = new HashSet<CharacterIkLimb>();
         internal bool Contains(AnimationModule module) => visited.Contains(module);
+        // 只在角色装配入口解析程序，避免编辑器序列化校验期间访问 Resources。
+        internal CompiledAnimationDecisions BindDecisions() => AnimationDecisionProgram.Bind(Decisions ? Decisions.Program : null);
+
+        internal AnimationDecisionModule Decisions { get; private set; }
         internal GaitModule Gait { get; private set; }
         internal StartTurnModule StartTurn { get; private set; }
         internal StopModule Stop { get; private set; }
@@ -32,6 +36,7 @@ namespace ThreeC.CharacterBehavior
             return Resolve(roots, null);
         }
 
+        // 展开根模块并校验装配中各条行为映射的触发条件和动作键。
         internal static AnimationModuleAssembly Resolve(IEnumerable<AnimationModule> roots, HashSet<AnimationModule> excluded, bool checkActionReferences = true)
         {
             var result = new AnimationModuleAssembly(excluded);
@@ -40,7 +45,7 @@ namespace ThreeC.CharacterBehavior
             {
                 var row = result.mappings[i];
                 if (!row.HasValidTrigger)
-                    throw new ArgumentException($"第 {i + 1} 条行为映射（{row.BehaviorId} / {row.AttackMove}）需要单一许可行为和有效动作键。");
+                    throw new ArgumentException($"第 {i + 1} 条行为映射（{row.BehaviorId} / {row.AttackStateId}）需要单一许可行为和有效动作键。");
                 if (checkActionReferences)
                 {
                     result.RequireAction(row.EntryAction, row, i);
@@ -65,10 +70,11 @@ namespace ThreeC.CharacterBehavior
             return false;
         }
 
+        // 校验映射引用的非空动作键已由组合中的模块提供。
         private void RequireAction(string key, CharacterBehaviorAnimationMapping row, int index)
         {
             if (!string.IsNullOrWhiteSpace(key) && !owners.ContainsKey(key))
-                throw new ArgumentException($"第 {index + 1} 条行为映射（{row.BehaviorId} / {row.AttackMove}）引用了组合中缺少的动作 {key}。");
+                throw new ArgumentException($"第 {index + 1} 条行为映射（{row.BehaviorId} / {row.AttackStateId}）引用了组合中缺少的动作 {key}。");
         }
 
         internal void Visit(AnimationModule module)
@@ -87,6 +93,12 @@ namespace ThreeC.CharacterBehavior
             return next;
         }
 
+        // 角色的各个动画阶段共享一套已编译的判定定义。
+        internal void Add(AnimationDecisionModule module)
+        {
+            if (Decisions) throw new AnimationDecisionProgramException($"组合中的 {Decisions.name} 和 {module.name} 同时提供判定程序。");
+            Decisions = module;
+        }
         internal void Add(GaitModule module) => Gait = Single(Gait, module);
         internal void Add(StartTurnModule module) => StartTurn = Single(StartTurn, module);
         internal void Add(StopModule module) => Stop = Single(Stop, module);

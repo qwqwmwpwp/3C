@@ -12,6 +12,7 @@ namespace ThreeC.CharacterBehavior
         public CharacterAnimationBinding Binding;
         public float Time, Length, Cost, Rate;
         public GroundMatchCost Components;
+        internal bool RejectPreviousStop;
         public bool HasEntry => Choice == CharacterMatchChoice.Stop || Choice == CharacterMatchChoice.Restart;
     }
 
@@ -20,43 +21,23 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly Animator animator;
         private readonly CharacterAnimationResourceCatalog resources;
-        private const float CycleSearchInterval = 0.10f;
         private readonly float margin, maxHold, walkLimit, sprintEntry;
         private readonly GroundMatchTuning tuning;
         private readonly GroundFeatureLayout layout;
         private readonly GroundCandidatePolicy policy;
-        internal GroundFeatureQuery Features { private get; set; }
+        private readonly string[] libraryNames;
+        private readonly string libraryIssues;
+        private readonly GroundSearchDecisions decisions;
+        private readonly GroundLibraryObservations observations;
+        internal GroundFeatureQuery[] Features { set => observations.Features = value; }
+        internal CharacterPresentationInput Input { set => observations.Input = value; }
         internal Vector2 Windows => layout?.Active == true ? layout.Windows : tuning.Windows;
         private readonly GroundPoseSearch search;
         private readonly Dictionary<int, CharacterMotionTrack> states = new Dictionary<int, CharacterMotionTrack>();
 
         private CharacterMatchMode mode;
-        // 保存匹配时延、当前播放与预测交还的候选快照。
-        private struct MatchHistory
-        {
-            internal long HandledTurn, HandledReverse, BaseInstance, PendingTurn;
-            internal float Hold, TurnWait, SearchDelay;
-            internal GroundTrackGait LastTarget, LastAlternate;
-            internal GroundMotionUse LastUse;
-            internal GroundCandidateRule LastRule;
-            internal GroundPoseQuery EntryQuery;
-            internal CharacterLocomotionPhase EntryPhase;
-            internal bool EntryWithoutPast;
-            internal CharacterMoveGait EntryInput;
-            internal GroundTrackSide EntrySupport;
-            internal Vector3 TurnDirection;
-            internal CharacterMotionTrack Playing, PreviewTrack;
-            internal int PlayingHash;
-            internal bool ObservedPlaying;
-            internal long PreviewVersion;
-            internal CharacterMatchResult Preview;
-            internal string PreviewGait;
-            internal GroundTrackSide PreviewSupport;
-            internal double PreviewTime;
-        }
-
-        private MatchHistory history = new MatchHistory { PreviewVersion = -1 };
-        private MatchHistory beforeSelection;
+        private GroundMatchHistory history = new GroundMatchHistory { PreviewVersion = -1 };
+        private GroundMatchHistory beforeSelection;
         private string compatibilityError;
         // 切换匹配方式时清除历史，旧序列化值沿用原规则。
         public CharacterMatchMode Mode
@@ -71,44 +52,32 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 为当前烘焙库建立可搜索的状态和轨道快照。
+        // 绑定候选策略并按当前烘焙库建立可搜索的状态与轨道索引。
         public CharacterMotionMatcher(Animator animator, CharacterAnimationResourceCatalog resources,
             CharacterAnimationConfiguration config)
         {
             this.animator = animator;
             this.resources = resources;
+            decisions = new GroundSearchDecisions(config.Decisions);
             tuning = config.MatchCosts;
             layout = config.FeatureLayout;
-            policy = config.CandidatePolicy ?? new GroundCandidatePolicy(null, null);
+            var libraries = config.SearchLibraries;
+            policy = config.CandidatePolicy ?? GroundCandidatePolicy.Bind(null, libraries, config.Decisions);
             search = new GroundPoseSearch(resources);
             walkLimit = Mathf.Max(0.01f, config.RunEnterSpeed);
             sprintEntry = Mathf.Max(walkLimit, config.SprintEnterSpeed);
-            var database = config.MatchDatabase;
+            observations = new GroundLibraryObservations(libraries, tuning.Windows);
+            libraryNames = libraries?.Names;
+            libraryIssues = libraries?.Issue;
             margin = InputMath.NonNegative(config.MatchMargin, 0.12f);
             maxHold = InputMath.NonNegative(config.MatchReverseHold, 0.08f);
-            if (!database || database.Format != CharacterMotionDatabase.CurrentFormat || database.BakedTracks == null) return;
-            foreach (var track in database.BakedTracks)
+            if (libraries == null) return;
+            foreach (var entry in libraries.Tracks)
             {
-                if (track == null || track.States == null || track.States.Length == 0 ||
-                    string.IsNullOrWhiteSpace(track.States[0])) continue;
-                var variant = track.IsStop
-                    ? (track.Side == GroundTrackSide.Left ? CharacterLocomotionVariant.StopLeft : CharacterLocomotionVariant.StopRight)
-                    : track.Use == GroundMotionUse.Start ? CharacterLocomotionVariant.Start :
-                    track.Use == GroundMotionUse.Turn ? (track.Side == GroundTrackSide.Left ?
-                        CharacterLocomotionVariant.TurnLeft : CharacterLocomotionVariant.TurnRight) : CharacterLocomotionVariant.None;
-                string stateName = track.States[0];
-                resources.TryGetPhase(Animator.StringToHash(stateName), out var phase);
-                var binding = track.IsStop
-                    ? CharacterAnimationBinding.Stop(stateName, variant, config.Transition, track.BrakeSeconds, track)
-                    : new CharacterAnimationBinding(new CharacterAnimationActionSettings
-                        { StateName = stateName, StateTransitionDuration = track.Blend },
-                        variant, phase);
-                var frozen = resources.Snapshot(track);
-                search.Add(frozen, binding);
-                if (!track.ReadyForSearch) continue;
-                foreach (string state in track.States)
-                    if (!string.IsNullOrWhiteSpace(state)) states[Animator.StringToHash(state)] = frozen;
+                search.Add(entry.Frozen, entry.Bind(config, resources));
+                foreach (int hash in entry.Hashes) states[hash] = entry.Frozen;
             }
+            search.BuildIndex();
         }
 
         // 在主线程核对匹配模块，记录影响规划可用性的配置问题。
@@ -137,21 +106,15 @@ namespace ThreeC.CharacterBehavior
         // 清除待用入点与上次匹配的步态、转向和续播历史。
         public void Reset()
         {
-            history.PreviewTrack = null;
-            history.PreviewVersion = -1;
-            history.HandledTurn = history.HandledReverse = history.BaseInstance = 0;
-            history.Hold = history.TurnWait = history.SearchDelay = 0f;
-            history.LastTarget = history.LastAlternate = GroundTrackGait.Any;
-            history.PendingTurn = 0;
-            history.Playing = null;
-            history.ObservedPlaying = false;
+            history = beforeSelection = new GroundMatchHistory { PreviewVersion = -1 };
         }
 
-        // 在突进或攻击交还部位之前只缓存候选；实际归属、步态和承重脚均吻合时才允许使用。
+        // 为本轮选姿准备交还候选，实际归属、步态和承重脚均吻合时才允许使用。
         internal void PrepareReturn(CharacterMovementForecast forecast, double now, CharacterAnimationDemand owner,
             bool lowerCoversFeet, bool matchRecovery, CharacterAnimationMotion motion, CharacterFootObservation feet,
             in CharacterBehaviorFrameResult behavior, CharacterLocomotionPhase phase)
         {
+            policy.ClearTrace();
             if (forecast == null || !forecast.Available || mode != CharacterMatchMode.Apply || compatibilityError != null ||
                 (lowerCoversFeet && !matchRecovery) || !motion.IsValid || motion.IsBlocked || !feet.ReadyForMatch)
             {
@@ -164,7 +127,7 @@ namespace ThreeC.CharacterBehavior
             if (owner.IsLocomotion || !forecast.TrySample(now, 0f, out var origin) || // 已获准的实际交还直接在 Evaluate 查询。
                 !origin.AnticipatesMovementReturn ||
                 history.PreviewTrack != null || !forecast.TryReturnToMovement(now, out float ahead, out var next) ||
-                !CharacterForecastQuery.TryMatch(forecast, now, ahead, Windows, out var goal)) return;
+                !observations.TryAnyGoal(ahead, out var goal)) return;
             history.PreviewGait = next.Gait == CharacterMoveGait.Walk ? CharacterAnimationIntentConverter.WalkKey :
                 next.Gait == CharacterMoveGait.Sprint ? CharacterAnimationIntentConverter.SprintKey : CharacterAnimationIntentConverter.MoveKey;
             double returnTime = now + ahead;
@@ -174,35 +137,36 @@ namespace ThreeC.CharacterBehavior
             var query = new GroundPoseQuery(GroundMotionUse.Cycle, GroundPoseQuery.GaitOf(history.PreviewGait), speed, goal.FarYaw);
             query = new GroundPoseQuery(query, policy.Select(query, behavior, phase, feet.Support, true));
             if (query.Selection.Skip) return;
-            var frame = new GroundSearchFrame(feet, goal, tuning.Profile(query.Use), speed, speed, default, resources.PlaybackClockScale, Features, query.Selection.Features, true, layout?.LegacyPelvis == true);
+            var frame = new GroundSearchFrame(feet, goal, tuning.Profile(query.Use), speed, speed, default, resources.PlaybackClockScale, observations, query.Selection.Features, ahead);
             history.Preview = Find(ref query, ref frame, out history.PreviewTrack, false);
+            history.PreviewRule = query.Selection.Rule;
             history.PreviewVersion = forecast.Version;
             history.PreviewSupport = feet.Support;
             history.PreviewTime = returnTime;
         }
 
-        // 在当前身体归属和地面状态下选择续播或匹配入点。
+        // 在当前身体归属和地面状态下按搜索决策选择续播或匹配入点。
         public CharacterMatchResult Evaluate(CharacterAnimationIntentConverter intent, CharacterAnimationDemand owner, bool lowerCoversFeet, bool matchRecovery,
             in CharacterPlaybackObservation seen, in CharacterAnimationPlaybackPlan last,
             CharacterAnimationMotion motion, CharacterFootObservation feet, float dt, in CharacterBehaviorFrameResult behavior)
         {
 #if UNITY_EDITOR
             search.DebugFrame?.Reset();
+            search.DebugFrame?.SetLibraries(libraryNames);
+            if (search.DebugFrame != null) search.DebugFrame.CompatibilityIssue = libraryIssues;
+            decisions.ClearTrace();
 #endif
             if (mode == CharacterMatchMode.Rules) return Fallback("已配置常规规则");
             bool stopping = intent.Phase == CharacterLocomotionPhase.BrakeLeadIn;
             bool recovering = lowerCoversFeet && matchRecovery && !stopping && intent.Phase != CharacterLocomotionPhase.Stopping;
             bool reverse = !recovering && intent.ReverseReleaseStep != 0 && history.HandledReverse != intent.ReverseReleaseStep;
             bool turn = !recovering && intent.DirectTurnStep != 0 && history.HandledTurn != intent.DirectTurnStep;
-            if (history.PendingTurn != intent.DirectTurnStep)
-            {
-                history.PendingTurn = intent.DirectTurnStep;
-                history.TurnWait = 0f;
-            }
+            history.ObserveDirectTurn(intent.DirectTurnStep);
             bool idleCrossing = reverse && owner.Key == CharacterAnimationIntentConverter.IdleKey;
             bool baselineUnavailable = !owner.IsLocomotion && !idleCrossing;
             if (lowerCoversFeet || baselineUnavailable)
             {
+                history.HandledInputTurn = intent.InputTurn?.Step ?? 0;
                 history.HandledTurn = intent.DirectTurnStep;
                 history.HandledReverse = intent.ReverseReleaseStep;
             }
@@ -212,6 +176,8 @@ namespace ThreeC.CharacterBehavior
                 history.BaseInstance = 0;
                 return Fallback("下身或基础动作已接管");
             }
+            if (!motion.Trajectory.Match.Valid && observations.TryAnyGoal(null, out var alternative))
+                motion = new CharacterAnimationMotion(motion, motion.Trajectory.WithForecast(motion.Trajectory.FutureVelocity, alternative));
             if (compatibilityError != null || !motion.IsValid || !motion.Trajectory.Match.Valid ||
                 motion.IsBlocked || motion.Trajectory.IsBrakeObstructed || (motion.CollisionFlags & CollisionFlags.Below) == 0)
             {
@@ -228,75 +194,94 @@ namespace ThreeC.CharacterBehavior
                 return Fallback(!feet.ReadyForMatch ? "缺少连续有效的双脚观测" : "播放观测尚未就绪");
             }
             if (!reverse) history.Hold = 0f;
-            if (intent.Phase == CharacterLocomotionPhase.Stopping) return Fallback("沿用制动时钟");
+            if (intent.Phase == CharacterLocomotionPhase.Stopping)
+            {
+                var keep = Fallback("沿用制动时钟");
+                if (history.StopTrack != null)
+                {
+                    var allowed = policy.Select(history.EntryQuery, behavior, history.EntryPhase, history.EntrySupport, false);
+                    keep.RejectPreviousStop = allowed.Rule != history.EntryQuery.Selection.Rule ||
+                        !(history.EntryQuery.Selection.Relaxed ? allowed.WithoutGroups() : allowed).Allows(history.StopTrack);
+                    if (keep.RejectPreviousStop) history.StopTrack = null;
+                }
+                return keep;
+            }
             var current = seen.Full.Destination;
             bool hasCurrent = states.TryGetValue(current.fullPathHash, out var source) &&
                 current.fullPathHash == last.FullBody.StateHash && resources.HasGroundTrack(current.fullPathHash, source);
-            if (!hasCurrent) source = null;
-            bool starting = !recovering && intent.Phase == CharacterLocomotionPhase.Starting;
-            GroundPoseQuery query;
-            if (stopping)
-                query = new GroundPoseQuery(GroundMotionUse.Stop, GroundPoseQuery.GaitOf(intent.StopGait), intent.StopEntryVelocity.magnitude);
-            else if (turn || reverse)
-                query = new GroundPoseQuery(GroundMotionUse.Turn, GroundPoseQuery.GaitOf(turn ? intent.DirectTurnGait : intent.ReverseGait),
-                    turn ? intent.DirectTurnSpeed : intent.ReverseSpeed, turn ? intent.DirectTurnAngle : intent.ReverseAngle);
-            else
-                query = GroundPoseQuery.Moving(starting, intent.RequestedGait, owner.Key, source, motion, walkLimit, sprintEntry);
-
-            if (!stopping && !turn && !reverse && starting && history.Playing != null &&
-                !history.Playing.IsLoop && current.fullPathHash == history.PlayingHash && current.normalizedTime * history.Playing.Seconds >= history.Playing.ExitTime)
-                query = GroundPoseQuery.Moving(false, intent.RequestedGait, owner.Key, source, motion, walkLimit, sprintEntry);
-            query = new GroundPoseQuery(query, policy.Select(query, behavior, intent.Phase, feet.Support, recovering));
+            var input = intent.InputTurn;
+            long inputStep = !recovering && !stopping ? input?.Step ?? 0 : 0;
+            bool checkInput = inputStep != 0 && history.HandledInputTurn != inputStep;
+            GroundPoseQuery query = default;
+            bool inputTurn = checkInput && policy.TrySelectInputTurn(input.Query, behavior, intent.Phase, feet.Support, out query);
+            // 候选表的拒绝和接收都随本次选姿历史一起提交或撤回。
+            if (checkInput && !inputTurn) history.HandledInputTurn = inputStep;
+            turn |= inputTurn;
+            if (!inputTurn)
+            {
+                if (stopping)
+                    query = new GroundPoseQuery(GroundMotionUse.Stop, GroundPoseQuery.GaitOf(intent.StopGait), intent.StopEntryVelocity.magnitude);
+                else if (turn || reverse)
+                    query = new GroundPoseQuery(GroundMotionUse.Turn, GroundPoseQuery.GaitOf(turn ? intent.DirectTurnGait : intent.ReverseGait),
+                        turn ? intent.DirectTurnSpeed : intent.ReverseSpeed, turn ? intent.DirectTurnAngle : intent.ReverseAngle);
+                else
+                {
+                    bool starting = !recovering && intent.Phase == CharacterLocomotionPhase.Starting;
+                    if (starting && history.Playing != null && !history.Playing.IsLoop && current.fullPathHash == history.PlayingHash &&
+                        current.normalizedTime * history.Playing.Seconds >= history.Playing.ExitTime) starting = false;
+                    query = GroundPoseQuery.Moving(starting, intent.RequestedGait, owner.Key, hasCurrent ? source : null, motion, walkLimit, sprintEntry);
+                }
+                query = new GroundPoseQuery(query, policy.Select(query, behavior, intent.Phase, feet.Support, recovering));
+            }
 
 #if UNITY_EDITOR
             Describe(query);
 #endif
+            if (query.Selection.Skip && query.Selection.Rule != null)
+                return SkipSearch(query, inputTurn ? inputStep : 0, intent.DirectTurnStep);
             history.SearchDelay = Mathf.Max(0f, history.SearchDelay - dt);
             bool unchanged = history.BaseInstance == owner.InstanceId && history.LastTarget == query.Target &&
                 history.LastAlternate == query.Alternate && history.LastUse == query.Use && history.LastRule == query.Selection.Rule;
-            if (!stopping && !turn && !reverse && unchanged && history.Playing == null && history.SearchDelay > 0f)
-                return Fallback("等待下一次周期查询");
-            if (!stopping && !turn && !reverse &&
-                KeepPlaying(query, unchanged, seen.Full, last.FullBody, intent.RequestedGait, motion.ExpectedVelocity, behavior, recovering))
+            bool moving = !stopping && !turn && !reverse;
+            var strategy = decisions.BeforeSearch(!moving, unchanged, history.Playing != null, history.SearchDelay);
+            if (strategy.Delay)
+                return Fallback("地面搜索策略延后本次查询");
+            var frame = Frame(query, feet, motion);
+            if (!inputTurn && history.Playing != null && strategy.AllowKeepPlaying &&
+                frame.TryLibrary(history.Playing.LibraryIndex, out _, out _, out _) &&
+                KeepPlaying(query, unchanged, seen.Full, last.FullBody, intent.RequestedGait,
+                    history.InputDirected && input != null ? input.Direction : motion.ExpectedVelocity, behavior, recovering))
             {
 #if UNITY_EDITOR
                 if (search.DebugFrame != null && hasCurrent)
                 {
                     var continuingQuery = source.IsLoop ? query : history.EntryQuery;
                     Describe(continuingQuery);
-                    var continued = Frame(continuingQuery, feet, motion);
-                    if (!source.IsLoop && history.EntryWithoutPast) continued = continued.WithoutHistory();
-                    RecordContinuing(source, current, last, continued, continuingQuery);
+                    if (Frame(continuingQuery, feet, motion).TryLibrary(source.LibraryIndex, out var continued, out _, out _))
+                        RecordContinuing(source, current, last, !source.IsLoop && history.EntryWithoutPast ?
+                            continued.WithoutHistory() : continued, continuingQuery);
                     search.DebugFrame.Reason = "仍在续播窗口";
                 }
 #endif
                 return new CharacterMatchResult { Choice = CharacterMatchChoice.Continue };
             }
 
-            if (query.Selection.Skip)
-            {
-                history.Playing = history.PreviewTrack = null;
-                history.SearchDelay = 0f;
-                return Fallback(query.Selection.Label);
-            }
+            if (query.Selection.Skip) return SkipSearch(query);
             history.Playing = null;
-            history.SearchDelay = CycleSearchInterval;
+            history.SearchDelay = strategy.Interval;
             history.LastUse = query.Use;
             history.LastRule = query.Selection.Rule;
             history.LastTarget = query.Target;
             history.LastAlternate = query.Alternate;
-            var frame = Frame(query, feet, motion);
-#if UNITY_EDITOR
-            Describe(query);
-#endif
             var best = Find(ref query, ref frame, out var winner, true);
             if ((query.Use == GroundMotionUse.Cycle || query.Use == GroundMotionUse.Transition) &&
-                history.PreviewTrack != null &&
+                history.PreviewTrack != null && history.PreviewRule == query.Selection.Rule && query.Selection.Allows(history.PreviewTrack) &&
                 query.Target == GroundPoseQuery.GaitOf(history.PreviewGait) &&
-                resources.HasGroundTrack(history.Preview.Binding.StateHash, history.PreviewTrack))
+                resources.HasGroundTrack(history.Preview.Binding.StateHash, history.PreviewTrack) &&
+                frame.TryLibrary(history.PreviewTrack.LibraryIndex, out var previewFrame, out _, out _))
             {
                 int index = history.PreviewTrack.Index(history.Preview.Time / history.Preview.Length);
-                var cost = frame.Score(history.PreviewTrack, index, resources.Pace(history.Preview.Binding.StateHash), out var rate);
+                var cost = previewFrame.Score(history.PreviewTrack, index, resources.Pace(history.Preview.Binding.StateHash), out var rate);
                 cost.Entry = query.EntryPenalty(history.PreviewTrack);
                 if (search.Filter(history.PreviewTrack, history.Preview.Binding.StateHash, query, feet.Support) == GroundMatchFilter.None &&
                     cost.Total < float.PositiveInfinity && cost.Total <= best.Cost + margin)
@@ -313,37 +298,39 @@ namespace ThreeC.CharacterBehavior
                 history.PreviewTrack = null;
             }
             float keepCost = 0f;
-            if (hasCurrent)
+            hasCurrent = hasCurrent && query.Selection.Allows(source);
+            bool canScoreCurrent = false;
+            if (hasCurrent && frame.TryLibrary(source.LibraryIndex, out var currentFrame, out _, out _))
             {
-                var cost = frame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
+                canScoreCurrent = true;
+                var cost = currentFrame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
                     out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
                 cost.Entry = query.EntryPenalty(source);
                 keepCost = cost.Total;
 #if UNITY_EDITOR
                 if (search.DebugFrame != null)
-                    search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName,
+                    search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName, Library = source.LibraryLabel, Track = source.TrackLabel,
                         Time = time, Rate = rate, Cost = cost };
 #endif
             }
             bool canWait = stopping ? !intent.MainBrakeDue : turn ? history.TurnWait + dt < maxHold :
                 !reverse || history.Hold + dt < maxHold;
-            bool moving = !turn && !reverse && !stopping;
             bool eligibleCycle = hasCurrent && source.IsLoop && search.Filter(source, current.fullPathHash, query, feet.Support) == GroundMatchFilter.None;
             bool sameCycle = moving && eligibleCycle && source == winner;
-            bool canKeep = hasCurrent && last.FullBody.Demand.IsLocomotion && (!moving || eligibleCycle);
-            if (canWait && canKeep && (sameCycle || idleCrossing && winner == null || moving && unchanged && winner != null && keepCost <= best.Cost + margin))
+            bool canKeep = canScoreCurrent && last.FullBody.Demand.IsLocomotion && (!moving || eligibleCycle);
+            if (decisions.KeepCurrent(canWait, canKeep, sameCycle, idleCrossing, winner != null, moving, unchanged, keepCost, best.Cost, margin))
             {
                 best.Choice = CharacterMatchChoice.Continue;
 #if UNITY_EDITOR
                 if (search.DebugFrame != null) search.DebugFrame.Reason = sameCycle ? "同一循环保持相位" :
-                    idleCrossing ? "反向过零保持原步" : "续播代价在切换宽限内";
+                    idleCrossing ? "反向过零保持原步" : "地面搜索策略保留当前片段";
 #endif
             }
             if (turn)
             {
                 history.TurnWait += dt;
                 if (best.Choice != CharacterMatchChoice.Continue)
-                    history.HandledTurn = intent.DirectTurnStep;
+                    history.CompleteTurn(inputTurn ? inputStep : 0, intent.DirectTurnStep);
             }
             if (reverse && (best.Choice == CharacterMatchChoice.Continue || idleCrossing && canWait)) history.Hold += dt;
             else if (reverse) history.HandledReverse = intent.ReverseReleaseStep;
@@ -351,24 +338,26 @@ namespace ThreeC.CharacterBehavior
                 best.Choice = CharacterMatchChoice.Rules;
             if (!stopping && !idleCrossing) history.BaseInstance = owner.InstanceId;
             if (best.Choice == CharacterMatchChoice.Continue && hasCurrent && source.IsLoop && query.AllowsGait(source) &&
-                !stopping && !reverse && !turn)
+                moving)
             {
                 history.Playing = source;
                 history.PlayingHash = current.fullPathHash;
                 history.ObservedPlaying = true;
             }
-            if (best.HasEntry && winner != null && !winner.IsStop)
+            if (best.HasEntry && winner != null)
             {
+                history.StopTrack = winner.IsStop ? winner : null;
                 if (winner.Use == GroundMotionUse.Turn)
                 {
-                    history.TurnDirection = motion.ExpectedVelocity.normalized;
+                    history.InputDirected = inputTurn;
+                    history.TurnDirection = inputTurn ? input.Direction : motion.ExpectedVelocity.normalized;
                 }
                 history.EntryQuery = query;
                 history.EntryPhase = intent.Phase;
                 history.EntryInput = intent.RequestedGait;
                 history.EntrySupport = feet.Support;
                 history.EntryWithoutPast = !frame.AllowPast;
-                history.Playing = winner;
+                history.Playing = winner.IsStop ? null : winner;
                 history.PlayingHash = best.Binding.StateHash;
                 history.ObservedPlaying = false;
             }
@@ -378,13 +367,13 @@ namespace ThreeC.CharacterBehavior
         // 入场和预搜共用条件表的空组回退，解除范围后仍保留基本合法条件。
         private CharacterMatchResult Find(ref GroundPoseQuery query, ref GroundSearchFrame frame, out CharacterMotionTrack winner, bool record)
         {
-            var found = search.Find(query, ref frame, out winner, record);
+            var found = search.FindScope(ref query, ref frame, out winner, record);
             if (winner != null || !query.Selection.Relax) return found;
             query = new GroundPoseQuery(query, query.Selection.WithoutGroups());
 #if UNITY_EDITOR
             if (record) Describe(query);
 #endif
-            return search.Find(query, ref frame, out winner, record);
+            return search.FindScope(ref query, ref frame, out winner, record);
         }
 
         // 判断当前步态、转向或一次性过渡是否仍在允许的续播窗口。
@@ -410,7 +399,7 @@ namespace ThreeC.CharacterBehavior
             var entry = history.EntryQuery;
             var selection = policy.Select(entry, behavior, history.EntryPhase, history.EntrySupport, recovering);
             if (entry.Selection.Rule != selection.Rule || selection.Skip ||
-                !selection.Allows(track) && !entry.Selection.Relaxed) return false;
+                !(entry.Selection.Relaxed ? selection.WithoutGroups() : selection).Allows(track)) return false;
             return selected && actual.normalizedTime * track.Seconds < track.ExitTime || pending;
         }
 
@@ -418,11 +407,20 @@ namespace ThreeC.CharacterBehavior
         private GroundSearchFrame Frame(in GroundPoseQuery query, in CharacterFootObservation feet, in CharacterAnimationMotion motion) =>
             new GroundSearchFrame(feet, motion.Trajectory.Match, tuning.Profile(query.Use), motion.ActualSpeed,
                 GroundPlaybackPace.StartSpeed(motion, resources.WalkSpeed), motion.Trajectory, resources.PlaybackClockScale,
-                Features, query.Selection.Features, true, layout?.LegacyPelvis == true
+                observations, query.Selection.Features, null
 #if UNITY_EDITOR
                 , search.DebugFrame != null
 #endif
                 );
+
+        // 回退时清除匹配缓存，并结算当前已接受的输入急转。
+        private CharacterMatchResult SkipSearch(in GroundPoseQuery query, long inputStep = 0, long directStep = 0)
+        {
+            if (inputStep != 0) history.CompleteTurn(inputStep, directStep);
+            history.Playing = history.PreviewTrack = null;
+            history.SearchDelay = 0f;
+            return Fallback(query.Selection.Label);
+        }
 
         // 返回常规规则，并仅在诊断开启时保留具体原因。
         private CharacterMatchResult Fallback(string reason)
@@ -434,11 +432,22 @@ namespace ThreeC.CharacterBehavior
         }
 
 #if UNITY_EDITOR
+        // 将当前试选的候选范围和搜索表达式记录交给动画诊断。
+        internal void AppendDecisionTrace(System.Text.StringBuilder trace)
+        {
+            policy.AppendTrace(trace);
+            decisions.AppendTrace(trace);
+        }
+
         // 记录最终试算使用的查询用途及来源、目标步态。
         private void Describe(in GroundPoseQuery query)
         {
             if (search.DebugFrame == null) return;
-            search.DebugFrame.Query = $"{query.Use} · {query.From} → {query.Target} · {query.Selection.Label} · {layout?.Status ?? "兼容脚姿"}";
+            search.DebugFrame.Rule = query.Selection.Label + (query.Selection.Ordered ? " · 按序试库" : " · 联合评分");
+            search.DebugFrame.Libraries = query.Selection.Scope?.Label;
+            search.DebugFrame.CompatibilityIssue = query.Selection.Scope?.Issue ?? libraryIssues;
+            string turnLabel = query.Selection.IsInputTurn ? "输入急转" : "常规转向";
+            search.DebugFrame.Query = $"{(query.Use == GroundMotionUse.Turn ? turnLabel : query.Use.ToString())} · {query.From} → {query.Target}";
         }
 
         // 只有监听角色需要为直接续播的窗口补算当前姿势代价。
@@ -449,7 +458,7 @@ namespace ThreeC.CharacterBehavior
             var cost = frame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
                 out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
             cost.Entry = query.EntryPenalty(source);
-            search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName,
+            search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName, Library = source.LibraryLabel, Track = source.TrackLabel,
                 Time = time, Rate = rate, Cost = cost };
         }
 
@@ -463,7 +472,7 @@ namespace ThreeC.CharacterBehavior
             {
                 debug.Choice = result.Choice.ToString();
                 debug.Reason ??= "最低代价有效入点";
-                debug.Chosen = new CharacterMatchDebugEntry { State = layer.Binding.StateName, Time = result.Time,
+                debug.Chosen = new CharacterMatchDebugEntry { State = layer.Binding.StateName, Library = layer.Binding.Library, Track = layer.Binding.Track, Time = result.Time,
                     Rate = result.Rate, Cost = result.Components };
             }
             else if (result.Choice == CharacterMatchChoice.Continue && layer.Reason == CharacterAnimationPlaybackReason.ContinueMatch)

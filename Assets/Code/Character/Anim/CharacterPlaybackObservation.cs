@@ -2,17 +2,25 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 标识实际求值的片段、句柄与精确素材秒数，归一化相位供选姿和结束判定。
     internal readonly struct CharacterClipProgress
     {
         public readonly int fullPathHash;
         public readonly float normalizedTime;
         public readonly bool loop;
+        internal readonly int ClipId;
+        internal readonly long PlaybackId;
+        internal readonly double Seconds;
 
-        public CharacterClipProgress(int hash, float progress, bool looping)
+        // 捕获素材声部的实际时钟，不从行为目标或上一帧计划反推。
+        public CharacterClipProgress(int hash, float progress, bool looping, int clipId, long playbackId, double seconds)
         {
             fullPathHash = hash;
             normalizedTime = progress;
             loop = looping;
+            ClipId = clipId;
+            PlaybackId = playbackId;
+            Seconds = seconds;
         }
 
     }

@@ -32,12 +32,13 @@ namespace ThreeC.CharacterBehavior
                 Roots = roots;
                 Excluded = excluded;
                 Assembly = AnimationModuleAssembly.Resolve(roots, excluded);
+                Assembly.BindDecisions();
             }
         }
 
         private ModuleSelection installedSelection, pendingSelection;
         private bool refreshModuleContents;
-        private CharacterAnimationConfig configurationSource;
+        private CharacterAnimationConfig configurationSource, rejectedSource;
         private string configurationError;
         private CharacterAnimationConfiguration boundConfig;
         private CharacterControllerFrameResult LatestFrame => driver ? driver.LatestFrame : external.Latest;
@@ -86,7 +87,7 @@ namespace ThreeC.CharacterBehavior
                     ? $"角色配置 {profile.name} 缺少动画表现配置。请在角色配置或角色行为动画组件中指定。"
                     : "角色行为动画缺少动画表现配置。请在组件中指定动画表现配置，或配置同对象上的行为驱动器。");
             var overrides = owner ? owner.Overrides : externalOverrides;
-            var config = source.Bind(modelBindings, overrides, profile ? profile.LightAttack : null, assembly);
+            var config = source.Bind(modelBindings, overrides, profile ? profile.AttackTable : null, assembly);
             if (owner) config.BindMovement(owner.ReadMovement(), owner.Motor.slopeLimit);
             return config;
         }
@@ -168,7 +169,6 @@ namespace ThreeC.CharacterBehavior
         // 绑定成功后启动或重装配流水线，配置错误时等待有效配置或模块选择。
         private void ApplyConfiguration(CharacterAnimationConfig source, bool replace)
         {
-            configurationSource = source;
             bool selectionRequested = pendingSelection != null;
             var selection = pendingSelection ?? installedSelection;
             bool refresh = refreshModuleContents;
@@ -185,39 +185,46 @@ namespace ThreeC.CharacterBehavior
             }
             catch (System.ArgumentException error)
             {
-                if (replace) StopPipeline(CharacterPlaybackEndSource.ResourceUnavailable);
+                if (replace && !(error is AnimationDecisionProgramException)) StopPipeline(CharacterPlaybackEndSource.ResourceUnavailable);
                 if (configurationError != error.Message) Debug.LogError(error.Message, this);
+                rejectedSource = source;
                 configurationError = error.Message;
                 return;
             }
-            configurationError = null;
             if (changes != null)
-            {
                 pipeline.Reconfigure(next, changes, LatestBehavior.SimulationVersion == SimulationVersion ? LatestBehavior : default);
-                installedSelection = selection;
-                boundConfig = next;
-                return;
+            else
+            {
+                StopPipeline(CharacterPlaybackEndSource.Rebind);
+                pipeline = new CharacterAnimationPipeline(animator, next, this, LatestFrame, LatestBehavior, StateVersion, SimulationVersion,
+                    driver ? default : external.LatestTrajectory);
+                if (driver) driver.FrameCommitted += ReceiveFrame;
             }
-            StopPipeline(CharacterPlaybackEndSource.Rebind);
-            pipeline = new CharacterAnimationPipeline(animator, next, this, LatestFrame, LatestBehavior, StateVersion, SimulationVersion,
-                driver ? default : external.LatestTrajectory);
             installedSelection = selection;
             boundConfig = next;
-            if (!driver) return;
-            driver.FrameCommitted += ReceiveFrame;
+            configurationSource = source;
+            configurationError = null;
+            rejectedSource = null;
         }
 
         // 从当前配置读取本实例采用的动作匹配模式。
         private CharacterMatchMode MatchMode => boundConfig != null && boundConfig.Modules.Match
             ? boundConfig.MatchMode : CharacterMatchMode.Rules;
 
-        // 采集本帧动画输入，排队在引擎求值前统一提交。
+        // 核对当前角色搜索范围的绑定版本，供采集与延后提交共同使用。
+        private bool GroundBindingsChanged => boundConfig?.SearchLibraries != null &&
+            !boundConfig.SearchLibraries.Current(boundConfig.Modules.Match ? boundConfig.Modules.Match.searchLibraries : null);
+
+        // 采集行为、运动和发布资源版本，旧装配失效时先接回后台计划。
         private void Update()
         {
             using var capture = CharacterPresentationBatch.Capture.Auto();
             var source = ResolveConfiguration(driver);
-            bool sourceChanged = !ReferenceEquals(configurationSource, source);
-            if (sourceChanged || pendingSelection != null) ApplyConfiguration(source, replace: sourceChanged);
+            if (!ReferenceEquals(rejectedSource, source)) configurationError = null;
+            bool sourceChanged = pipeline == null || !ReferenceEquals(configurationSource, source);
+            if (!sourceChanged && GroundBindingsChanged) refreshModuleContents = true;
+            if (pendingSelection != null || (sourceChanged || refreshModuleContents) && configurationError == null)
+                ApplyConfiguration(source, replace: sourceChanged);
 #if UNITY_EDITOR
             if (driver && ActionTrace.Enabled)
             {
@@ -238,7 +245,7 @@ namespace ThreeC.CharacterBehavior
             int state = StateVersion, simulation = SimulationVersion;
             if (!TryReadForecast(current, state, simulation, out var forecast)) return;
             if (current.Capture(LatestFrame, LatestBehavior, state, simulation, IsSimulating, Time.deltaTime,
-                driver ? driver.CharacterTime : Time.timeAsDouble, driver ? driver.CommittedGuardApproval : 0, forecast))
+                driver ? driver.CharacterTime : external.Time, driver ? driver.CommittedGuardApproval : 0, forecast))
             {
                 current.Schedule(driver && driver.UseWorkerThreads);
                 CharacterPresentationBatch.Queue(this);
@@ -261,7 +268,8 @@ namespace ThreeC.CharacterBehavior
             if (current == null) return;
             current.Join();
             int state = StateVersion, simulation = SimulationVersion;
-            if (!current.CanApply(state, simulation, IsSimulating)) { current.Discard(); return; }
+            if (pendingSelection != null || GroundBindingsChanged || !current.CanApply(state, simulation, IsSimulating))
+            { current.Discard(); return; }
             bool valid = TryReadForecast(current, state, simulation, out var forecast);
             if (!this || !isActiveAndEnabled || pipeline != current) return;
             if (!current.CanApply(StateVersion, SimulationVersion, IsSimulating) || !valid) { current.Discard(); return; }
@@ -274,12 +282,12 @@ namespace ThreeC.CharacterBehavior
         public CharacterActionPlayback PlayActionOnce(string semanticKey, float weight = 1f)
         {
             return isActiveAndEnabled && pipeline != null
-                ? pipeline.PlayOnce(semanticKey, weight, LatestFrame, StateVersion, SimulationVersion)
+                ? pipeline.PlayOnce(semanticKey, weight, LatestFrame, StateVersion, SimulationVersion, driver ? driver.CharacterTime : external.Time)
                 : null;
         }
 
         /// <summary>仅撤销本角色上这一次播放，即使重置后复用了实例号也不会误撤销。</summary>
-        public bool WithdrawAction(CharacterActionPlayback playback) => pipeline != null && pipeline.Withdraw(playback);
+        public bool WithdrawAction(CharacterActionPlayback playback) => pipeline != null && pipeline.Withdraw(playback, driver ? driver.CharacterTime : external.Time);
 
         /// <summary>提交 Inspector 中已映射的动作。同键实例号从正数递增，重复提交保持进度，更大编号从配置起点重播。
         /// 需求持续到撤销、停用或角色重置，获选后受压制时按映射的中断策略处理。</summary>
@@ -294,13 +302,13 @@ namespace ThreeC.CharacterBehavior
         public bool SubmitAction(CharacterAnimationRequest request)
         {
             return isActiveAndEnabled && pipeline != null &&
-                pipeline.Submit(request, LatestFrame, StateVersion, SimulationVersion);
+                pipeline.Submit(request, LatestFrame, StateVersion, SimulationVersion, driver ? driver.CharacterTime : external.Time);
         }
 
         /// <summary>撤销指定键的当前实例；旧实例的迟到撤销不会误删新实例。撤销后下次 Update 恢复组合。</summary>
         public bool WithdrawAction(string semanticKey, long instanceId)
         {
-            return pipeline != null && pipeline.Withdraw(semanticKey, instanceId);
+            return pipeline != null && pipeline.Withdraw(semanticKey, instanceId, driver ? driver.CharacterTime : external.Time);
         }
 
         /// <summary>启用指定部位的目标来源。实例号在同部位同来源内单调递增；场景目标须独立于角色。
@@ -309,12 +317,12 @@ namespace ThreeC.CharacterBehavior
         public bool SubmitIkTarget(CharacterIkLimb limb, CharacterIkSource source, long instanceId,
             Transform target = null, int priority = 10, string actionKey = null, string providerKey = null)
         {
-            return pipeline != null && pipeline.Ik.Submit(limb, source, instanceId, target, priority, actionKey, providerKey);
+            return pipeline != null && pipeline.Pose.Ik.Submit(limb, source, instanceId, target, priority, actionKey, providerKey);
         }
 
         /// <summary>只撤销相同来源的当前实例；随后恢复该来源的 Inspector 默认设置。</summary>
         public bool WithdrawIkTarget(CharacterIkLimb limb, CharacterIkSource source, long instanceId, string providerKey = null) =>
-            pipeline != null && pipeline.Ik.Withdraw(limb, source, instanceId, providerKey);
+            pipeline != null && pipeline.Pose.Ik.Withdraw(limb, source, instanceId, providerKey);
 
         /// <summary>明确瞬移或参考系突变时清除接触、惯性和差分历史，保留已提交的目标请求。</summary>
         public void ResetIkContacts() => pipeline?.ResetPoseHistory();
@@ -354,6 +362,15 @@ namespace ThreeC.CharacterBehavior
             pipeline.Receive(frame, StateVersion, SimulationVersion, IsSimulating, driver ? driver.LastSolvedTime : Time.timeAsDouble);
 
 #if UNITY_EDITOR
+        // 接回规划工作后，从组件菜单读取本角色各阶段最近一次已求值的分支。
+        [ContextMenu("诊断/打印动画判定程序")]
+        private void PrintDecisionTrace()
+        {
+            if (pipeline == null) { Debug.Log("当前角色尚未安装动画判定程序。", this); return; }
+            pipeline.Join();
+            Debug.Log(pipeline.ReadDecisionTrace(), this);
+        }
+
         internal CharacterAnimationConfiguration ActiveConfiguration => pipeline != null ? boundConfig : null;
 
         // 读取当前运行配置或编辑器所选资产的瞬移重置阈值。

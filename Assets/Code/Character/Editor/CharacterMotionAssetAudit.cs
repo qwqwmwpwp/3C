@@ -14,15 +14,15 @@ namespace ThreeC.CharacterBehavior
         // 判断当前是否选择了动作库或引用动作库的角色配置。
         [MenuItem(Menu, true)]
         private static bool CanCheck() => Selection.activeObject is CharacterMotionDatabase ||
-            Selection.activeObject is CharacterProfile;
+            Selection.activeObject is CharacterProfile || Selection.activeObject is CharacterAnimationConfig;
 
-        // 按当前选择检查已发布的动作库。
+        // 检查已发布的动作库以及角色配置声明的跨库搜索关系。
         [MenuItem(Menu)]
         private static void CheckSelected()
         {
             var selected = Selection.activeObject;
-            var profile = selected as CharacterProfile;
-            var db = profile ? profile.EffectivePlayback : selected as CharacterMotionDatabase;
+            var config = selected as CharacterAnimationConfig ?? (selected as CharacterProfile)?.AnimationConfig;
+            var db = config ? config.PlaybackLibrary : selected as CharacterMotionDatabase;
             if (!db)
             {
                 Debug.LogWarning("角色配置缺少动画播放库。", selected);
@@ -30,6 +30,7 @@ namespace ThreeC.CharacterBehavior
             }
 
             Inspect(db, db.Playback, db.BakedTracks);
+            if (config) CharacterSearchLibraryAudit.Inspect(config, selected);
         }
 
         // 读取使用该动作库的角色配置，以定位配置引用的动作和 IK 曲线。
@@ -139,11 +140,13 @@ namespace ThreeC.CharacterBehavior
             var expected = CharacterMotionGroupBaker.ReadExpectedHashes(db, errors);
             var found = new HashSet<string>(StringComparer.Ordinal);
             int valid = 0, total = 0, missingHashes = 0, staleHashes = 0;
-            foreach (var track in tracks ?? Array.Empty<CharacterMotionTrack>())
+            tracks ??= Array.Empty<CharacterMotionTrack>();
+            for (int i = 0; i < tracks.Length; i++)
             {
+                var track = tracks[i];
                 if (track?.States == null || track.States.Length == 0)
                 {
-                    errors.Add("发布轨道缺少状态路径。");
+                    errors.Add($"{CharacterSearchLibraryAudit.TrackLabel(track, i)}：缺少发布状态路径。");
                     continue;
                 }
                 string label = track.States[0] ?? "未指定状态";
@@ -179,10 +182,15 @@ namespace ThreeC.CharacterBehavior
                         errors.Add($"{label}：状态 {path} 为空或已被另一轨道使用。");
                         continue;
                     }
-                    if (!states.TryGetValue(path, out var bound) || !CharacterMotionTrackAudit.MatchesPlayback(track, bound) ||
-                        firstState != null && !CharacterMotionTrackAudit.SameBlend(firstState.Blend, bound.Blend))
+                    if (!states.TryGetValue(path, out var bound))
                     {
-                        errors.Add($"{path}：发布状态缺少相同片段和混合时钟的下身轨道。");
+                        errors.Add($"{CharacterSearchLibraryAudit.TrackLabel(track, i)}：缺少播放绑定 {path}。");
+                        continue;
+                    }
+                    string issue = GroundSearchLibraries.PlaybackIssue(db, track, bound);
+                    if (issue != null)
+                    {
+                        errors.Add($"{CharacterSearchLibraryAudit.TrackLabel(track, i)} · 播放绑定 {path}：{issue}");
                         continue;
                     }
                     if (!expected.ContainsKey(path)) warnings.AppendLine($"{path}：源数据组缺少或无法验证此变体。");

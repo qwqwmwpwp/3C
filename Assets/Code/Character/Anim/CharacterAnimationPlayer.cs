@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Playables;
 
 namespace ThreeC.CharacterBehavior
 {
@@ -38,6 +39,19 @@ namespace ThreeC.CharacterBehavior
         private bool paused;
         private float speedBeforePause;
         private string oneShotWarning;
+        private CharacterAnimationPlaybackPlan lastEvaluated;
+        private readonly CharacterPlaybackFrameBudget budget = new CharacterPlaybackFrameBudget();
+        internal CharacterPlaybackFrameStep Remaining => budget.Remaining;
+
+        // 在主线程把本帧普通及非缩放 Animator 时间各登记一次。
+        internal CharacterPlaybackFrameStep CaptureFrame(double now, float dt)
+        {
+            budget.Capture(Time.frameCount, now, dt, clips.LayerBlendDelta(dt));
+            return budget.Remaining;
+        }
+
+        private readonly CharacterLayerObservation[] seen = new CharacterLayerObservation[4];
+        private readonly float[] visibleWeights = new float[4];
 
         public bool NeedsRebind => !bound || animator && (boundAvatar != animator.avatar ||
             boundWithController != (animator.runtimeAnimatorController != null));
@@ -88,7 +102,7 @@ namespace ThreeC.CharacterBehavior
             CharacterAnimationDemand selected, CharacterAnimationComposer composer)
         {
             var playback = previous.Demand.Playback;
-            if (playback == null || playback.Status != CharacterActionPlaybackStatus.Started ||
+            if (playback == null || playback.Clock.Valid || playback.Status != CharacterActionPlaybackStatus.Started ||
                 selected.Playback != playback) return false;
             var status = playback.Observe(previous.StateHash, layer);
             if (status == CharacterActionPlaybackStatus.Started) return false;
@@ -99,6 +113,98 @@ namespace ThreeC.CharacterBehavior
                     ? CharacterPlaybackEndSource.ResourceUnavailable : CharacterPlaybackEndSource.ArbitrationLost;
             return composer.End(playback.Key, playback.InstanceId, status, source);
         }
+
+        // 已播声部按时间先后共同推进；每段图事件返回后重新核对仲裁、资源和批次代次。
+        internal bool DrainRetired(CharacterAnimationComposer composer, CharacterAnimationRequest behavior, double now,
+            CharacterPosePipeline pose, CharacterAnimationMotion motion, System.Func<bool> current, ref CharacterAnimationPlaybackPlan committed)
+        {
+            bool changed = false;
+            while (current())
+            {
+                composer.RetireDue(now, behavior);
+                var retiring = composer.Retiring;
+                if (retiring.Count == 0) break;
+                changed = true;
+                double from = double.PositiveInfinity, to = double.PositiveInfinity;
+                for (int i = retiring.Count - 1; i >= 0; i--)
+                {
+                    var handle = retiring[i];
+                    bool available = CanResume(handle);
+                    if (!available || handle.Clock.End <= handle.LastEvaluatedAt)
+                    {
+                        composer.FinishRetired(handle, available || !handle.HasStarted);
+                        continue;
+                    }
+                    from = System.Math.Min(from, handle.LastEvaluatedAt);
+                    to = System.Math.Min(to, handle.Clock.End);
+                }
+                if (retiring.Count == 0) break;
+                foreach (var handle in retiring)
+                    if (handle.LastEvaluatedAt > from) to = System.Math.Min(to, handle.LastEvaluatedAt);
+                if (budget.NextFrameEnd > from) to = System.Math.Min(to, budget.NextFrameEnd);
+                var step = budget.Until(to);
+                var plan = new CharacterAnimationPlaybackPlan(lastEvaluated, seen, clips, composer, step);
+                clips.Apply(plan, step, visibleWeights);
+                if (!clips.Graph.IsValid())
+                {
+                    while (retiring.Count > 0) composer.FinishRetired(retiring[retiring.Count - 1], false);
+                    break;
+                }
+                var owners = new CharacterAnimationComposition(plan.FullBody.Demand, plan.UpperOwner.Demand, plan.LowerOwner.Demand);
+                pose.Prepare(owners, motion, plan, step);
+                composer.BeginSegment(to);
+                try { EvaluatePose(plan, step); }
+                finally { composer.EndSegment(now); }
+                if (!current()) break;
+                committed = plan;
+                // 新请求及撤销已记下本段真实时刻，下一轮重新计算最早截止。
+            }
+            return changed;
+        }
+
+        // 核对上次真实提交的句柄、素材与当前播放库；从未显示的请求没有可补采的区间。
+        private bool CanResume(CharacterActionPlayback handle)
+        {
+            if (!handle.HasStarted || !handle.Cursor.HasValue || handle.StopSource == CharacterPlaybackEndSource.ResourceUnavailable)
+                return false;
+            foreach (var layer in seen)
+                if (layer.Ready && layer.Destination.PlaybackId == handle.PlaybackId)
+                    return clips.MatchesMaterial(layer.Destination);
+            return false;
+        }
+
+        // 读取四个原生混合源的求值结果，区间内未推进的声部保持自己的事件游标。
+        private void ObserveSegment(in CharacterAnimationPlaybackPlan plan, double at)
+        {
+            for (int i = 0; i < seen.Length; i++)
+            {
+                var source = (CharacterAnimationSource)i;
+                seen[i] = clips.Observe(source);
+                visibleWeights[i] = clips.LayerWeight(source);
+            }
+            Record(plan.Overlay, at);
+            Record(plan.LowerBody, at);
+            Record(plan.UpperBody, at);
+        }
+
+        // 只有真实求值且素材、实例均一致的声部才能推进对应句柄。
+        private void Record(in CharacterAnimationLayerPlan layer, double at)
+        {
+            var playback = layer.Demand.Playback;
+            if (playback == null || !playback.HasStarted || playback.EndSource != default) return;
+            double time = playback.Clock.Valid ? System.Math.Min(at, playback.Clock.End) : at;
+            var observation = seen[(int)layer.Demand.Source];
+            if (observation.Ready && observation.Destination.fullPathHash == layer.StateHash)
+            {
+                playback.RecordCursor(observation.Destination, time);
+                if (playback.Clock.Valid && playback.Cursor.HasValue) playback.EntryCoverage ??= layer.Demand.EntryCoverage;
+            }
+        }
+
+        internal bool Evaluating => clips.Evaluating;
+
+        // 事件回调触发硬重置时，延迟图与 IK 的释放直至当前求值退出。
+        internal void AfterEvaluation(System.Action change) => clips.AfterEvaluation(change);
 
         // 仅给实际下发播放指令的部位发布单次动作开始回执。
         internal void PublishOneShotStarts(in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission,
@@ -118,14 +224,27 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 推进各层到计划指定的状态并返回本帧实际开始的播放。
-        internal CharacterAnimationPlaybackEmission ApplyPlan(in CharacterAnimationPlaybackPlan plan, float deltaTime) =>
-            clips.Apply(plan, deltaTime);
+        internal CharacterAnimationPlaybackEmission ApplyPlan(in CharacterAnimationPlaybackPlan plan, in CharacterPlaybackFrameStep step) =>
+            clips.Apply(plan, step);
+
+        // 丢弃旧装配的基础声部与补播快照，动作层的回执和游标仍然有效。
+        internal void ResetGround()
+        {
+            clips.ResetGround();
+            lastEvaluated = lastEvaluated.WithoutGround();
+            seen[(int)CharacterAnimationSource.Baseline] = default;
+        }
 
         // 通知片段图释放旧动作声部，但保留已装配资源和图本身。
         internal void ClearMotionSources() => clips.ClearMotionSources();
 
         // 在各层权重和 IK 输入均就绪后求值本帧姿态。
-        internal void EvaluatePose() => clips.Evaluate();
+        internal void EvaluatePose(CharacterAnimationPlaybackPlan plan, CharacterPlaybackFrameStep step) => clips.Evaluate(() =>
+        {
+            budget.Commit(step);
+            lastEvaluated = plan;
+            ObserveSegment(plan, step.End);
+        });
 
 #if UNITY_EDITOR
         // 采集已求值片段的实际权重供编辑器发布。
@@ -134,6 +253,16 @@ namespace ThreeC.CharacterBehavior
 
         // 停用 Animator 时释放当前播放图，保留资源绑定供恢复使用。
         public void CloseGraph() => clips.Close();
+
+        // 角色硬重置同时清除旧角色的已消费时刻和分层快照。
+        internal void ResetPlayback()
+        {
+            clips.Close();
+            budget.Reset();
+            lastEvaluated = default;
+            System.Array.Clear(seen, 0, seen.Length);
+            System.Array.Clear(visibleWeights, 0, visibleWeights.Length);
+        }
 
         // 释放图并恢复由暂停暂存的 Animator 速度。
         public void Release()

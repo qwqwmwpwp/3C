@@ -41,10 +41,11 @@ namespace ThreeC.CharacterBehavior
             Interrupts = (CharacterBehaviorInterrupt[])interrupts?.Clone() ?? Array.Empty<CharacterBehaviorInterrupt>();
         }
 
-        // 在主线程创建本流程独占的行为，核对工厂产物与声明的精确位移能力。
-        internal CharacterBehaviorRule Create(bool snapshot)
+        // 在主线程创建独占行为，仅内置预测攻击可复用本次调度的查表数据，再统一核对运动能力。
+        internal CharacterBehaviorRule Create(bool snapshot, CharacterAttackLookup sharedAttack = null)
         {
-            var behavior = create(snapshot);
+            var behavior = snapshot && Id == CharacterBehaviorId.Attack && sharedAttack != null
+                ? new CharacterAttackBehavior(sharedAttack) : create(snapshot);
             if (behavior == null || (uint)motion > (uint)CharacterBehaviorMotionCapability.ExactInterval ||
                 (behavior is ICharacterIntervalMotion) != (motion == CharacterBehaviorMotionCapability.ExactInterval))
                 throw new ArgumentException($"行为 {Id} 的工厂或运动能力无效。");

@@ -105,7 +105,7 @@ namespace ThreeC.CharacterBehavior
             if (!old.TrySample(t, 0f, out expected)) return;
             if (Teleported(expected.Position, driver.transform.position)) { Reset(); return; }
             var actual = new CharacterForecastSample(driver.transform.position, Vector3.zero, Quaternion.identity,
-                behavior, driver.LatestFrame.CollisionFlags, driver.FrameInput.Gait);
+                behavior, driver.LatestFrame.CollisionFlags, driver.FrameInput.Gait, t);
             bool interrupted = behavior.InterruptedBehaviors != CharacterBehaviorId.None;
             if (!interrupted && SameBehavior(expected, actual)) return; // 已经预期的自然结束或恢复移动。
             if (!Mark(old, t, driver.CharacterTime)) return;
@@ -120,7 +120,7 @@ namespace ThreeC.CharacterBehavior
         // 移动系统在待机时也持有 Move；普通移动以实际许可为准。攻击阶段的自然推进不切换行为。
         private static bool SameBehavior(in CharacterForecastSample a, in CharacterForecastSample b) =>
             (a.Behaviors & ~CharacterBehaviorId.Move) == (b.Behaviors & ~CharacterBehaviorId.Move) &&
-            a.MoveApproved == b.MoveApproved && a.Attack == b.Attack && a.AttackInstance == b.AttackInstance &&
+            a.MoveApproved == b.MoveApproved && a.AttackStateId == b.AttackStateId && a.AttackInstance == b.AttackInstance &&
             a.ExternallyControlled == b.ExternallyControlled;
 
         private static bool FirstBehaviorChange(CharacterMovementForecast old, CharacterMovementForecast next,

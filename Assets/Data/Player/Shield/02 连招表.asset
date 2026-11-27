@@ -12,55 +12,91 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74bb49f4edc34fa7adbbcb41edc288db, type: 3}
   m_Name: "02 \u8FDE\u62DB\u8868"
   m_EditorClassIdentifier: 
-  Routes:
+  Data:
+    DashInterruptPhases: 5
     Openers:
-    - Button: 1
+    - Trigger: 0
+      Button: 1
       To: 1
       OpeningCondition: 0
-      BlendInEnd: 0.1
-      BlendOutStart: 0.8
-    - Button: 2
-      To: 3
-      OpeningCondition: 0
-      BlendInEnd: 0.02
-      BlendOutStart: 0.7
-    LightOneRoutes:
-      EarlySeconds: 0.15
-      LinkStart: 0.6
-      LinkEnd: 0.7
-      Links:
-      - Button: 1
-        To: 2
-        OpeningCondition: 0
-        BlendInEnd: 0.1
-        BlendOutStart: 0.8
-      - Button: 2
-        To: 3
-        OpeningCondition: 0
-        BlendInEnd: 0.1
-        BlendOutStart: 0.7
-      - Button: 3
-        To: 4
-        OpeningCondition: 0
-        BlendInEnd: 0.1
-        BlendOutStart: 0.8
-    LightTwoRoutes:
-      EarlySeconds: 1.3333334
-      LinkStart: 0.6
-      LinkEnd: 0.7
-      Links:
-      - Button: 2
-        To: 3
-        OpeningCondition: 0
-        BlendInEnd: 0.1
-        BlendOutStart: 0.8
-    HeavyRoutes:
-      EarlySeconds: 0
-      LinkStart: 0.05
-      LinkEnd: 0.7
-      Links: []
-    SkillTwoRoutes:
-      EarlySeconds: 0
       LinkStart: 0
       LinkEnd: 0
+      EarlySeconds: 0
+      Result: 0
+    - Trigger: 0
+      Button: 2
+      To: 3
+      OpeningCondition: 0
+      LinkStart: 0
+      LinkEnd: 0
+      EarlySeconds: 0
+      Result: 0
+    LightOne:
+      Clip: {fileID: -7391068719408809722, guid: f935b9f1d197ae64fa23d312530efa23,
+        type: 3}
+      Name: "\u8F7B\u51FB\u4E00"
+      Links:
+      - Trigger: 0
+        Button: 1
+        To: 2
+        OpeningCondition: 0
+        LinkStart: 0.6
+        LinkEnd: 0.7
+        EarlySeconds: 0.15
+        Result: 0
+      - Trigger: 0
+        Button: 2
+        To: 3
+        OpeningCondition: 0
+        LinkStart: 0.6
+        LinkEnd: 0.7
+        EarlySeconds: 0.15
+        Result: 0
+      - Trigger: 0
+        Button: 3
+        To: 4
+        OpeningCondition: 0
+        LinkStart: 0.6
+        LinkEnd: 0.7
+        EarlySeconds: 0.15
+        Result: 0
+      AnimationDurationSeconds: 1.5000001
+      EntryBlendSeconds: 0.36
+      ActiveSeconds: 0.51000005
+      RecoverySeconds: 0.63000005
+    LightTwo:
+      Clip: {fileID: -4705555360703855209, guid: 0c17a750330e6e04c9685ac96f8e0351,
+        type: 3}
+      Name: "\u8F7B\u51FB\u4E8C"
+      Links:
+      - Trigger: 0
+        Button: 2
+        To: 3
+        OpeningCondition: 0
+        LinkStart: 0.6
+        LinkEnd: 0.7
+        EarlySeconds: 1.3333334
+        Result: 0
+      AnimationDurationSeconds: 2.1000001
+      EntryBlendSeconds: 0.33600003
+      ActiveSeconds: 0.71400005
+      RecoverySeconds: 1.0500001
+    Heavy:
+      Clip: {fileID: -5630466525676994369, guid: 28c7be177e10c4c4cafe6fa3949cb723,
+        type: 3}
+      Name: "\u91CD\u51FB"
       Links: []
+      AnimationDurationSeconds: 1.5000001
+      EntryBlendSeconds: 0.2
+      ActiveSeconds: 1
+      RecoverySeconds: 0.3
+    SkillTwo:
+      Clip: {fileID: 5355005919754498082, guid: a09590c5da341a34aa5bf7a1bebe3175,
+        type: 3}
+      Name: "\u6280\u80FD\u4E8C"
+      Links: []
+      AnimationDurationSeconds: 2.1333334
+      EntryBlendSeconds: 0.512
+      ActiveSeconds: 0.8746667
+      RecoverySeconds: 0.74666667
+      CooldownSeconds: 3

@@ -12,16 +12,19 @@ namespace ThreeC.CharacterBehavior
         private readonly Animator animator;
         private readonly CharacterMotionDatabase database;
         private readonly Dictionary<int, CharacterClipState> states = new Dictionary<int, CharacterClipState>();
-        private readonly Dictionary<AnimationClip, CharacterClipCurves> curves = new Dictionary<AnimationClip, CharacterClipCurves>();
+        private readonly Dictionary<int, (CharacterClipCurves first, CharacterClipCurves second)> curves =
+            new Dictionary<int, (CharacterClipCurves, CharacterClipCurves)>();
         private readonly Dictionary<int, GroundPlaybackPace> paces = new Dictionary<int, GroundPlaybackPace>();
         private readonly Dictionary<int, CharacterMotionTrack> groundTracks = new Dictionary<int, CharacterMotionTrack>();
-        private readonly CharacterClipLibrary library;
-        private readonly string libraryError;
+        private CharacterClipLibrary library;
+        private string libraryError;
         private bool reuseMixers;
         private PlayableGraph graph;
         private AnimationPlayableOutput output;
         private CharacterBodyPlaybackGraph body;
         private float delta, clockScale = 1f;
+        internal bool Evaluating { get; private set; }
+        private Action afterEvaluation;
 
         internal bool Available => ValidateBinding() == null;
         internal bool ReuseMixers => reuseMixers;
@@ -44,6 +47,14 @@ namespace ThreeC.CharacterBehavior
         {
             this.animator = animator;
             database = config.PlaybackLibrary;
+            ConfigurePaces(config);
+        }
+
+        // 重建主库与搜索库播放索引，并一次绑定各状态来自本库的双素材曲线。
+        private void ConfigureStates(CharacterAnimationConfiguration config)
+        {
+            states.Clear();
+            curves.Clear();
             library = database ? database.Playback : null;
             libraryError = database ? database.ValidatePlayback() : "动画配置缺少由基础动画数据组烘焙的播放库。";
             if (libraryError != null) return;
@@ -64,14 +75,40 @@ namespace ThreeC.CharacterBehavior
                 }
                 states.Add(hash, state);
             }
-            foreach (var clip in library.Clips)
-                if (clip != null && clip.Clip) curves[clip.Clip] = clip;
-            ConfigurePaces(config);
+            BindCurves(library, path => Animator.StringToHash(path));
+            var sources = config.SearchLibraries;
+            if (sources == null) return;
+            for (int i = 0; i < sources.Databases.Length; i++)
+            {
+                var db = sources.Databases[i];
+                if (sources.Issues[i] != null || !db || db == database) continue;
+                foreach (var state in db.Playback.States)
+                    if (state != null && state.Clip && !string.IsNullOrWhiteSpace(state.Path) && sources.TryKey(i, state.Path, out int key))
+                        states.Add(key, state);
+                BindCurves(db.Playback, path => sources.TryKey(i, path, out int key) ? key : 0);
+            }
+        }
+
+        // 同一素材在不同库内允许具有不同的曲线版本，按实际播放状态缓存两路来源。
+        private void BindCurves(CharacterClipLibrary source, Func<string, int> keyFor)
+        {
+            var lookup = new Dictionary<AnimationClip, CharacterClipCurves>();
+            foreach (var clip in source.Clips)
+                if (clip != null && clip.Clip) lookup[clip.Clip] = clip;
+            foreach (var state in source.States)
+            {
+                if (state == null || !state.Clip || string.IsNullOrWhiteSpace(state.Path)) continue;
+                lookup.TryGetValue(state.Clip, out var first);
+                CharacterClipCurves second = null;
+                if (state.Blend.Second) lookup.TryGetValue(state.Blend.Second, out second);
+                curves[keyFor(state.Path)] = (first, second);
+            }
         }
 
         // 根据步态配置和烘焙采样确定用于步频和制动调速的状态。
         internal void ConfigurePaces(CharacterAnimationConfiguration config)
         {
+            ConfigureStates(config);
             reuseMixers = config.ReuseActionMixers;
             paces.Clear();
             groundTracks.Clear();
@@ -103,6 +140,19 @@ namespace ThreeC.CharacterBehavior
                     if (track.ReadyForSearch) groundTracks[hash] = track;
                 }
             }
+
+            if (config.SearchLibraries != null)
+                foreach (var entry in config.SearchLibraries.Tracks)
+                {
+                    var track = entry.Source;
+                    float nominal = track.IsLoop && !track.FixedCycleSpeed && track.ScalesWithSpeed ? track.ReferenceSpeed : 0f;
+                    foreach (int hash in entry.Hashes)
+                    {
+                        if (!MatchesTrack(hash, track)) continue;
+                        paces[hash] = new GroundPlaybackPace(track.Use, track.Gait, nominal, states[hash].Speed, config.PaceLimits);
+                        groundTracks[hash] = entry.Frozen;
+                    }
+                }
 
             // 用实际播放状态的基础倍率建立可在规划线程只读的逻辑时钟规则。
             void SetPace(string path, GroundMotionUse use, GroundTrackGait gait, float nominal)
@@ -147,6 +197,10 @@ namespace ThreeC.CharacterBehavior
         // 状态路径只寻址片段，身体范围由动作申请决定。
         public bool HasState(int hash) => states.ContainsKey(hash);
 
+        // 在主线程冻结可播放资源的素材身份与单片段属性。
+        internal (int id, bool single) OneShotIdentity(int hash) =>
+            (states[hash].Clip.GetInstanceID(), !states[hash].Blend.Second);
+
         public bool CanPlayOnce(int hash)
         {
             var clip = StateClip(hash);
@@ -175,6 +229,9 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 重装地面资源时仅释放基础步态层，保持上身及动作接管的素材时钟。
+        internal void ResetGround() => body?.Source(CharacterAnimationSource.Baseline).Release(true);
+
         // 丢弃瞬移和外控前的片段与时间差，后续从新基线建声部。
         internal void ClearMotionSources()
         {
@@ -193,23 +250,23 @@ namespace ThreeC.CharacterBehavior
             delta = 0f;
         }
 
-        // 将最终 IK 接入片段图，并接管 Animator 的姿态输出。
-        public void ConnectIk(AnimationScriptPlayable job)
+        // 将姿态修正作业接入片段图，并接管 Animator 的姿态输出。
+        public void ConnectPose(AnimationScriptPlayable job)
         {
             job.SetInputCount(1);
             output.SetSourcePlayable(Playable.Null);
             if (!graph.Connect(body.Root, 0, job, 0))
             {
                 output.SetSourcePlayable(body.Root);
-                throw new InvalidOperationException("无法将分层播放输出接入最终 IK。");
+                throw new InvalidOperationException("无法将分层播放输出接入姿态修正作业。");
             }
             job.SetInputWeight(0, 1f);
             job.SetProcessInputs(true);
             output.SetSourcePlayable(job);
         }
 
-        // 移除 IK 节点并恢复由身体混合器直接输出姿势。
-        public void DisconnectIk(AnimationScriptPlayable job)
+        // 移除姿态修正节点并恢复由身体混合器直接输出姿势。
+        public void DisconnectPose(AnimationScriptPlayable job)
         {
             if (!job.IsValid() || !graph.IsValid()) return;
             bool connected = output.GetSourcePlayable().Equals((Playable)job);
@@ -254,11 +311,14 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 推进各部位混合及全身动作的接管，记录实际创建的播放。
-        public CharacterAnimationPlaybackEmission Apply(in CharacterAnimationPlaybackPlan plan, float dt)
+        public CharacterAnimationPlaybackEmission Apply(in CharacterAnimationPlaybackPlan plan, in CharacterPlaybackFrameStep step,
+            float[] restoreWeights = null)
         {
+            bool rebuilding = body == null;
             Open();
-            delta = LayerBlendDelta(dt);
-            clockScale = dt > 0f ? delta / dt : 0f;
+            if (rebuilding && restoreWeights != null) body?.RestoreWeights(restoreWeights);
+            delta = step.GraphDelta;
+            clockScale = step.FrameDelta > 0f ? delta / step.FrameDelta : 0f;
             return body?.Apply(this, plan, delta) ?? default;
         }
 
@@ -266,30 +326,28 @@ namespace ThreeC.CharacterBehavior
         internal bool Advance(CharacterClipMixer mixer, in CharacterAnimationLayerPlan plan,
             in CharacterAnimationPlaybackPlan frame, float dt, bool created = false)
         {
-            mixer.ClockPhase = plan.Demand.Timing.ClockPhase;
             bool played = false;
             if (plan.HasState)
             {
                 mixer.ExitProfile = plan.ExitProfile;
-                bool entered = plan.Demand.HasHandoff && plan.Demand.Timing.SamplePhase >= plan.Demand.Timing.Handoff.FullFrom;
+                bool entered = plan.Demand.Timing.Entered;
                 if (plan.Command != CharacterAnimationPlaybackCommand.Keep || created || mixer.Empty)
                 {
                     var state = states[plan.StateHash];
                     var clip = StateClip(plan.StateHash);
                     float duration = !entered && plan.Command == CharacterAnimationPlaybackCommand.CrossFade ?
                         plan.Blend.InSeconds(mixer.BlendedLength()) : 0f;
-                    curves.TryGetValue(clip, out var permissions);
-                    CharacterClipCurves secondary = null;
-                    if (state.Blend.Second) curves.TryGetValue(state.Blend.Second, out secondary);
+                    curves.TryGetValue(plan.StateHash, out var permissions);
                     mixer.EntryProfile = plan.EntryProfile;
-                    mixer.Enter(state, clip, permissions, secondary, plan.StateHash,
-                        plan.Start.InSeconds(state.Blend.Second ? state.Blend.Seconds : clip.length), duration, plan.ResumeLoop, plan.Demand.Timing.Resumed, plan.Demand);
+                    mixer.Enter(state, clip, permissions.first, permissions.second, plan.StateHash,
+                        plan.RestoredSeconds ?? plan.Start.InSeconds(state.Blend.Second ? state.Blend.Seconds : clip.length),
+                        duration, plan.ResumeLoop, plan.RestoredSeconds.HasValue || plan.Demand.Timing.Resumed, plan.Demand);
                     played = true;
                 }
                 else if (entered) mixer.CompleteTransition();
                 mixer.SetInertiaSuppression(plan.Demand.Rule.InertiaSuppression);
             }
-            mixer.Advance(dt, this, frame);
+            mixer.Advance(dt, this, frame, plan.Demand.Timing);
             return played;
         }
 
@@ -305,10 +363,37 @@ namespace ThreeC.CharacterBehavior
             return body?.Permission(part, curve, delta, action, instance) ?? default;
         }
 
-        public void Evaluate()
+        // 在主线程确认已显示的状态仍然对应同一实际素材。
+        internal bool MatchesMaterial(in CharacterClipProgress seen) => states.TryGetValue(seen.fullPathHash, out var state) &&
+            state.Clip && state.Clip.GetInstanceID() == seen.ClipId;
+
+        // 图求值发生重入时只登记拆卸操作，保持当前节点和原生缓冲有效。
+        internal void AfterEvaluation(Action change)
+        {
+            if (Evaluating) afterEvaluation += change;
+            else change();
+        }
+
+        // 退出原生求值后依次处理事件触发的图生命周期操作。
+        private void FinishEvaluation()
+        {
+            Evaluating = false;
+            var changes = afterEvaluation;
+            afterEvaluation = null;
+            changes?.Invoke();
+        }
+
+        // 在最终姿势与 IK 全部就绪后进行本帧正常求值。
+        public void Evaluate(Action record = null)
         {
             if (!graph.IsValid()) return;
-            graph.Evaluate(delta);
+            Evaluating = true;
+            try
+            {
+                graph.Evaluate(delta);
+                record?.Invoke(); // 延后重置拆图前，先记录当前区间已经实际采过的事件位置。
+            }
+            finally { FinishEvaluation(); }
         }
     }
 }

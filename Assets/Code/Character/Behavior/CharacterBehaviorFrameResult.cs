@@ -19,6 +19,7 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterBehaviorStep step;
 
         public long FrameNumber { get; }
+        internal double StepStartTime => step.StartSeconds;
         internal bool DurationCommitted => step.DurationCommitted;
         public Vector2 Displacement { get; }
         public CharacterDisplacementSource DisplacementSource { get; }
@@ -158,7 +159,6 @@ namespace ThreeC.CharacterBehavior
     /// <summary>位移提供者本步的固定时钟、转向和制动指令，非位移行为使用默认值。</summary>
     public struct CharacterActionMotion
     {
-        internal bool OpeningStep; // 本步前摇位移已积分，马达直接执行并保留物理碰撞。
         /// <summary>立即施加本步动作速度，动作结束时只清理动作贡献的余速。</summary>
         public bool UsesBurstVelocity;
         /// <summary>动作开始时立即转向 Facing，优先于普通转向。</summary>
@@ -166,7 +166,6 @@ namespace ThreeC.CharacterBehavior
         public float? StartPhase;
         public float EndPhase, Duration;
         public float MaxTurn, Braking;
-        internal float AlignmentYawAtStart, AlignmentYawDelta; // 世界竖轴角度，单位为度，独立于作者的原始转向。
         public Vector2 Facing;
         public bool ControlsFacing, RecoversMovement;
     }

@@ -75,7 +75,6 @@ namespace ThreeC.CharacterBehavior
         {
             ref readonly var old = ref basis.Observation;
             if (old.Generation != current.Generation) return ForecastRefreshReason.SimulationBoundary;
-            if (old.AlignmentRevision != current.AlignmentRevision) return ForecastRefreshReason.ExternalState;
             if (old.Origin.DynamicContact != current.Origin.DynamicContact) return ForecastRefreshReason.DynamicContact;
             if (basis.ControlReturnsAt != controlReturnsAt || basis.ForcedBraking != forcedBraking)
                 return ForecastRefreshReason.Knockback;
@@ -136,8 +135,8 @@ namespace ThreeC.CharacterBehavior
         {
             var attack = behavior.Attack;
             return sample.Behaviors == behavior.ActiveBehaviors && sample.MoveApproved == behavior.MoveApproved &&
-                sample.Attack == attack.Move && sample.AttackInstance == attack.InstanceId && sample.AttackPhase == attack.Phase &&
-                sample.BufferedMove == attack.BufferedMove && sample.LinkAtSeconds == attack.LinkAtSeconds &&
+                sample.AttackStateId == attack.StateId && sample.AttackInstance == attack.InstanceId && sample.AttackPhase == attack.Phase &&
+                sample.BufferedStateId == attack.BufferedStateId && sample.LinkAtSeconds == attack.LinkAtSeconds &&
                 sample.Stamina == behavior.StaminaRemaining && (!behavior.DashActive || sample.DashDirection == behavior.DashDirection);
         }
 

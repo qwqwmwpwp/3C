@@ -1,0 +1,242 @@
+using UnityEngine;
+
+namespace ThreeC.CharacterBehavior
+{
+    // 维护一条瞬发映射的行为时钟、招式身份、播放句柄与重绑游标。
+    internal sealed class CharacterPulseAnimationState
+    {
+        private readonly CharacterBehaviorAnimationBinding binding;
+        private readonly CharacterBehaviorAnimationBindings animations;
+        private CharacterActionPlayback entry;
+        private CharacterActionHandoff handoff;
+        private float? moveStart, firstPose;
+        private float lastPose, duration;
+        private bool observedActive, timedActive, resumeTimed, resumedEntry;
+        private long attackInstance, entryAttackInstance;
+        private float attackPhase, attackEntryPhase;
+
+        // 将瞬发状态绑定到冻结的配置和全局有序提交队列。
+        internal CharacterPulseAnimationState(CharacterBehaviorAnimationBinding binding, CharacterBehaviorAnimationBindings animations)
+        {
+            this.binding = binding;
+            this.animations = animations;
+        }
+
+        // 只有行为和播放句柄都属于当前招式时才接受其移动交还。
+        internal bool OwnsAttack(long instance, CharacterActionPlayback playback) =>
+            attackInstance == instance && entryAttackInstance == instance && entry == playback;
+
+        // 按单步先结束后开始的次序冻结播放边沿，并维护本次行为时钟。
+        internal void Observe(in CharacterBehaviorFrameResult step, float deltaTime, bool active, bool began, bool reconnect, bool seed)
+        {
+            var id = binding.Rule.BehaviorId;
+            observedActive = active;
+            // 同一步可能先释放旧许可、再批准新实例；自然结束保留开始事件。
+            if (!seed && (step.InterruptedBehaviors & id) != 0)
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Interrupted, end: CharacterPlaybackEndSource.BehaviorInterrupted);
+            else if (!seed && (step.WithdrawnBehaviors & id) != 0)
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Withdrawn, end: CharacterPlaybackEndSource.BehaviorWithdrawn);
+            if (id == CharacterBehaviorId.Attack && binding.Rule.AttackStateId != 0)
+            {
+                ObserveAttack(step, active, reconnect, seed);
+                return;
+            }
+            if (binding.HandoffSettings?.OverridePhases == true)
+            {
+                ObserveConfigured(step, deltaTime, active, began, reconnect, seed);
+                return;
+            }
+            bool previouslyTimed = timedActive;
+            if (began) firstPose = null;
+            if (step.DisplacementProvider == id)
+            {
+                firstPose = step.ActionMotion.StartPhase;
+                lastPose = step.ActionMotion.EndPhase;
+                duration = step.ActionMotion.Duration;
+            }
+            timedActive = active && step.DisplacementProvider == id && firstPose.HasValue;
+            if ((!seed && began) || (reconnect && timedActive))
+            {
+                resumeTimed = false;
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Pending, reconnect && !began || seed
+                    ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
+            }
+            if (!seed && !active && (step.EndedBehaviors & id) != 0 &&
+                (previouslyTimed || firstPose.HasValue))
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
+        }
+
+        // 招式起止相位来自当帧行为时间，位移权限和动画淡入都不会重置时钟。
+        private void ObserveAttack(in CharacterBehaviorFrameResult step, bool active, bool reconnect, bool seed)
+        {
+            bool matches = step.Attack.StateId == binding.Rule.AttackStateId;
+            long instance = matches && active ? step.Attack.InstanceId : 0;
+            bool newInstance = instance != 0 && attackInstance != instance;
+            if (newInstance)
+            {
+                attackPhase = 0f;
+                attackEntryPhase = step.Attack.StartProgress;
+            }
+            attackInstance = instance;
+            timedActive = instance != 0;
+            if (!matches)
+            {
+                if (step.AttackMoveStarted)
+                {
+                    resumeTimed = false;
+                    if (!seed) animations.QueueEdge(binding, CharacterActionPlaybackStatus.Withdrawn);
+                }
+                return;
+            }
+
+            firstPose = step.Attack.StartProgress;
+            lastPose = step.Attack.Progress;
+            duration = step.Attack.Duration;
+            SetHandoff(step.Attack.Handoff, step.MoveApproved, reconnect || newInstance);
+            if (!active)
+            {
+                resumeTimed = false;
+                if (!seed && step.AttackMoveStarted) animations.QueueEdge(binding, CharacterActionPlaybackStatus.Pending);
+                if (!seed) animations.QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
+            }
+            else if (reconnect && !step.AttackMoveStarted)
+            {
+                resumeTimed = true;
+            }
+            else if (newInstance || step.AttackMoveStarted)
+            {
+                resumeTimed = false;
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Pending, seed
+                    ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
+            }
+        }
+
+        // 用当帧行为时钟或配置的时长推进单次动作。
+        private void ObserveConfigured(in CharacterBehaviorFrameResult step, float deltaTime, bool active,
+            bool began, bool reconnect, bool seed)
+        {
+            bool entering = began || reconnect;
+            bool wasActive = timedActive;
+            timedActive = active;
+            if (!active && !began && !wasActive) return;
+            bool hasClock = binding.Rule.BehaviorId != CharacterBehaviorId.Move &&
+                step.DisplacementProvider == binding.Rule.BehaviorId && step.ActionMotion.StartPhase.HasValue &&
+                step.ActionMotion.Duration > 0f;
+            if (hasClock)
+            {
+                firstPose = step.ActionMotion.StartPhase;
+                lastPose = step.ActionMotion.EndPhase;
+                duration = step.ActionMotion.Duration;
+            }
+            else
+            {
+                if (entering || !wasActive) duration = binding.HandoffSettings.Duration;
+                float age = step.GrantAgeAtStepStart(binding.Rule.BehaviorId);
+                firstPose = Mathf.Clamp01(age / duration);
+                lastPose = Mathf.Clamp01((age + deltaTime) / duration);
+            }
+            SetHandoff(default, step.MoveApproved, entering);
+            if (entering && (active || !seed && began))
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Pending, (seed || reconnect && !began)
+                    ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
+            if (!active && !seed && (step.InterruptedBehaviors & binding.Rule.BehaviorId) == 0 &&
+                (step.WithdrawnBehaviors & binding.Rule.BehaviorId) == 0)
+                animations.QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
+        }
+
+        // 只从确实开始的同一招式保留游标，重绑时跨过已发事件。
+        private void RememberAttackCursor()
+        {
+            if (attackInstance == 0 || entryAttackInstance != attackInstance || entry?.HasStarted != true) return;
+            attackPhase = Mathf.Max(attackPhase, Mathf.Clamp01(entry.LastObservedPhase));
+            if (attackPhase == 0f) attackPhase = 0.000001f; // 首帧事件已交付，恢复点越过零时刻。
+        }
+
+        // 将本次行为相位和移动许可转换成动作交还权重。
+        private void SetHandoff(CharacterActionHandoff source, bool moveApproved, bool entering)
+        {
+            var settings = binding.HandoffSettings;
+            if (entering) moveStart = null;
+            if (!source.UsesRouteBlend && settings?.OverridePhases == true)
+            {
+                float releaseFrom = source.Valid ? Mathf.Max(source.ReleaseFrom, settings.ReleaseFrom) : settings.ReleaseFrom;
+                if (moveApproved && !moveStart.HasValue && lastPose >= releaseFrom)
+                    moveStart = Mathf.Max(firstPose.GetValueOrDefault(), releaseFrom);
+                source = settings.Resolve(duration, source, moveStart);
+            }
+            handoff = source;
+        }
+
+        // 收到开始边沿时使用入队时的招式身份，真实开始优先于同帧续播。
+        internal void Start(CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source)
+        {
+            resumeTimed = false;
+            resumedEntry = source == CharacterPlaybackStartSource.Rebind && origin.Move != 0;
+            entryAttackInstance = origin.Move;
+            animations.TryPlayEntry(binding, origin, source, out entry);
+        }
+
+        // 按当前时钟续播或向合成器提交同一招式的采样范围。
+        internal void Submit()
+        {
+            if (resumeTimed && observedActive) Start(binding.Origin, CharacterPlaybackStartSource.Rebind);
+            resumeTimed = false;
+            if (entry != null && firstPose.HasValue && (attackInstance != 0 || duration > 0f))
+            {
+                float phase = Mathf.Clamp01(lastPose);
+                if (attackInstance != 0) attackPhase = Mathf.Max(attackPhase, phase);
+                float? start = resumedEntry ? attackPhase : attackInstance != 0 ? attackEntryPhase : firstPose;
+                animations.Composer.Sample(entry, start, phase, handoff,
+                    !handoff.UsesRouteBlend && binding.HandoffSettings?.StartAtZero == true, resumedEntry);
+            }
+        }
+
+        // 在仲裁器重绑前保存已发事件的游标，终态句柄不再续播。
+        internal void Rebind()
+        {
+            if (observedActive && timedActive && (entry == null || entry.ObservedStatus == CharacterActionPlaybackStatus.Pending ||
+                entry.ObservedStatus == CharacterActionPlaybackStatus.Started))
+            {
+                RememberAttackCursor();
+                entry = null;
+                resumeTimed = true;
+            }
+        }
+
+        // 暂停时撤回旧句柄，并只为尚在计时的行为保留恢复意图。
+        internal void Suspend(CharacterPlaybackEndSource source)
+        {
+            RememberAttackCursor();
+            End(CharacterActionPlaybackStatus.Interrupted, source);
+            resumeTimed = timedActive;
+        }
+
+        // 撤回时间窗已过且尚未获部位的播放请求。
+        internal void ReleaseExpired()
+        {
+            if (firstPose.HasValue && !timedActive && entry?.Status == CharacterActionPlaybackStatus.Pending)
+                End(CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.BehaviorWindowEnded);
+        }
+
+        // 结束当前句柄并解除它与招式的绑定，保留已提交回执。
+        internal void End(CharacterActionPlaybackStatus reason, CharacterPlaybackEndSource source)
+        {
+            if (entry != null) animations.Composer.End(entry.Key, entry.InstanceId, reason, source);
+            entry = null;
+            entryAttackInstance = 0;
+            resumedEntry = false;
+        }
+
+        // 在模拟代次切换后丢弃旧招式的时间窗与恢复意图。
+        internal void ResetObservation()
+        {
+            observedActive = false;
+            attackInstance = entryAttackInstance = 0;
+            resumedEntry = false;
+            firstPose = null;
+            handoff = default;
+            moveStart = null;
+            resumeTimed = timedActive = false;
+        }
+    }
+}

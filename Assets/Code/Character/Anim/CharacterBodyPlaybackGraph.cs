@@ -45,6 +45,9 @@ namespace ThreeC.CharacterBehavior
                 Node.SetInputWeight(0, 1f);
             }
 
+            // 图重建时从上次实际输出的层覆盖继续后续权重过渡。
+            internal void RestoreWeight(float weight) => Weight = previousWeight = weight;
+
             private bool Writes(AvatarMaskBodyPart part) => !mask || mask.GetHumanoidBodyPartActive(part);
 
             // 记录推进前的层覆盖，为当前求值计算覆盖变化与卸层边沿。
@@ -165,6 +168,14 @@ namespace ThreeC.CharacterBehavior
             handoff = new Blend(graph, upper.Node, null, smoothWeight: true); // 无共享动作时仅透传已合成的两部位姿势。
         }
 
+        // 恢复三处可见覆盖，帧间重绑仍由原蒙版和全身混合输出。
+        internal void RestoreWeights(float[] weights)
+        {
+            lower.RestoreWeight(weights[(int)CharacterAnimationSource.LowerBody]);
+            upper.RestoreWeight(weights[(int)CharacterAnimationSource.UpperBody]);
+            handoff.RestoreWeight(weights[(int)CharacterAnimationSource.FullBodyOverlay]);
+        }
+
         private static void Connect(PlayableGraph graph, Playable input, Playable output, int port)
         {
             if (!graph.Connect(input, 0, output, port)) throw new InvalidOperationException("无法连接角色身体姿势源。");
@@ -178,12 +189,10 @@ namespace ThreeC.CharacterBehavior
             float previousCoverage = handoff.Weight;
             handoff.AdvanceWeight(takeover, dt);
             float nextCoverage = handoff.Weight;
-            bool entering = takeover.HasState && (timing.Handoff.Valid && timing.SamplePhase < timing.Handoff.FullFrom ||
+            bool entering = takeover.HasState && (timing.HasWeight && !timing.Entered ||
                 takeover.LayerBlendSeconds > 0f && nextCoverage > previousCoverage);
             bool covered = takeover.HasState && nextCoverage >= 1f;
-            float untilCovered = timing.Handoff.Valid
-                ? Mathf.Max(0f, timing.Handoff.FullFrom - timing.SamplePhase.GetValueOrDefault()) * timing.Handoff.Duration
-                : 0f;
+            float untilCovered = timing.RemainingEntry;
             lower.AdvanceWeight(frame.LowerBody, dt, entering, covered);
             upper.AdvanceWeight(frame.UpperBody, dt, entering, covered, untilCovered);
             bool groundPlayed = clips.Advance(baseline, frame.FullBody, frame, dt);

@@ -73,10 +73,26 @@ namespace ThreeC.CharacterBehavior
         private readonly Dictionary<string, long> latestInstances = new Dictionary<string, long>(); // 每个语义键的最大实例号。
         private readonly List<string> rankedKeys = new List<string>(); // 仅在动作实例新增或退出时更新顺序。
         private long submissionOrder;
+        private readonly CharacterPlaybackArbitration ownership = new CharacterPlaybackArbitration();
+        private double? evaluatingAt;
         private CharacterAnimationComposition previousSelection;
 
         private readonly List<CharacterActionPlayback> receipts = new List<CharacterActionPlayback>();
         private bool planning;
+        private double presentationTime;
+        private readonly List<CharacterActionPlayback> retiring = new List<CharacterActionPlayback>();
+        internal IReadOnlyList<CharacterActionPlayback> Retiring => retiring;
+
+        internal double Time => presentationTime;
+
+        // 更新规划与显式请求共用的角色时刻。
+        internal void SetTime(double now) => presentationTime = evaluatingAt ?? now;
+
+        // 动画事件中的请求沿用当前原生求值区间的截止时刻。
+        internal void BeginSegment(double at) { evaluatingAt = at; presentationTime = at; }
+
+        // 回到本次提交的角色帧末，各请求仍保留各自生效时刻。
+        internal void EndSegment(double now) { evaluatingAt = null; presentationTime = now; }
 
         internal void BeginPlan() => planning = true;
         internal void FinishPlan() => planning = false;
@@ -140,11 +156,12 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 关联当前执行并申请一个新的单次播放，续播始终产生独立句柄。
-        public CharacterActionPlayback PlayOnce(string key, float weight, CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source)
+        public CharacterActionPlayback PlayOnce(string key, float weight, CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source,
+            CharacterPlaybackClock clock = default, int clipId = 0)
         {
             long id = NextInstance(key);
             if (id == 0) return null;
-            var playback = new CharacterActionPlayback(key, id, origin, source);
+            var playback = new CharacterActionPlayback(key, id, origin, source, clock, clipId);
             if (!Submit(new CharacterAnimationRequest(key, id, weight), playback)) return null;
 #if UNITY_EDITOR
             if (source == CharacterPlaybackStartSource.Rebind || source == CharacterPlaybackStartSource.ArbitrationRecovery)
@@ -172,7 +189,8 @@ namespace ThreeC.CharacterBehavior
                     active[key] = CreateDemand(request, rule, current.SubmissionOrder, current.Playback).WithTiming(current.Timing);
                     return true;
                 }
-                End(key, latest, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ArbitrationLost);
+                var at = playback != null && playback.Clock.Valid ? playback.Clock.Start : presentationTime;
+                EndAt(key, latest, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ArbitrationLost, at);
             }
 
             latestInstances[key] = request.InstanceId;
@@ -181,16 +199,22 @@ namespace ThreeC.CharacterBehavior
             while (index > 0 && demand.Precedes(active[rankedKeys[index - 1]])) index--;
             rankedKeys.Insert(index, key);
             active[key] = demand;
+            ownership.Add(demand, playback != null && playback.Clock.Valid ? playback.Clock.Start : presentationTime);
             return true;
         }
 
+        // 保留已下发的素材入点，提交普通动作本帧的权重和素材采样相位。
         public void Sample(CharacterActionPlayback playback, float? firstPhase, float phase, CharacterActionHandoff handoff,
             bool startAtZero, bool resumed)
         {
             if (!active.TryGetValue(playback.Key, out var demand) || demand.Playback != playback) return;
-            var start = playback.HasStarted ? demand.Timing.StartPhase : firstPhase;
+            var start = playback.HasStarted ? demand.Timing.StartClipPhase : firstPhase;
             active[playback.Key] = demand.WithTiming(new CharacterActionTiming(start, phase, handoff, startAtZero, resumed));
         }
+
+        // 为普通外部定相位动作读取本帧已提交的目标，核对句柄以免跨实例插值。
+        internal CharacterActionTiming CurrentTiming(CharacterActionPlayback playback) =>
+            active.TryGetValue(playback.Key, out var demand) && demand.Playback == playback ? demand.Timing : default;
 
         // 按语义键撤销调用者指定的实例。
         public bool Withdraw(string key, long instanceId) =>
@@ -201,12 +225,23 @@ namespace ThreeC.CharacterBehavior
             Withdraw(playback.Key, playback.InstanceId);
 
         // 先从仲裁集合移出指定实例，再暂存或提交其唯一终态。
-        public bool End(string key, long instanceId, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source)
+        public bool End(string key, long instanceId, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source) =>
+            EndAt(key, instanceId, status, source, presentationTime);
+
+        // 将已生效的撤销与仲裁移除分开，已开始的计时实例仍须实际求值最后合法区间。
+        private bool EndAt(string key, long instanceId, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source, double at)
         {
             if (!active.TryGetValue(key, out var demand) || demand.InstanceId != instanceId) return false;
             rankedKeys.Remove(key);
             active.Remove(key);
+            ownership.Close(demand, at);
             var playback = demand.Playback;
+            if (playback != null && playback.Clock.Valid && status != CharacterActionPlaybackStatus.Completed)
+            {
+                playback.Cancel(at, status, source);
+                retiring.Add(playback);
+                return true;
+            }
             if (playback != null && playback.QueueEnd(status, source))
             {
                 if (planning) receipts.Add(playback);
@@ -215,6 +250,59 @@ namespace ThreeC.CharacterBehavior
             return true;
         }
 
+        // 在主线程实际提交前摘下到期实例；未获选者撤回，已获选者进入尾段结算。
+        internal void RetireDue(double now, CharacterAnimationRequest behavior)
+        {
+            presentationTime = now;
+            var baseline = Resolve(behavior);
+            RetireDisplaced(previousSelection.UpperOwner, baseline, now);
+            if (previousSelection.LowerOwner.Playback != previousSelection.UpperOwner.Playback)
+                RetireDisplaced(previousSelection.LowerOwner, baseline, now);
+            for (int i = rankedKeys.Count - 1; i >= 0; i--)
+            {
+                var demand = active[rankedKeys[i]];
+                var playback = demand.Playback;
+                if (playback == null || !playback.Clock.Valid || playback.Clock.End > now) continue;
+                rankedKeys.RemoveAt(i);
+                active.Remove(demand.Key);
+                ownership.Close(demand, playback.Clock.End);
+                retiring.Add(playback);
+            }
+        }
+
+        // 核对实际素材结果后发布终态，无法再次取得素材的实例按资源失效退出。
+        internal void FinishRetired(CharacterActionPlayback playback, bool available)
+        {
+            if (!retiring.Remove(playback)) return;
+            bool finished = playback.HasStarted && playback.Clock.NaturalEnd <= playback.Clock.StopAt &&
+                playback.Cursor?.normalizedTime >= 1f;
+            var status = finished ? CharacterActionPlaybackStatus.Completed : !playback.HasStarted ? CharacterActionPlaybackStatus.Withdrawn :
+                !available || playback.StopSource == default ? CharacterActionPlaybackStatus.Interrupted : playback.StopStatus;
+            var reason = finished ? CharacterPlaybackEndSource.ClipFinished : !available ? CharacterPlaybackEndSource.ResourceUnavailable :
+                playback.StopSource == default ? CharacterPlaybackEndSource.BehaviorWindowEnded : playback.StopSource;
+            if (playback.QueueEnd(status, reason)) PublishEnd(playback);
+        }
+
+        // 同素材图重建保留逻辑句柄；映射消失或真正换片段时终结旧请求。
+        internal void RebindPlayback(CharacterAnimationResourceCatalog resources)
+        {
+            RetireChangedClips(resources);
+        }
+
+        // 已激活的请求保留冻结参数，只有实际绑定到不同素材时才撤回。
+        internal void RetireChangedClips(CharacterAnimationResourceCatalog resources)
+        {
+            for (int i = rankedKeys.Count - 1; i >= 0; i--)
+            {
+                var demand = active[rankedKeys[i]];
+                var playback = demand.Playback;
+                if (playback == null) continue;
+                if (playback.ClipId != 0 && resources.OneShotClipId(demand.Key, playback.Clock.Valid) == playback.ClipId) continue;
+                End(demand.Key, demand.InstanceId, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ResourceUnavailable);
+            }
+        }
+
+        // 以绝对角色时刻对尚在窗口内的请求做纯值试选；再次选择不推进时钟。
         public CharacterAnimationComposition Preview(CharacterAnimationRequest behavior)
         {
             var baseline = Resolve(behavior);
@@ -223,12 +311,35 @@ namespace ThreeC.CharacterBehavior
             {
                 if (!hasBinding(key)) continue;
                 var demand = active[key];
+                if (demand.Playback != null && demand.Playback.Clock.Valid)
+                {
+                    var clock = demand.Playback.Clock;
+                    if (presentationTime < clock.Start || presentationTime >= clock.End) continue;
+                    demand = demand.WithTiming(new CharacterActionTiming(clock.Sample(presentationTime), demand.Playback.Cursor, demand.Playback.InitialPhase));
+                }
                 if (claims.TryClaim(demand, baseline) && baseline.Key == CharacterAnimationIntentConverter.DashKey)
                     baseline = Resolve(new CharacterAnimationRequest(CharacterAnimationIntentConverter.IdleKey, baseline.InstanceId));
             }
             return claims.Compose(baseline);
         }
 
+        // 以观察到的角色时刻登记基础动作的优先级切换。
+        internal void ChangeBaseline(CharacterAnimationRequest behavior, double at) => ownership.ChangeBaseline(Resolve(behavior), at);
+
+        // 在摘下到期请求之前重放真实部位冲突，已经离开活动集合的句柄也可缩短尾段。
+        private void RetireDisplaced(in CharacterAnimationDemand previous, in CharacterAnimationDemand baseline, double now)
+        {
+            var handle = previous.Playback;
+            if (handle == null || !handle.Clock.Valid || !handle.HasStarted || handle.EndSource != default) return;
+            var idle = Resolve(new CharacterAnimationRequest(CharacterAnimationIntentConverter.IdleKey, baseline.InstanceId));
+            var at = ownership.FirstLoss(previous, previousSelection.FullBody, baseline, idle, now, hasBinding);
+            if (!at.HasValue) return;
+            if (!EndAt(previous.Key, previous.InstanceId, CharacterActionPlaybackStatus.Interrupted,
+                CharacterPlaybackEndSource.ArbitrationLost, at.Value))
+                handle.Cancel(at.Value, CharacterActionPlaybackStatus.Interrupted, CharacterPlaybackEndSource.ArbitrationLost);
+        }
+
+        // 提交最终获选组合，并按普通动作原策略结束旧许可。
         public void Commit(in CharacterAnimationComposition selected)
         {
             // 只比较已提交的选择，忽略预览时的短暂压制。
@@ -237,6 +348,7 @@ namespace ThreeC.CharacterBehavior
             CancelInterrupted(previousSelection.UpperBody, selected.UpperBody);
             CancelInterrupted(previousSelection.LowerBody, selected.LowerBody);
             previousSelection = selected;
+            ownership.Prune();
         }
 
         // 在最终选择发生变化时结束失去部位的旧实例。
@@ -266,17 +378,6 @@ namespace ThreeC.CharacterBehavior
 
         private static float ClampUnit(float value) => Math.Min(1f, InputMath.NonNegative(value, 0f));
 
-        // 播放资源重绑时重建选中历史，保留持续请求和实例编号。
-        public void ResetSelection(CharacterPlaybackEndSource source)
-        {
-            for (int i = rankedKeys.Count - 1; i >= 0; i--)
-            {
-                var demand = active[rankedKeys[i]];
-                if (demand.Playback != null) End(demand.Key, demand.InstanceId, CharacterActionPlaybackStatus.Interrupted, source);
-            }
-            previousSelection = default;
-        }
-
         // 结束本角色当前的全部请求，回执在角色重置后仍然可查。
         public void Reset(CharacterPlaybackEndSource source, bool forgetInstances = true)
         {
@@ -288,7 +389,15 @@ namespace ThreeC.CharacterBehavior
             }
             if (forgetInstances) latestInstances.Clear();
             submissionOrder = 0;
+            while (retiring.Count > 0)
+            {
+                var old = retiring[retiring.Count - 1];
+                retiring.RemoveAt(retiring.Count - 1);
+                if (old.QueueEnd(old.HasStarted ? CharacterActionPlaybackStatus.Interrupted : CharacterActionPlaybackStatus.Withdrawn, source))
+                    PublishEnd(old);
+            }
             previousSelection = default;
+            ownership.Clear();
         }
     }
 }

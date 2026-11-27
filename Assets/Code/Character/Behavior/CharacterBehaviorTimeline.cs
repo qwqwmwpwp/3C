@@ -47,7 +47,6 @@ namespace ThreeC.CharacterBehavior
             internal readonly CharacterCommittedBehaviorGrants Grants;
             internal readonly CharacterMovementSettings Movement;
             internal readonly Vector2 Facing, Velocity;
-            internal readonly CharacterAlignmentOrigin Origin;
             internal readonly int Version;
 
             // 固定本次逐帧裁决使用的依赖。
@@ -60,7 +59,6 @@ namespace ThreeC.CharacterBehavior
                 Movement = movement;
                 Facing = state.Facing;
                 Velocity = state.GroundVelocity;
-                Origin = new CharacterAlignmentOrigin { Position = state.Start, Facing = state.Facing, Time = body.SubmittedThrough };
                 Version = version;
             }
         }
@@ -117,17 +115,10 @@ namespace ThreeC.CharacterBehavior
         private void Publish(in Frame frame, CharacterInputSnapshot input, float seconds, double end)
         {
             double start = Time;
-            var behavior = frame.Flow.AdvanceTimeline(input, frame.Facing, seconds, frame.Movement, frame.Velocity);
+            var behavior = frame.Flow.AdvanceTimeline(input, frame.Facing, seconds, frame.Movement, frame.Velocity, start, end);
             if (behavior.DurationCommitted) Time = end;
             if (frame.Flow.DispatchCancelled) return;
-            var origin = frame.Flow.Alignment.HasTarget && behavior.Attack.Move != CharacterAttackMove.None
-                ? frame.Flow.ProjectAlignmentOrigin(frame.Body, Time, frame.Origin, frame.Movement.MoveTurnSpeed) : frame.Origin;
-            if (frame.Flow.DispatchCancelled)
-            {
-                frame.Flow.RetainUnpublished(behavior);
-                return;
-            }
-            var command = frame.Flow.PublishMotion(Time, behavior, Held, frame.Facing, frame.Velocity, frame.Movement, origin);
+            var command = frame.Flow.CaptureMotion(Time, behavior, Held, frame.Facing, frame.Velocity, frame.Movement);
             // 包括扩展采样器冻结在内的回调全部返回后，才把这一刻交给物理与动画。
             if (frame.Flow.DispatchCancelled)
             {
@@ -138,7 +129,7 @@ namespace ThreeC.CharacterBehavior
                 frame.Body.Write(new CharacterMotionCommand(start, Time, behavior, Held));
             frame.Body.Write(command);
             latestIsExternal = false;
-            Latest = new CharacterBehaviorObservation(behavior, seconds, frame.Version);
+            Latest = new CharacterBehaviorObservation(behavior, seconds, frame.Version, Time);
             updates.Add(Latest);
             frame.Grants.Observe(behavior, frame.Version);
         }
@@ -149,7 +140,7 @@ namespace ThreeC.CharacterBehavior
             BeginObservationBatch();
             previousDeviceTime = firstAcceptedDeviceTime = deviceNow;
             Held = default;
-            Latest = new CharacterBehaviorObservation(result, 0f, version);
+            Latest = new CharacterBehaviorObservation(result, 0f, version, Time);
             updates.Add(Latest);
             latestIsExternal = true;
         }

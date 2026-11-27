@@ -69,8 +69,9 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
+        // 比较预测与实走中同一时刻的许可、招式及打断阶段。
         private static bool SameBehavior(in CharacterForecastSample a, in CharacterForecastSample b) =>
-            a.Behaviors == b.Behaviors && a.Attack == b.Attack && a.AttackPhase == b.AttackPhase &&
+            a.Behaviors == b.Behaviors && a.AttackStateId == b.AttackStateId && a.AttackPhase == b.AttackPhase &&
             a.MoveApproved == b.MoveApproved;
 
         internal void Observe(long step, in CharacterForecastSample actual)

@@ -61,31 +61,21 @@ namespace ThreeC.CharacterBehavior
         internal bool Bound => body != null && capsule != null;
         internal bool Available => Bound && capsule.enabled;
 
+        // 保存逐帧行为裁决使用的实测朝向和地面速度。
         internal readonly struct StepState
         {
-            internal readonly Vector3 Start;
-            internal readonly Vector2 Facing;
-            internal readonly Vector2 GroundVelocity;
-            internal readonly Surface Contacts;
+            internal readonly Vector2 Facing, GroundVelocity;
 
+            // 从同一刚体状态和支撑面取得输入方向与起手条件。
             internal StepState(Rigidbody body, Surface contacts)
             {
-                Start = body.position;
                 Vector3 forward = body.rotation * Vector3.forward;
                 Facing = new Vector2(forward.x, forward.z);
                 GroundVelocity = CharacterMotorStep.GroundVelocity(body.velocity, contacts.Ground);
-                Contacts = contacts;
             }
         }
 
         internal StepState ReadStepState() => new StepState(body, ReadContacts());
-
-        // 在目标变化时读取当前真实刚体站位与水平朝向，尚未绑定时没有可用起点。
-        internal CharacterAlignmentOrigin? ReadAlignmentOrigin()
-        {
-            if (!Available) return null;
-            return new CharacterAlignmentOrigin { Position = body.position, Facing = CharacterAlignmentPlan.Flat(body.rotation * Vector3.forward) };
-        }
 
         // 读取实际求解后的刚体运动和接触面。
         internal CharacterMotorObservation ReadSolvedPose()
@@ -165,13 +155,6 @@ namespace ThreeC.CharacterBehavior
         private Vector3 pendingVelocity, pendingPosition, requestedVelocity, liftedPosition;
         private Quaternion initialRotation, requestedRotation;
         private readonly List<CharacterMotionSlice> stepSlices = new List<CharacterMotionSlice>();
-
-        // 从刚刚求解的那一组实际马达切片结算对齐实例，回调之前仍保留此次提交的起点。
-        internal long ObserveAlignment(ref CharacterActionAlignmentRuntime alignment, in CharacterMotorObservation actual)
-        {
-            Vector3 forward = actual.Rotation * Vector3.forward;
-            return alignment.Observe(stepSlices, pendingPosition, actual.Position, new Vector2(forward.x, forward.z), actual.Contacts);
-        }
 
         // 逐段计算速度和转向，将整步积分得到的平均速度只交给求解器一次。
         internal CharacterPendingPhysicsStep DriveStep(CharacterRigidbodyBlackboard board, float dt, double end,

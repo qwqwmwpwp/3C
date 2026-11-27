@@ -76,7 +76,7 @@ namespace ThreeC.CharacterBehavior
         private CharacterMoveGait _gait;
         private bool _dashPressed;
         private bool _guardHeld;
-        private CharacterBehaviorId pendingBehaviors;
+        private ulong pendingBehaviors; // 待消费的行为位掩码，以整数形式供 Unity 热重载序列化。
         private AttackButtonPresses _attackPresses;
         private readonly List<CharacterInputPress> presses = new List<CharacterInputPress>();
         private bool _wasReceivingPlayerInput;
@@ -115,7 +115,7 @@ namespace ThreeC.CharacterBehavior
         {
             ulong bits = (ulong)id;
             if (bits == 0 || (bits & (bits - 1)) != 0 || id == CharacterBehaviorId.Move || (Peek().Requests & id) != 0) return false;
-            pendingBehaviors |= id;
+            pendingBehaviors |= bits;
             return true;
         }
 
@@ -142,7 +142,7 @@ namespace ThreeC.CharacterBehavior
 
         // 把持续输入与尚未消费的脚本请求合成一份只读快照。
         internal CharacterInputSnapshot Peek() =>
-            new CharacterInputSnapshot(_direction, _dashPressed, _guardHeld, pendingBehaviors, _gait, _attackPresses);
+            new CharacterInputSnapshot(_direction, _dashPressed, _guardHeld, (CharacterBehaviorId)pendingBehaviors, _gait, _attackPresses);
 
         /// <summary>保留方向和持续请求，只清除已转交的按下事件。供显式写入快照的调用者消费。</summary>
         public CharacterInputSnapshot Consume()

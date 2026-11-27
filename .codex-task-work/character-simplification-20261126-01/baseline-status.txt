@@ -1,0 +1,31 @@
+ M Assets/Code/Character/Anim/CharacterAnimationConfig.cs
+ M Assets/Code/Character/Anim/CharacterAnimationConfiguration.cs
+ M Assets/Code/Character/Anim/CharacterBehaviorAnimationBindings.cs
+ M Assets/Code/Character/Anim/CharacterBehaviorAnimationMapping.cs
+ M Assets/Code/Character/Anim/CharacterBehaviorAnimator.cs
+ M Assets/Code/Character/Behavior/CharacterActionAlignmentRuntime.cs
+ M Assets/Code/Character/Behavior/CharacterAttackCombo.cs
+ M Assets/Code/Character/Behavior/CharacterAttackMotion.cs
+ M Assets/Code/Character/Behavior/CharacterBehaviorConfig.cs
+ M Assets/Code/Character/Behavior/CharacterBehaviorDecision.cs
+ M Assets/Code/Character/Behavior/CharacterBehaviorTimeline.cs
+ M Assets/Code/Character/Behavior/CharacterBlackboard.cs
+ M Assets/Code/Character/Behavior/CharacterComboTable.cs
+ M Assets/Code/Character/Behavior/CharacterComboValidation.cs
+ M Assets/Code/Character/Behavior/CharacterLightAttackBehavior.cs
+ M Assets/Code/Character/Behavior/CharacterProfile.cs
+ M Assets/Code/Character/Editor/CharacterForecastPose.cs
+ M Assets/Code/Character/Editor/CharacterForecastTrail.cs
+ M Assets/Code/Character/Editor/CharacterProfileEditor.cs
+ M Assets/Code/Character/Forecast/CharacterForecastDiagnostics.cs
+ M Assets/Code/Character/Forecast/CharacterForecastValidity.cs
+ M Assets/Code/Character/Forecast/CharacterMovementForecast.cs
+ M "Assets/Data/Player/Shield/01 \350\247\222\350\211\262\350\241\214\344\270\272.asset"
+ M "Assets/Data/Player/Shield/02 \350\277\236\346\213\233\350\241\250.asset"
+?? .codex-task-work/character-simplification-20261126-01/
+?? Assets/Code/Character/Behavior/CharacterAttackDefinition.cs
+?? Assets/Code/Character/Behavior/CharacterAttackDefinition.cs.meta
+?? Assets/Code/Character/Behavior/CharacterAttackState.cs
+?? Assets/Code/Character/Behavior/CharacterAttackState.cs.meta
+?? Assets/Code/Character/Editor/CharacterAttackDefinitionDrawer.cs
+?? Assets/Code/Character/Editor/CharacterAttackDefinitionDrawer.cs.meta

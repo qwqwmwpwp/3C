@@ -1,0 +1,142 @@
+[
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationComposer.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "25E4BAF4DF8171989498E908DA67A67BDA5724C8FFD851656F5E15909D2C2C7D",
+    "FinalSHA256": "186802CFAEACA4D381AE5C7A120B3289EC555BE842FB76C3A9B3463057F862F4",
+    "Lines": 403
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationIk.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "2D8F704B823966C719A5254BD8D6335B95194EC96B9A448BF5747954D5587798",
+    "FinalSHA256": "990F92AC9EFE4E214294479548074471DE4784CB787C82A3FD4DEEBA0020C021",
+    "Lines": 452
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationPipeline.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "68F6183A972732E3E580A7D88DDFD7CA213BDF5DCD4EE3040936E7B337141DAF",
+    "FinalSHA256": "456C8BD54692B8B63ECD4493B95288741063D3479E9D39A2A5B7B56F69F17B92",
+    "Lines": 500
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationPlayer.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "CD8AE35B46A75313326F8A6F77F47F115B420DEB6106C21DAD218AC496F53054",
+    "FinalSHA256": "2CAA3B3CBD1D3D875A0AC898ED9E549A0B9FE3B27228D83D7913B150EEAA7090",
+    "Lines": 266
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationResourceCatalog.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "C3D50EE6ED0FB2AD2AECE62DEBDE3783D3D4C1D12B707B2642526C0F3BAB8D94",
+    "FinalSHA256": "C5FE10C96D38AACBD28A03054CE0A99A7C7CF28A488E51CC756E3A70BD76F949",
+    "Lines": 465
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAnimationResourceResolver.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "0097B852A82D996F5C1580D82FD2AF2F3831AB66687A4367073ECE959AA0C234",
+    "FinalSHA256": "16AD03E001143B4EF4109A027C4279CDEBFA958AAFA47E5A88EDC7C592826A52",
+    "Lines": 226
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterAttackAnimationBinding.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "8F922A996F6541E6334BA674E526F674B48254791EAEE45D15FAA7F7E28E5E4B",
+    "FinalSHA256": "725DCCD85A64A9EF462F5A4A13C53A587C357FC05CE9A9EB00FA136EB4D1B312",
+    "Lines": 76
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterBodyPlaybackGraph.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "B747826A14511DCD8916D2D5B1CB297D8A5DF4A291F1337C487AEBE4FAAD8F42",
+    "FinalSHA256": "2E585C578E50D06672BED4EB4C35D9D7C5086E0A177D3F3382ED3DB75A6E997B",
+    "Lines": 276
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterClipMixer.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "457D4FE5542D71011B8E3E0B7DD827C279E95C44D97CF28E67DFEDCE1247843F",
+    "FinalSHA256": "EA903C44E2FF1CB792C4A6A050CFDE21019B4000AF9D506F737A8C9DCDEAF967",
+    "Lines": 297
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterClipPlayback.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "A9918529793AF2CCCC66DC1DEC4593223649D67240E0CE333865499882698753",
+    "FinalSHA256": "D95A1F7982844581C47DC526D11261922E237761C2894F22DD0B73FFF9AC4103",
+    "Lines": 350
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPlaybackArbitration.cs",
+    "Status": "Added",
+    "InitialReviewSHA256": null,
+    "FinalSHA256": "33E3D806FCA52F2A1A29BFFF8A32FFE71F05F7C9FD3440957089EC8875E0E6EC",
+    "Lines": 86
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPlaybackArbitration.cs.meta",
+    "Status": "Added",
+    "InitialReviewSHA256": null,
+    "FinalSHA256": "BD44829367784208BAB02EF50882D4904D06862B6889CB7E661763B82F162733",
+    "Lines": null
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPlaybackClock.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "B8C8639FD800853DF899EE298CA5AC5CE9B68A1CEC2A20BEF98A2DAC229B65C2",
+    "FinalSHA256": "528C78F7C43FC65131826A584BC80627D34F6592D5816730D1EA87B21691962B",
+    "Lines": 85
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPlaybackFrameBudget.cs",
+    "Status": "Added",
+    "InitialReviewSHA256": null,
+    "FinalSHA256": "454A00D728DBBD09D27DD95E994890D85F168F998C3A297F7AA4183D2135E55E",
+    "Lines": 114
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPlaybackFrameBudget.cs.meta",
+    "Status": "Added",
+    "InitialReviewSHA256": null,
+    "FinalSHA256": "E7CEF9388BEEA6A0369F55DC7B6BACDA4353481210FBBBC92E5BE26FCC278F90",
+    "Lines": null
+  },
+  {
+    "Path": "Assets/Code/Character/Anim/CharacterPulseAnimationState.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "70D409E0C394044A9B456E39483A9251497ECEDF27AC12E8628FE7E9FC61DDA6",
+    "FinalSHA256": "47E99BE6A933BBAAFD16BF26FC6C9ABE97526FC904EABE1AD05C05E11D70E8CB",
+    "Lines": 157
+  },
+  {
+    "Path": "Assets/Code/Character/Behavior/CharacterAttackPresentation.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "F9FEFE1DBCFA0ACF94B229002C30CF349B07522CF6270D6F439C45E5EE8B409F",
+    "FinalSHA256": "5DADC89D944681EEF0FAB1A8EAB5087D8618F6529A6343D9CDC8BBCC2D336869",
+    "Lines": 40
+  },
+  {
+    "Path": "Assets/Code/Character/Behavior/CharacterBehaviorFlow.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "68EF37FACCDF0A909D6D407DD8B6C4C45B4D28DABC087B6F00B13E937373FB34",
+    "FinalSHA256": "A92F933E0FFD2601ADD789E01666649D814DDF0229B7B4DD276F23253206AB59",
+    "Lines": 482
+  },
+  {
+    "Path": "Assets/Code/Character/Behavior/CharacterBehaviorTimeline.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "45CB7C44786E6EECAEAC5CDCFA049EBB27B013B554F291D44B17EDE56E3593C4",
+    "FinalSHA256": "08B9E90BDEE157B1753523CE8C1D1D9F7AFE210362FFDE875430DC02B53E6AA9",
+    "Lines": 174
+  },
+  {
+    "Path": "Assets/Code/Character/Forecast/CharacterForecastRollout.cs",
+    "Status": "Modified",
+    "InitialReviewSHA256": "E11C58ADDBA802630EE270111AEF04B2A353EEB7D32DA4CD26C6C7074AFAB741",
+    "FinalSHA256": "6485D707D9F7389748371C45DA80AF7A7D7111B44C393466EBFECFDFE6277088",
+    "Lines": 176
+  }
+]

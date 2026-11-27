@@ -67,19 +67,6 @@ namespace ThreeC.CharacterBehavior
             if (!hasEntry) throw new InvalidOperationException("入点窗口内没有可搜索的样点。");
         }
 
-        // 检查已发布的混合时钟和权重可用于采样，且两个输入与轨道一致。
-        internal static bool MatchesPlayback(CharacterMotionTrack track, CharacterClipState state)
-        {
-            if (state.Layer != 0 || !Finite(state.Speed) || state.Speed <= 0f || !state.MatchesTrack(track, state.Clip)) return false;
-            var blend = state.Blend;
-            return !track.Mixed || Finite(blend.FirstRate) && blend.FirstRate > 0f && Finite(blend.SecondRate) && blend.SecondRate > 0f &&
-                Unit(blend.Weights.x) && Unit(blend.Weights.y) && Unit(blend.Weights.z);
-        }
-
-        // 判断同一轨道的两个别名是否使用同一份混合设置。
-        internal static bool SameBlend(CharacterMotionBlend a, CharacterMotionBlend b) =>
-            a.Second == b.Second && a.FirstRate == b.FirstRate && a.SecondRate == b.SecondRate && a.Weights.Equals(b.Weights);
-
         // 检查参考轨迹从局部原点开始、时间严格递增，并覆盖整个片段。
         private static void ValidatePath(GroundPathKey[] keys, float seconds)
         {

@@ -4,449 +4,447 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>标识攻击招式，供参数配置、接续和表现映射查找。</summary>
-    public enum CharacterAttackMove
+    // 在攻击许可内统一裁决各状态的进入、接续与退出，发布招式时钟和状态观测。
+    internal sealed class CharacterAttackBehavior : CharacterBehavior
     {
-        [InspectorName("无（起手）")] None = 0,
-        [InspectorName("轻击一")] LightOne = 1,
-        [InspectorName("轻击二")] LightTwo = 2,
-        [InspectorName("重击")] Heavy = 3,
-        [InspectorName("技能 2")] SkillTwo = 4
-    }
-
-    /// <summary>本步执行的招式。自然结束的最后一步仍保留进度，空闲及被打断的步返回默认值。</summary>
-    public readonly struct CharacterAttackState
-    {
-        public CharacterAttackMove Move { get; }
-        public long InstanceId { get; }
-        public CharacterBehaviorPhase Phase { get; }
-        public float StartProgress { get; }
-        public float Progress { get; }
-        public float Duration { get; } // 当前招式的逻辑时长，单位为秒。
-        internal CharacterActionHandoff Handoff { get; }
-        public CharacterAttackMove BufferedMove { get; }
-        public float LinkAtSeconds { get; }
-        public string BufferResult { get; }
-
-        // 封装当前招式时钟、表现交接及预输入观测。
-        internal CharacterAttackState(CharacterAttackMove move, long instanceId, CharacterBehaviorPhase phase,
-            float startProgress, float progress, float duration, Vector2 blendRange, float? recoveryMoveStart,
-            CharacterAttackMove bufferedMove = default, float linkAt = 0f, string result = null)
-        {
-            BufferedMove = bufferedMove;
-            LinkAtSeconds = linkAt;
-            BufferResult = result;
-            Move = move;
-            InstanceId = instanceId;
-            Phase = phase;
-            StartProgress = startProgress;
-            Progress = progress;
-            Duration = duration;
-            Handoff = new CharacterActionHandoff(duration, blendRange, recoveryMoveStart);
-        }
-    }
-
-    /// <summary>保存本次起手或接续请求选定的路线、单招参数和原速时长。</summary>
-    internal readonly struct CharacterAttackOpening
-    {
-        internal readonly CharacterAttackLink Link;
-        internal readonly CharacterAttackMoveSettings Definition;
-        internal readonly float Duration;
-
-        // 保存本次准入请求已经解析的路线和有效时长。
-        internal CharacterAttackOpening(CharacterAttackLink link, CharacterAttackMoveSettings definition, float duration)
-        {
-            Link = link;
-            Definition = definition;
-            Duration = duration;
-        }
-
-        // 缓冲成功时冻结目标定义，直到执行、覆盖或撤销本次接续。
-        internal CharacterAttackOpening Freeze() => new CharacterAttackOpening(Link, Definition.Snapshot(), Duration);
-    }
-
-    // 让已解析的起手招式随本次申请交给获准的攻击实例。
-    internal sealed class CharacterAttackStart : CharacterBehaviorStart
-    {
-        internal readonly CharacterAttackOpening Opening;
-
-        // 保存本次攻击的公共报价与选定起手招式。
-        internal CharacterAttackStart(CharacterBehaviorContext context, float cost, CharacterAttackOpening opening)
-            : base(context, cost) => Opening = opening;
-    }
-
-    /// <summary>同一许可内按接续表切招。每招的播放、转向、位移和打断窗口共用固定步时钟。</summary>
-    internal sealed class CharacterAttackBehavior : CharacterBehavior, ICharacterIntervalMotion
-    {
-        private readonly CharacterLightAttackSettings settings;
-        private readonly CharacterComboRoutes routes;
-        private const float TimingTolerance = 0.000001f;
-        private readonly Dictionary<CharacterAttackMove, double> readyAt = new Dictionary<CharacterAttackMove, double>();
-        private CharacterAttackRuntimeState state;
-        public override bool SharesMovementOnStart => true;
+        internal const float Tolerance = 0.000001f;
+        private readonly CharacterAttackLookup table;
+        private double skillReadyAt; // 本角色技能二的下一次可用时刻。
+        private readonly HashSet<int> enteredAtInstant = new HashSet<int>();
+        private readonly HashSet<int> processedTimeLinks = new HashSet<int>(); // 本状态实例已到达过阈值的路线下标。
+        private double instant = double.NaN;
+        private CharacterAttackExecution current;
+        private int id;
+        private string stateName, bufferResult;
+        private long instance;
+        private float startProgress;
+        private double startedAt;
+        private bool movingOpening, firstStep, moveStarted;
+        private CharacterAttackPending pending;
+        // 只有普通执行和普通预输入参数可以安全地共享只读预测表。
+        internal bool SupportsSharedForecastTable => (current == null || current is CharacterOrdinaryAttack) &&
+            (pending.Target.Definition == null || pending.Target.Definition is CharacterAttackMoveSettings);
+        internal CharacterAttackState State => current == null ? default :
+            new CharacterAttackState(id, stateName, instance, current, startProgress, startedAt, pending, bufferResult);
         public override bool DefersCompletionAtEndpoint => true;
-        public override float InputEndpointTolerance => TimingTolerance;
-        protected override object ExclusiveRuntimeStorage => readyAt;
-        internal CharacterAttackState State => state.Move == CharacterAttackMove.None ? default :
-            new CharacterAttackState(state.Move, state.InstanceId, Phase, state.StartProgress, (float)(state.Elapsed / state.Duration),
-                state.Duration, state.BlendRange, state.RecoveryMoveStart, state.BufferedMove, (float)state.BufferedAt, state.BufferResult);
-        public override bool AllowsOrdinaryMotionNow =>
-            !state.HasAttackMotion || state.Elapsed >= state.Recovery || state.Elapsed < state.Strike && !state.AttackMotion.HasOpening;
-        public override double NextBoundaryDelay
-        {
-            get
-            {
-                if (!IsActive) return double.PositiveInfinity;
-                double next = state.NextPhaseEnd;
-                if (state.BufferedMove != CharacterAttackMove.None && state.BufferedAt > state.Elapsed)
-                    next = Math.Min(next, state.BufferedAt);
-                return next - state.Elapsed;
-            }
-        }
-        public override CharacterBehaviorPhase Phase =>
-            state.Elapsed < state.Strike ? CharacterBehaviorPhase.Startup :
-            state.Elapsed < state.Recovery ? CharacterBehaviorPhase.Active : CharacterBehaviorPhase.Recovery;
-        public override bool IsComplete => state.Elapsed >= state.Duration;
+        public override float InputEndpointTolerance => Tolerance;
+        protected override object ExclusiveRuntimeStorage => enteredAtInstant;
+        public override CharacterBehaviorPhase Phase => current?.Phase ?? CharacterBehaviorPhase.Active;
+        public override bool IsComplete => current == null || current.IsComplete;
+        public override double NextBoundaryDelay => current == null ? double.PositiveInfinity :
+            NextEndpoint(current.NextBoundary) - current.Elapsed;
 
-        // 按值冻结招式的运动和阶段时钟，无片段的招式也通过同一协议交还移动。
-        public CharacterFrozenMotion FreezeMotion(in CharacterMotionCapture capture) =>
-            new CharacterFrozenAttackMotion(in state, in capture);
+        // 绑定作者表查询或本次预测的冻结查询，执行和连招缓存始终由本流程独占。
+        internal CharacterAttackBehavior(CharacterAttackLookup table) => this.table = table;
 
-        // 绑定此行为实际查阅的招式和接续定义。
-        internal CharacterAttackBehavior(CharacterLightAttackSettings settings, CharacterComboRoutes routes)
-        {
-            this.settings = settings;
-            this.routes = routes;
-        }
-
-        // 为有效按键解析一次起手招式，保留至该申请得到准入。
+        // 选定首招并保存报价，框架准入成功后直接使用同一个冻结目标。
         internal override CharacterBehaviorStart PrepareStart(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
         {
             reason = CharacterBehaviorRejectReason.StateCondition;
             if (IsActive) return null;
-            var opening = SelectOpening(context, out reason);
-            return opening.Link.To == CharacterAttackMove.None ? null
-                : new CharacterAttackStart(context, GetStaminaCost(context), opening);
+            var target = SelectOpening(context, out reason);
+            return target.Id == 0 ? null : new CharacterAttackStart(context, GetStaminaCost(context), target);
         }
 
-        // 使用准入时选定的招式启动攻击。
-        internal override void StartPrepared(CharacterBehaviorStart request) =>
-            StartAttack(request.Context, ((CharacterAttackStart)request).Opening);
+        // 切换失败已撤销状态所有权时，让外层流程在下一次裁决回收旧许可。
+        public override bool ShouldContinue(CharacterBehaviorContext context) => current != null;
 
-        // 按按键顺序选取符合起手条件且冷却已好的第一招。
-        private CharacterAttackOpening SelectOpening(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
+        // 接收已经获准的首招申请。
+        internal override void StartPrepared(CharacterBehaviorStart request) => StartAttack(request.Context, ((CharacterAttackStart)request).Target);
+
+        // 按本批按键的原始顺序解析首个可进入的攻击状态。
+        private CharacterAttackTarget SelectOpening(CharacterBehaviorContext context, out CharacterBehaviorRejectReason reason)
         {
-            var presses = context.Input.AttackPresses;
             reason = CharacterBehaviorRejectReason.NoRoute;
-            bool moving = IsMoving(context);
+            var presses = context.Input.AttackPresses;
             for (int i = 0; i < presses.Count; i++)
             {
-                var link = CharacterComboRoutes.Find(routes.Openers, presses[i], moving);
-                CharacterBehaviorRejectReason failure;
-                if (link.To == CharacterAttackMove.None)
-                    failure = CharacterComboRoutes.Find(routes.Openers, presses[i]).To == CharacterAttackMove.None
-                        ? CharacterBehaviorRejectReason.NoRoute : CharacterBehaviorRejectReason.StateCondition;
-                else
-                {
-                    var opening = ResolveMove(link);
-                    if (!(opening.Duration > 0f) || float.IsInfinity(opening.Duration)) failure = CharacterBehaviorRejectReason.InvalidConfiguration;
-                    else if (!IsReady(link.To, context.SimulationTime)) failure = CharacterBehaviorRejectReason.Cooldown;
-                    else { reason = default; return opening; }
-                }
+                var target = SelectInput(table.Openers, presses[i], context, true, out _, out _, out var failure);
+                if (target.Id != 0) { reason = default; return target; }
                 if (i == 0) reason = failure;
             }
             return default;
         }
 
-        // 从当前实际地速判定移动起手。
+        // 从首招进入时的实际地速判断本次整个连招的移动起手分类。
         private static bool IsMoving(CharacterBehaviorContext context) => context.GroundVelocity.sqrMagnitude > 0.0025f;
 
-        // 按角色时刻和端点容差检查目标招式的冷却。
-        private bool IsReady(CharacterAttackMove target, double at) =>
-            !readyAt.TryGetValue(target, out double ready) || ready <= at + TimingTolerance;
-
-        // 只读检查是否收到可执行的起手请求。
-        public override bool Evaluate(CharacterBehaviorContext context) =>
-            !IsActive && SelectOpening(context, out _).Link.To != CharacterAttackMove.None;
-
-        // 沿用当前定义按招式编号查找参数。
-        private CharacterAttackMoveSettings SettingsFor(CharacterAttackMove attack) => settings.Moves?.Move(attack);
-
-        // 解析目标路线的参数和原速时长。
-        private CharacterAttackOpening ResolveMove(CharacterAttackLink link)
+        // 所有路径共用同一套定义、冷却及状态专属准入检查。
+        internal CharacterBehaviorRejectReason CheckAdmission(CharacterAttackDefinition definition, CharacterBehaviorContext context)
         {
-            var next = link.To;
-            var definition = SettingsFor(next);
-            float seconds = settings.DurationFor(next, definition);
-            return new CharacterAttackOpening(link, definition, seconds);
+            if (!definition.IsUsable) return CharacterBehaviorRejectReason.InvalidConfiguration;
+            return definition.CheckEntry(At(context, 0d, 0f, true), skillReadyAt);
         }
 
-        // 开始攻击许可并记录首招和移动起手条件。
-        public override void Start(CharacterBehaviorContext context) => StartAttack(context, SelectOpening(context, out _));
+        // 查询首招是否获得状态机准入。
+        public override bool Evaluate(CharacterBehaviorContext context) => !IsActive && SelectOpening(context, out _).Id != 0;
 
-        // 初始化攻击许可与首招的运行状态。
-        private void StartAttack(CharacterBehaviorContext context, CharacterAttackOpening opening)
+        // 为直接调用者解析并启动本次首招。
+        public override void Start(CharacterBehaviorContext context)
         {
+            if (!IsActive) StartAttack(context, SelectOpening(context, out _));
+        }
+
+        // 打开一次攻击许可，锁定本次连招的首招分类。
+        private void StartAttack(CharacterBehaviorContext context, CharacterAttackTarget target)
+        {
+            if (target.Id == 0) return;
+            movingOpening = IsMoving(context);
+            bufferResult = null;
+            enteredAtInstant.Clear();
+            Enter(target, context);
             base.Start(context);
-            state.MovingOpening = IsMoving(context);
-            state.BufferResult = null;
-            Enter(opening, context, 0f, true);
-            state.OpeningStep = true;
+            firstStep = true;
         }
 
-        // 进入指定招式，按当前配置锁定时钟、位移参数和冷却。
-        private void Enter(CharacterAttackOpening opening, CharacterBehaviorContext context, float stepOffset, bool first)
+        // 创建并进入目标实例，统一更新状态身份、动画交接和从进入时刻起算的冷却。
+        private void Enter(CharacterAttackTarget target, CharacterBehaviorContext context)
         {
-            state.Move = opening.Link.To;
-            state.BlendRange = opening.Link.BlendRange;
-            state.InstanceId++;
-            state.Duration = opening.Duration;
-            state.Elapsed = state.StartProgress = 0f;
-            var definition = opening.Definition;
-            float cooldown = InputMath.NonNegative(definition.CooldownSeconds, 0f);
-            if (cooldown > 0f) readyAt[state.Move] = context.SimulationTime + stepOffset + cooldown;
-            state.Strike = definition.StrikeStart * state.Duration;
-            state.Recovery = definition.RecoveryStart * state.Duration;
-            state.RecoveryMoveStart = null;
-            state.HasAttackMotion = definition.HasMotionClip;
-            state.Alignment = definition.Alignment;
-            if (state.HasAttackMotion)
-                state.AttackMotion = new CharacterAttackMotion(definition, context, state.Duration, state.Strike, state.Recovery,
-                    first ? InputMath.NonNegative(settings.OpeningStepDistance, 0f) : (float?)null, state.MovingOpening);
-            ClearBuffer();
+            var next = target.Definition.CreateExecution() ?? throw new InvalidOperationException($"攻击状态 {target.Id} 没有创建运行实例。");
+            float progress;
+            try
+            {
+                next.Enter(At(context, 0d, 0f, true));
+                progress = next.Progress;
+            }
+            catch (Exception failure)
+            {
+                // 尚未发布所有权，清理部分进入的新实例，同时保留原始进入异常及清理异常。
+                try { next.Exit(CharacterBehaviorEndReason.Withdrawn, context.IsPrediction); }
+                catch (Exception cleanup) { failure.Data["AttackEnterCleanup"] = cleanup; }
+                throw;
+            }
+            processedTimeLinks.Clear();
+            current = next;
+            id = target.Id;
+            stateName = target.Name;
+            instance++;
+            startProgress = progress;
+            startedAt = context.SimulationTime;
+            moveStarted = true;
+            BeginInstant(context.SimulationTime);
+            enteredAtInstant.Add(id);
+            target.Definition.OnEntered(context.SimulationTime, ref skillReadyAt);
         }
 
-        // 保留当前招式在起手时锁定的运动数值，后续招式由目标自己的定义解析。
-        protected override void CopyRuntimeStateTo(CharacterBehavior target)
+        // 同一角色时刻最多进入每个目标一次，避免零耗时自环及多状态环。
+        private void BeginInstant(double at)
         {
-            var copy = (CharacterAttackBehavior)target;
-            copy.state = state;
-            if (state.BufferedMove != default) copy.state.BufferedOpening = state.BufferedOpening.Freeze();
-            copy.readyAt.Clear();
-            foreach (var pair in readyAt) copy.readyAt.Add(pair.Key, pair.Value);
+            if (at == instant) return;
+            instant = at;
+            enteredAtInstant.Clear();
         }
 
-        // 清除已缓存的接续路线和执行时点。
-        internal void ClearBuffer()
+        // 按列表优先级检查同键路线，允许不同时段或不同条件选择不同目标。
+        private CharacterAttackTarget SelectInput(ReadOnlySpan<CharacterAttackLink> links, ThreeC.Player.AttackButton button,
+            CharacterBehaviorContext context, bool opener, out double at, out double expires, out CharacterBehaviorRejectReason reason)
         {
-            state.BufferedOpening = default;
-            state.BufferedAt = 0f;
-            state.BufferedRequest = 0;
+            at = expires = 0d;
+            reason = CharacterBehaviorRejectReason.NoRoute;
+            if (button == ThreeC.Player.AttackButton.None) return default;
+            foreach (var link in links)
+            {
+                if (link.Trigger != CharacterAttackTrigger.Input || link.Button != button) continue;
+                CharacterBehaviorRejectReason failure = default;
+                if (!link.AllowsOpening(opener ? IsMoving(context) : movingOpening))
+                    failure = CharacterBehaviorRejectReason.StateCondition;
+                else if (!opener)
+                {
+                    if (!link.HasValidWindow) failure = CharacterBehaviorRejectReason.InvalidConfiguration;
+                    else if (!(current.Duration > 0f))
+                    {
+                        at = expires = current.Elapsed;
+                        float progress = current.Progress;
+                        if (link.EarlySeconds > 0f) failure = CharacterBehaviorRejectReason.RequiresFixedDuration;
+                        else if (!(progress >= link.LinkStart && progress <= link.LinkEnd)) failure = CharacterBehaviorRejectReason.OutsideWindow;
+                    }
+                    else
+                    {
+                        double open = link.LinkStart * current.Duration;
+                        expires = link.LinkEnd * current.Duration;
+                        at = Math.Max(open, current.Elapsed);
+                        if (current.Elapsed + Tolerance < Math.Max(0d, open - link.EarlySeconds) || current.Elapsed > expires + Tolerance)
+                            failure = CharacterBehaviorRejectReason.OutsideWindow;
+                    }
+                }
+                if (failure == default)
+                {
+                    var target = table.Resolve(link, opener ? context : At(context, at - current.Elapsed, 0f), this, out failure);
+                    if (target.Id != 0) { reason = default; return target; }
+                }
+                if (reason == CharacterBehaviorRejectReason.NoRoute) reason = failure;
+            }
+            return default;
         }
 
-        // 清除跨活动期的招式冷却和预输入观测。
-        internal override void Reset()
-        {
-            base.Reset();
-            readyAt.Clear();
-            ClearBuffer();
-            state.BufferResult = null;
-        }
-
-        // 按原输入顺序处理仍在窗口内的有效接续，后一次有效请求可覆盖先前请求。
-        private void ReadLinks(CharacterBehaviorContext context)
+        // 按键窗口合格且目标可准入时才覆盖一个预输入槽。
+        private void ReadLinks(CharacterBehaviorContext context, bool allowNewOpening = false)
         {
             var presses = context.Input.AttackPresses;
             if (presses.Count == 0) return;
-            var source = routes.ForMove(state.Move);
+            var links = table.Links(id);
             for (int i = 0; i < presses.Count; i++)
             {
-                long requestId = Journal?.NewRequest() ?? 0;
-                var link = CharacterComboRoutes.Find(source?.Links, presses[i], state.MovingOpening);
-                if (link.To == CharacterAttackMove.None)
+                var target = SelectInput(links, presses[i], context, false, out double at, out double expires, out var reason);
+                // 终点处未成为接续的输入仍可作为新首招，交给外层裁决记录唯一结果。
+                if (allowNewOpening && reason != default) continue;
+                long request = Journal?.NewRequest() ?? 0;
+                if (reason != default)
                 {
-                    bool noRoute = CharacterComboRoutes.Find(source?.Links, presses[i]).To == CharacterAttackMove.None;
-                    RejectLink(requestId, noRoute ? CharacterBehaviorRejectReason.NoRoute : CharacterBehaviorRejectReason.StateCondition,
-                        noRoute ? "未覆盖：当前招式无此路线" : "未覆盖：起手条件不满足");
+                    bufferResult = reason switch {
+                        CharacterBehaviorRejectReason.NoRoute => "未覆盖：当前状态无此路线",
+                        CharacterBehaviorRejectReason.OutsideWindow => "未覆盖：窗口外",
+                        CharacterBehaviorRejectReason.Cooldown => "未覆盖：接续时仍在冷却",
+                        CharacterBehaviorRejectReason.StateCondition => "未覆盖：状态条件不满足",
+                        CharacterBehaviorRejectReason.RequiresFixedDuration => "未覆盖：此状态无固定时长，提前输入须设置为 0 秒",
+                        _ => "未覆盖：路线或目标配置无效"
+                    };
+                    Journal?.Record(RegisteredId, request, Execution.Instance, CharacterBehaviorRequestStatus.Rejected, reason);
                     continue;
                 }
-                if (!source.HasValidWindow)
-                {
-                    RejectLink(requestId, CharacterBehaviorRejectReason.InvalidConfiguration, "未覆盖：当前招式的接续时间无效");
-                    continue;
-                }
-                float open = source.LinkStart * state.Duration;
-                float early = Mathf.Max(0f, open - source.EarlySeconds);
-                float end = source.LinkEnd * state.Duration;
-                bool inWindow = context.SeparateBoundaries
-                    ? state.Elapsed + TimingTolerance >= early && state.Elapsed <= (double)end + TimingTolerance
-                    : (float)state.Elapsed + TimingTolerance >= early && (float)state.Elapsed <= end + TimingTolerance;
-                if (!inWindow)
-                {
-                    RejectLink(requestId, CharacterBehaviorRejectReason.OutsideWindow, "未覆盖：窗口外");
-                    continue;
-                }
-                double linkAt = Math.Max(open, state.Elapsed);
-                if (!IsReady(link.To, context.SimulationTime + linkAt - state.Elapsed))
-                {
-                    RejectLink(requestId, CharacterBehaviorRejectReason.Cooldown, "未覆盖：接续时仍在冷却");
-                    continue;
-                }
-                var next = ResolveMove(link);
-                if (!(next.Duration > 0f) || float.IsInfinity(next.Duration))
-                {
-                    RejectLink(requestId, CharacterBehaviorRejectReason.InvalidConfiguration, "未覆盖：条件或招式配置不满足");
-                    continue;
-                }
-                state.BufferResult = state.BufferedMove == CharacterAttackMove.None ? "已预输入" : "后一次输入已覆盖";
-                if (state.BufferedMove != default) CloseBuffer(CharacterBufferEvent.Overwritten);
-                state.BufferedOpening = next.Freeze();
-                state.BufferedRequest = requestId;
-                state.BufferExpires = end;
-                Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Buffered,
-                    buffer: CharacterBufferEvent.Buffered);
-                state.BufferedAt = linkAt;
+                bufferResult = pending.Target.Id == 0 ? "已预输入" : "后一次输入已覆盖";
+                CloseBuffer(CharacterBufferEvent.Overwritten);
+                pending = new CharacterAttackPending { Request = request, Target = target, At = at, Expires = expires };
+                Journal?.Record(RegisteredId, request, Execution.Instance, CharacterBehaviorRequestStatus.Buffered, buffer: CharacterBufferEvent.Buffered);
             }
         }
 
-        // 发布实际拒绝接续的原因，不修改既有缓存的身份。
-        private void RejectLink(long requestId, CharacterBehaviorRejectReason reason, string message)
+        // 优先执行已完成招式的端点接续，无可进入的目标时把本批按键留作新请求。
+        internal bool TryContinueAtEndpoint(CharacterBehaviorContext context)
         {
-            state.BufferResult = message;
-            Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Rejected, reason);
+            startProgress = current.Progress;
+            moveStarted = false;
+            var endpoint = At(context, 0d, 0f);
+            ReadLinks(endpoint, allowNewOpening: true);
+            current.Advance(endpoint, current.Elapsed);
+            if (!TrySwitch(At(endpoint, 0d, 0f, true))) return false;
+            // 本批按键已交给原招，新实例本步只接收持续输入。
+            firstStep = true;
+            return true;
         }
 
-        // 在覆盖、过期或取消发生的真实时刻终结原来的缓存请求。
+        // 释放尚未执行的预输入并记录其终止事件。
         private void CloseBuffer(CharacterBufferEvent change, CharacterBehaviorRejectReason reason = default, double? at = null)
         {
-            if (state.BufferedMove != default)
-                Journal?.Record(RegisteredId, state.BufferedRequest, Execution.Instance, CharacterBehaviorRequestStatus.Rejected,
-                    reason, buffer: change, at: at);
-            ClearBuffer();
+            if (pending.Target.Id == 0) return;
+            Journal?.Record(RegisteredId, pending.Request, Execution.Instance, CharacterBehaviorRequestStatus.Rejected, reason, buffer: change, at: at);
+            pending = default;
         }
 
-        // 记录收招交还移动的时刻，并发布本步实际执行的招式。
+        // 在状态报告的下个时刻与未到达的输入、时间路线之间取最近的边界。
+        private double NextEndpoint(double next)
+        {
+            if (pending.Target.Id != 0 && pending.At > current.Elapsed) next = Math.Min(next, pending.At);
+            var links = table.Links(id);
+            if (links.IsEmpty || !(current.Duration > 0f)) return next;
+            for (int i = 0; i < links.Length; i++)
+            {
+                var link = links[i];
+                if (link.Trigger != CharacterAttackTrigger.Time || processedTimeLinks.Contains(i) ||
+                    !link.HasValidTime || !link.AllowsOpening(movingOpening)) continue;
+                double time = link.LinkStart * current.Duration;
+                if (time > current.Elapsed) next = Math.Min(next, time);
+            }
+            return next;
+        }
+
+        // 依次尝试已到时的预输入、专属状态的目标请求及按表顺序匹配的自动转移。
+        private bool TrySwitch(CharacterBehaviorContext context)
+        {
+            BeginInstant(context.SimulationTime);
+            if (pending.Target.Id != 0 && pending.At <= current.Elapsed + Tolerance)
+            {
+                var reason = current.Elapsed > pending.Expires + Tolerance ? CharacterBehaviorRejectReason.OutsideWindow :
+                    CheckAdmission(pending.Target.Definition, context);
+                if (reason == default)
+                {
+                    var accepted = pending;
+                    pending = default;
+                    Switch(accepted.Target, context, accepted.Request, CharacterBufferEvent.Executed);
+                    return true;
+                }
+                CloseBuffer(CharacterBufferEvent.Expired, reason, context.SimulationTime);
+            }
+            int requested = current.RequestedTarget;
+            if (requested != 0 && TryAutomatic(CharacterAttackLink.ToState(requested), context)) return true;
+            var links = table.Links(id);
+            for (int i = 0; i < links.Length; i++)
+            {
+                var link = links[i];
+                if (!link.AllowsOpening(movingOpening)) continue;
+                bool matches = link.Trigger switch {
+                    CharacterAttackTrigger.Completed => current.IsComplete,
+                    CharacterAttackTrigger.Time => ConsumeTimeLink(i, link),
+                    CharacterAttackTrigger.Result => link.Result != 0 && current.Result == link.Result,
+                    _ => false
+                };
+                if (matches && TryAutomatic(link, context)) return true;
+            }
+            return false;
+        }
+
+        // 阈值首次到达时先消费该定时路线；冷却、专属条件或防环检查拒绝后均不再重试。
+        private bool ConsumeTimeLink(int index, CharacterAttackLink link)
+        {
+            if (!link.HasValidTime || processedTimeLinks.Contains(index)) return false;
+            bool reached = current.Progress >= link.LinkStart ||
+                current.Duration > 0f && current.Elapsed >= link.LinkStart * current.Duration;
+            return reached && processedTimeLinks.Add(index);
+        }
+
+        // 自动与动态意图经过同一目标查找和准入后才获得新的执行实例。
+        private bool TryAutomatic(CharacterAttackLink link, CharacterBehaviorContext context)
+        {
+            if (enteredAtInstant.Contains(link.TargetId)) return false;
+            var target = table.Resolve(link, context, this, out _);
+            if (target.Id == 0) return false;
+            Switch(target, context, Journal?.NewRequest() ?? 0, default);
+            return true;
+        }
+
+        // 交接时先终结旧实例并清理其缓存，再进入新状态并发布对应执行号。
+        private void Switch(CharacterAttackTarget target, CharacterBehaviorContext context, long request, CharacterBufferEvent buffer)
+        {
+            CloseBuffer(CharacterBufferEvent.Cancelled, at: context.SimulationTime);
+            Journal?.End(this, CharacterBehaviorEndReason.Completed);
+            try
+            {
+                ExitCurrent(CharacterBehaviorEndReason.Completed, context.IsPrediction);
+                Enter(target, context);
+                Journal?.Start(this, request);
+            }
+            catch (Exception failure)
+            {
+                IsActive = false;
+                // 登记新实例时还会读取其阶段；登记失败也需释放已成功进入的目标。
+                try { ExitCurrent(CharacterBehaviorEndReason.Withdrawn, context.IsPrediction); }
+                catch (Exception cleanup) { failure.Data["AttackSwitchCleanup"] = cleanup; }
+                Journal?.Record(RegisteredId, request, Execution.Instance, CharacterBehaviorRequestStatus.Rejected,
+                    CharacterBehaviorRejectReason.InvalidConfiguration, buffer: buffer == CharacterBufferEvent.Executed
+                        ? CharacterBufferEvent.Cancelled : default, at: context.SimulationTime);
+                throw;
+            }
+            Journal?.Record(RegisteredId, request, Execution.Instance, CharacterBehaviorRequestStatus.Started, buffer: buffer, at: context.SimulationTime);
+        }
+
+        // 产生子区间的准确时间；已经消耗的离散输入不再交付给下一时段。
+        private static CharacterBehaviorContext At(CharacterBehaviorContext context, double offset, float seconds, bool heldOnly = false)
+        {
+            var input = context.Input;
+            if (offset > 0d || heldOnly) input = new CharacterInputSnapshot(input.Direction, false, input.GuardHeld, default, input.Gait);
+            return new CharacterBehaviorContext(input, context.Facing, seconds, context.Settings, context.StaminaRemaining,
+                context.DashCooldownRemaining, context.SimulationTime + offset, context.GroundVelocity, context.SeparateBoundaries, context.IsPrediction);
+        }
+
+        // 普通行为入口只推进攻击时钟，位移由普通移动行为独立提供。
+        public override Vector2 Update(CharacterBehaviorContext context)
+        {
+            if (current == null) return default;
+            moveStarted = firstStep;
+            startProgress = current.Progress;
+            if (firstStep) context = At(context, 0d, context.DeltaTime, true);
+            else ReadLinks(context);
+            firstStep = false;
+            if (context.SeparateBoundaries && context.DeltaTime > 0f)
+            {
+                AdvanceSegment(context, context.DeltaTime, NextEndpoint(current.NextBoundary));
+                return default;
+            }
+            current.Advance(At(context, 0d, 0f), current.Elapsed);
+            double offset = 0d;
+            while (true)
+            {
+                var endpoint = At(context, offset, 0f, true);
+                while (TrySwitch(endpoint)) current.Advance(endpoint, current.Elapsed);
+                double remaining = context.DeltaTime - offset;
+                if (!(remaining > 0d) || current.IsComplete) return default;
+                double next = NextEndpoint(current.NextDecision);
+                double seconds = Math.Min(remaining, next - current.Elapsed);
+                if (!(seconds > 0d) || !(offset + seconds > offset))
+                    throw new InvalidOperationException($"攻击状态 {id} 在 {current.Elapsed} 秒没有可推进的下一边界。");
+                AdvanceSegment(At(context, offset, (float)seconds, true), seconds, next);
+                offset += seconds;
+            }
+        }
+
+        // 将浮点步长吸附到实际跨过的阶段端点，避免下一次裁决重复同一边界。
+        private void AdvanceSegment(CharacterBehaviorContext context, double seconds, double boundary)
+        {
+            double end = current.Elapsed + seconds;
+            if (seconds >= (float)(boundary - current.Elapsed)) end = Math.Max(end, boundary);
+            if (boundary == current.Duration) end = Math.Min(end, boundary);
+            current.Advance(context, end);
+        }
+
+        // 发布本步攻击实例和开始边沿，移动许可由移动行为独立记录。
         internal override void RecordOutcome(bool moveApproved, ref CharacterBehaviorStep step)
         {
-            if (!IsActive) return;
-            if (moveApproved && Phase == CharacterBehaviorPhase.Recovery && !state.RecoveryMoveStart.HasValue)
-                state.RecoveryMoveStart = Mathf.Max(state.StartProgress, state.Recovery / state.Duration);
+            if (current == null) return;
             ReadOutcome(ref step);
-            step.AttackMoveStarted = state.MoveStarted;
+            step.AttackMoveStarted = moveStarted;
         }
 
-        // 将当前招式与接续状态写入行为帧。
+        // 发布当前状态的冻结观测和缓存信息。
         internal override void ReadOutcome(ref CharacterBehaviorStep step) => step.Attack = State;
 
-        // 暂停或失去输入连续性时清除尚未执行的接续。
+        // 将活动实例、缓存、冷却、定时路线消费记录及零时刻防环状态独立复制到预测流程。
+        protected override void CopyRuntimeStateTo(CharacterBehavior target)
+        {
+            var copy = (CharacterAttackBehavior)target;
+            copy.current = current?.CopyForPrediction();
+            if (current != null && (copy.current == null || ReferenceEquals(current, copy.current)))
+                throw new InvalidOperationException($"攻击状态 {id} 必须提供独立的预测运行实例。");
+            copy.id = id;
+            copy.stateName = stateName;
+            copy.instance = instance;
+            copy.startProgress = startProgress;
+            copy.startedAt = startedAt;
+            copy.firstStep = firstStep;
+            copy.movingOpening = movingOpening;
+            copy.moveStarted = moveStarted;
+            copy.bufferResult = bufferResult;
+            copy.pending = pending;
+            copy.pending.Target = pending.Target.Snapshot();
+            copy.skillReadyAt = skillReadyAt;
+            copy.instant = instant;
+            copy.enteredAtInstant.Clear();
+            copy.enteredAtInstant.UnionWith(enteredAtInstant);
+            copy.processedTimeLinks.Clear();
+            copy.processedTimeLinks.UnionWith(processedTimeLinks);
+        }
+
+        // 输入连续性中断时只撤销未执行的接续。
         protected override void OnInputContinuityEnded() => CloseBuffer(CharacterBufferEvent.Cancelled);
 
-        // 结束本次攻击并释放活动招式、运动和预输入。
+        // 先解除当前实例的所有权，再交付退出回调，后续恢复和外层撤销均无法重复退出。
+        private void ExitCurrent(CharacterBehaviorEndReason reason, bool isPrediction)
+        {
+            var previous = current;
+            current = null;
+            id = 0;
+            stateName = null;
+            firstStep = moveStarted = false;
+            processedTimeLinks.Clear();
+            previous?.Exit(reason, isPrediction);
+        }
+
+        // 在自然结束、外部接管或被打断时退出活动状态并保留跨许可冷却。
         public override void End()
         {
             CloseBuffer(CharacterBufferEvent.Cancelled);
-            base.End();
-            state.Move = CharacterAttackMove.None;
-            state.HasAttackMotion = false;
-            ClearBuffer();
+            try { ExitCurrent(Execution.EndReason, IsPrediction); }
+            finally { base.End(); }
         }
 
-        // 通过原位移入口推进并返回本步攻击位移。
-        public override Vector2 Update(CharacterBehaviorContext context) => AdvanceStep(context).Displacement;
-
-        // 推进当前招式，在时间窗口允许时执行缓冲接续。
-        public override CharacterBehaviorMotion AdvanceStep(CharacterBehaviorContext context)
+        // 角色重置时释放本代缓存和冷却，招式实例序号继续单调增长。
+        internal override void Reset()
         {
-            state.MoveStarted = state.OpeningStep;
-            if (!state.OpeningStep) ReadLinks(context);
-            state.OpeningStep = false;
-
-            float seconds = context.DeltaTime;
-            if (!CanExecuteBufferedLink(context, out float untilLink))
-                return Advance(context, seconds);
-
-            var next = state.BufferedOpening;
-            long requestId = state.BufferedRequest;
-            untilLink = Mathf.Min(seconds, untilLink);
-            var at = context.SimulationTime + untilLink;
-            bool expired = state.Elapsed + untilLink > state.BufferExpires + TimingTolerance;
-            if (expired || !IsReady(next.Link.To, at))
-            {
-                CloseBuffer(CharacterBufferEvent.Expired, expired ? CharacterBehaviorRejectReason.OutsideWindow
-                    : CharacterBehaviorRejectReason.Cooldown, at);
-                return Advance(context, seconds);
-            }
-            var previous = Advance(context, untilLink);
-            Journal?.End(this, CharacterBehaviorEndReason.Completed);
-            Enter(next, context, untilLink, false);
-            Journal?.Start(this, requestId);
-            Journal?.Record(RegisteredId, requestId, Execution.Instance, CharacterBehaviorRequestStatus.Started,
-                buffer: CharacterBufferEvent.Executed, at: at);
-            state.MoveStarted = true;
-            var current = Advance(context, seconds - untilLink);
-            // 两段均消耗本步时间，帧末的阶段、转向与表现时钟属于接入的新招。
-            return new CharacterBehaviorMotion(previous.Displacement + current.Displacement,
-                previous.OrdinaryMovementSeconds + current.OrdinaryMovementSeconds, current.ControlsDisplacement, current.Motion);
+            base.Reset();
+            skillReadyAt = 0d;
+            enteredAtInstant.Clear();
+            instant = double.NaN;
+            pending = default;
+            bufferResult = null;
         }
-
-        // 分段时间线仅在已到达接续点的零裁决中切招，公开 Tick 仍允许在单步中切招。
-        private bool CanExecuteBufferedLink(CharacterBehaviorContext context, out float untilLink)
-        {
-            untilLink = 0f;
-            if (state.BufferedMove == CharacterAttackMove.None) return false;
-            if (context.SeparateBoundaries)
-                return context.DeltaTime == 0f && state.BufferedAt <= state.Elapsed;
-
-            untilLink = Mathf.Max(0f, (float)state.BufferedAt - (float)state.Elapsed);
-            return untilLink <= context.DeltaTime + TimingTolerance;
-        }
-
-        // 推进单招时钟并计算位移和交还时间。
-        private CharacterBehaviorMotion Advance(CharacterBehaviorContext context, float seconds)
-        {
-            double before = state.Elapsed;
-            state.StartProgress = (float)(before / state.Duration);
-            AdvanceElapsed(seconds, context.SeparateBoundaries);
-            if (!state.HasAttackMotion)
-                return new CharacterBehaviorMotion(Vector2.zero, seconds, controlsDisplacement: false);
-
-            Vector2 displacement = state.AttackMotion.Advance(context, before, state.Elapsed, out var motion, out float movementSeconds);
-            // 自然结束后的步内余量交还给移动。
-            movementSeconds += context.SeparateBoundaries ? (float)Math.Max(0d, before + seconds - state.Duration)
-                : Mathf.Max(0f, (float)before + seconds - state.Duration);
-            return new CharacterBehaviorMotion(displacement, movementSeconds, Phase == CharacterBehaviorPhase.Active || motion.OpeningStep, motion);
-        }
-
-        // 仅校正已到达的边界，以步长的 float 精度消除舍入余量。
-        private void AdvanceElapsed(float seconds, bool separateBoundaries)
-        {
-            double before = state.Elapsed;
-            if (!separateBoundaries)
-            {
-                state.Elapsed = Mathf.Min(state.Duration, (float)before + seconds);
-                return;
-            }
-
-            if (seconds == 0f) return;
-            float boundary = state.NextPhaseEnd;
-            state.Elapsed = Math.Min(state.Duration, before + seconds);
-            if (seconds >= (float)(boundary - before))
-                state.Elapsed = Math.Max(state.Elapsed, boundary);
-            if (state.BufferedMove != CharacterAttackMove.None && state.BufferedAt > before &&
-                seconds >= (float)(state.BufferedAt - before))
-                state.Elapsed = Math.Max(state.Elapsed, state.BufferedAt);
-        }
-    }
-
-    /// <summary>保存单个攻击实例的招式时钟、接续、运动和表现交接值，独占冷却表由行为持有。</summary>
-    internal struct CharacterAttackRuntimeState
-    {
-        internal CharacterAttackMove Move;
-        internal long InstanceId;
-        internal long BufferedRequest;
-        internal double BufferExpires;
-        internal double Elapsed, BufferedAt; // 动作运行与接续时刻，单位为秒。
-        internal float Duration, Strike, Recovery; // 定义中的原速时钟，单位为秒。
-        internal float StartProgress;
-        internal CharacterAttackOpening BufferedOpening;
-        internal readonly CharacterAttackMove BufferedMove => BufferedOpening.Link.To;
-        internal string BufferResult;
-        internal Vector2 BlendRange;
-        internal float? RecoveryMoveStart;
-        internal bool MovingOpening, OpeningStep, MoveStarted;
-        internal bool HasAttackMotion;
-        internal CharacterAttackMotion AttackMotion;
-        internal CharacterActionAlignmentSettings Alignment;
-        internal readonly float NextPhaseEnd => Elapsed < Strike ? Strike : Elapsed < Recovery ? Recovery : Duration;
     }
 }

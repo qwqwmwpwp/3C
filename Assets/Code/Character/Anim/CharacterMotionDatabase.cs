@@ -55,6 +55,8 @@ namespace ThreeC.CharacterBehavior
     [Serializable]
     internal sealed class CharacterMotionTrack
     {
+        [NonSerialized] internal int LibraryIndex;
+        [NonSerialized] internal string LibraryLabel, TrackLabel;
         public AnimationClip Clip;
         [Range(0f, 1f)] public float FirstPhase, SecondPhase;
         [HideInInspector] public bool Mixed;
@@ -147,6 +149,10 @@ namespace ThreeC.CharacterBehavior
         [SerializeField, HideInInspector] internal Avatar BakedAvatar;
         [SerializeField, HideInInspector] internal int Format;
 
+#if UNITY_EDITOR
+        // 标记已装配的角色搜索范围，使编辑器修改在下一批次重新生效。
+        private void OnValidate() => GroundSearchLibraries.InvalidateBindings();
+#endif
         // 检查库是否由当前基础动画组和 Avatar 烘焙，并返回缺失或失效的资源。
         internal string ValidatePlayback()
         {

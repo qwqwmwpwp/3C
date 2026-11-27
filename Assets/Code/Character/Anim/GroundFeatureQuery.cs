@@ -10,6 +10,15 @@ namespace ThreeC.CharacterBehavior
         private readonly uint mask;
         internal bool Active => layout != null; // 没有可信通道时也不能临时切回另一套评分布局。
 
+        // 缺少本库参与评分的原始骨通道时报告其编号，以便本行尝试下一个库。
+        internal int MissingChannel(GroundFeatureGroups groups)
+        {
+            for (int i = 0; i < layout.Channels.Length; i++)
+                if ((layout.Available & (1u << i)) != 0 && (mask & (1u << i)) == 0 &&
+                    (layout.Channels[i].Group & groups) != 0 && layout.Channels[i].Weight > 0f) return i;
+            return -1;
+        }
+
         // 接管主线程已经复制的原始姿态与查询有效位。
         internal GroundFeatureQuery(GroundFeatureLayout layout, Vector3[] observed, uint mask)
         {

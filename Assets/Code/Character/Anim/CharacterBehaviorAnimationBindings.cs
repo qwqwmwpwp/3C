@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>按已提交的许可维护动作实例。一次许可只进入一次，持续姿势随动作资源选择移动变体。</summary>
+    /// <summary>按映射顺序收集行为许可与瞬发边沿，在动画采集阶段统一提交。</summary>
     internal sealed class CharacterBehaviorAnimationBindings
     {
         private readonly List<Binding> bindings = new List<Binding>();
@@ -12,23 +12,27 @@ namespace ThreeC.CharacterBehavior
             CharacterPlaybackStartSource start, CharacterPlaybackEndSource end)> edges = new();
         internal int StateVersion { get; set; }
         private int? version;
-        private readonly CharacterAnimationComposer composer;
+        private CharacterAnimationConfiguration configuration;
+        internal readonly CharacterAnimationComposer Composer;
         private CharacterAnimationResourceCatalog resources;
         private readonly UnityEngine.Object context;
 
-        public CharacterBehaviorAnimationBindings(CharacterBehaviorAnimationMapping[] mappings,
+        // 装配映射、资源目录与统一的动画提交目标。
+        public CharacterBehaviorAnimationBindings(CharacterAnimationConfiguration config,
             CharacterAnimationComposer composer, CharacterAnimationResourceCatalog resources, UnityEngine.Object context)
         {
-            this.composer = composer;
+            Composer = composer;
             this.resources = resources;
             this.context = context;
-            AddMappings(mappings, default, false);
+            configuration = config;
+            AddMappings(config.BehaviorAnimations, default, false);
         }
 
         // 用当前行为相位为新增映射续播，并保留仍在使用的绑定。
-        internal void Reconfigure(CharacterBehaviorAnimationMapping[] mappings, CharacterAnimationResourceCatalog catalog,
+        internal void Reconfigure(CharacterAnimationConfiguration config, CharacterAnimationResourceCatalog catalog,
             CharacterBehaviorObservation frame, AnimationModuleChanges changes)
         {
+            configuration = config;
             resources = catalog;
             var retained = new Dictionary<CharacterBehaviorAnimationMapping, Binding>();
             foreach (var binding in bindings)
@@ -41,11 +45,12 @@ namespace ThreeC.CharacterBehavior
                     continue;
                 }
                 binding.Removed = true;
-                ClearPulse(binding, CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ModuleRemoved);
-                if (binding.Hold.InstanceId != 0) composer.Withdraw(binding.Hold.SemanticKey, binding.Hold.InstanceId);
+                if (binding.Attack != null) binding.Attack.Cancel(frame.Time, CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ModuleRemoved);
+                else if (binding.IsPulse) binding.Pulse.End(CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ModuleRemoved);
+                else binding.Grant.End(CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.ModuleRemoved);
             }
             bindings.Clear();
-            AddMappings(mappings, frame, true, retained);
+            AddMappings(config.BehaviorAnimations, frame, true, retained);
         }
 
         // 绑定动作规则并从已获准的行为恢复新加入的映射。
@@ -66,8 +71,8 @@ namespace ThreeC.CharacterBehavior
                     Debug.LogWarning("行为表现需要一个许可行为和至少一个动作键。", context);
                     continue;
                 }
-                var settings = rule.Handoff;
-                if (settings?.OverridePhases != true && rule.EntryAction != null &&
+                var settings = rule.IsAttackState ? null : rule.Handoff;
+                if (!rule.IsAttackState && settings?.OverridePhases != true && rule.EntryAction != null &&
                     resources.Rules.TryGetValue(rule.EntryAction, out var action) && action.Handoff?.OverridePhases == true)
                     settings = action.Handoff;
                 if (rule.Trigger == CharacterAnimationTrigger.OnStart && settings?.OverridePhases == true &&
@@ -76,32 +81,41 @@ namespace ThreeC.CharacterBehavior
                     Debug.LogWarning($"行为 {rule.BehaviorId} 的单次接管需要有效阶段、时长和加权层：{rule.EntryAction}。", context);
                     continue;
                 }
-                var binding = new Binding { Source = rule, Rule = rule.Snapshot(), HandoffSettings = settings?.Snapshot() };
+                var binding = new Binding(rule, settings, this);
                 bindings.Add(binding);
                 if (seed && frame.FrameNumber != 0) Observe(frame, true, binding);
             }
         }
 
-        // 独立调用同一动作键时复用招式阶段；行为驱动的实例采用行为时间。
-        internal static CharacterActionHandoffSettings ResolveHandoff(CharacterAnimationActionSettings action,
-            CharacterAnimationConfiguration config)
+        // 核对主线程已冻结的素材身份，再把请求交给通用单次播放实例。
+        internal CharacterActionPlayback PlayRequest(string key, float weight, CharacterPlaybackOrigin origin,
+            CharacterPlaybackStartSource source, CharacterPlaybackClock clock, int clipId)
         {
-            if (action.Handoff?.OverridePhases == true) return action.Handoff;
-            if (config.BehaviorAnimations == null) return null;
-            foreach (var mapping in config.BehaviorAnimations)
-            {
-                if (mapping == null || mapping.Trigger != CharacterAnimationTrigger.OnStart || mapping.EntryAction != action.Key) continue;
-                if (mapping.BehaviorId != CharacterBehaviorId.Attack) continue;
-                var move = config.AttackSettings?.Moves?.Move(mapping.AttackMove);
-                if (move == null || !move.HasValidPhases) continue;
-                return new CharacterActionHandoffSettings
-                {
-                    FullFrom = move.StrikeStart, ReleaseFrom = move.RecoveryStart,
-                    MoveBlendSeconds = move.RecoveryMoveBlendSeconds,
-                    StartAtZero = mapping.Handoff?.StartAtZero == true
-                };
-            }
-            return null;
+            if (!clock.Valid || clipId == 0 || resources.Ready && resources.OneShotClipId(key, true) != clipId) return null;
+            return Composer.PlayOnce(key, weight, origin, source, clock, clipId);
+        }
+
+        // 按键独立播放在上层兼容映射中冻结招式配置，并安排后摇及退出命令。
+        internal CharacterActionPlayback PlayExplicit(string key, float weight, CharacterPlaybackOrigin origin, double at)
+        {
+            resources.CaptureOneShots();
+            if (!resources.CanPlayOnce(key)) return null;
+            int state = FindAttackState(key, configuration);
+            if (state == 0) return Composer.PlayOnce(key, weight, origin, CharacterPlaybackStartSource.ExplicitRequest, clipId: resources.OneShotClipId(key));
+            var action = configuration.AttackTable?.Find(state)?.Presentation ?? default;
+            var handle = PlayRequest(key, weight, origin, CharacterPlaybackStartSource.ExplicitRequest, action.Play(at), action.ClipId);
+            handle?.FadeOut(action.RecoveryAt(at), action.Recovery);
+            handle?.Cancel(action.ExitAt(at), CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.BehaviorWindowEnded);
+            return handle;
+        }
+
+        // 将动作键解析到对应的具名攻击，独立播放在请求时从该字段冻结时钟。
+        internal static int FindAttackState(string key, CharacterAnimationConfiguration config)
+        {
+            if (config.BehaviorAnimations != null)
+                foreach (var mapping in config.BehaviorAnimations)
+                    if (mapping?.IsAttackState == true && mapping.EntryAction == key) return mapping.AttackStateId;
+            return 0;
         }
 
         // 按该物理步实际执行的行为判断前摇步态，后到的渲染帧不会改写步态历史。
@@ -109,17 +123,6 @@ namespace ThreeC.CharacterBehavior
         {
             foreach (var binding in bindings)
                 if (binding.Rule.PreservesEntryGait(frame, binding.HandoffSettings)) return true;
-            return false;
-        }
-
-        internal bool IsReturningToMovement(in CharacterAnimationDemand overlay, in CharacterBehaviorFrameResult step)
-        {
-            var attack = step.Attack;
-            if (overlay.Playback == null || !step.MoveApproved || step.DashActive ||
-                attack.InstanceId == 0 || attack.Phase != CharacterBehaviorPhase.Recovery) return false;
-            foreach (var binding in bindings)
-                if (binding.AttackInstance == attack.InstanceId && binding.EntryAttackInstance == attack.InstanceId &&
-                    binding.Entry == overlay.Playback) return true;
             return false;
         }
 
@@ -131,147 +134,16 @@ namespace ThreeC.CharacterBehavior
         private void Observe(CharacterBehaviorObservation frame, bool seed, Binding added)
         {
             bool reconnect = seed || version != frame.SimulationVersion;
-            if (version.HasValue && version != frame.SimulationVersion) Reset(CharacterPlaybackEndSource.Paused);
+            if (version.HasValue && version != frame.SimulationVersion) edges.Clear();
             version = frame.SimulationVersion;
-            var step = frame.Behavior;
             foreach (var binding in bindings)
             {
-                if (added != null && binding != added) continue;
-                var id = binding.Rule.BehaviorId;
-                binding.CaptureOrigin(StateVersion, frame);
-                if ((step.InterruptedBehaviors & id) != 0)
-                {
-                    binding.Interrupted = true;
-                    binding.GrantEnd = CharacterPlaybackEndSource.BehaviorInterrupted;
-                }
-                else if ((step.WithdrawnBehaviors & id) != 0) binding.GrantEnd = CharacterPlaybackEndSource.BehaviorWithdrawn;
-                bool active = id == CharacterBehaviorId.Move ? step.MoveApproved : (step.ActiveBehaviors & id) != 0;
-                bool began = id == CharacterBehaviorId.Move ? step.MoveStarted : (step.StartedBehaviors & id) != 0;
-                binding.ObservedActive = active;
-                if (active && reconnect && (seed || !began)) binding.NextEntryStart = CharacterPlaybackStartSource.Rebind;
-                if (binding.IsPulse)
-                {
-                    // 同一步可能先释放旧许可、再批准新实例；自然结束保留开始事件。
-                    if (!seed && (step.InterruptedBehaviors & id) != 0)
-                        QueueEdge(binding, CharacterActionPlaybackStatus.Interrupted, end: CharacterPlaybackEndSource.BehaviorInterrupted);
-                    else if (!seed && (step.WithdrawnBehaviors & id) != 0)
-                        QueueEdge(binding, CharacterActionPlaybackStatus.Withdrawn, end: CharacterPlaybackEndSource.BehaviorWithdrawn);
-                    if (id == CharacterBehaviorId.Attack && binding.Rule.AttackMove != CharacterAttackMove.None)
-                    {
-                        ObserveAttack(binding, step, active, reconnect, seed);
-                        continue;
-                    }
-                    if (binding.HandoffSettings?.OverridePhases == true)
-                    {
-                        ObserveConfigured(binding, frame, active, began, reconnect, seed);
-                        continue;
-                    }
-                    bool previouslyTimed = binding.TimedActive;
-                    if (began) binding.FirstPose = null;
-                    if (step.DisplacementProvider == id)
-                    {
-                        binding.FirstPose = step.ActionMotion.StartPhase;
-                        binding.LastPose = step.ActionMotion.EndPhase;
-                        binding.Duration = step.ActionMotion.Duration;
-                    }
-                    binding.TimedActive = active && step.DisplacementProvider == id && binding.FirstPose.HasValue;
-                    if ((!seed && began) || (reconnect && binding.TimedActive))
-                    {
-                        binding.ResumeTimed = false;
-                        QueueEdge(binding, CharacterActionPlaybackStatus.Pending, reconnect && !began || seed
-                            ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
-                    }
-                    if (!seed && !active && (step.EndedBehaviors & id) != 0 &&
-                        (previouslyTimed || binding.FirstPose.HasValue))
-                        QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
-                    continue;
-                }
-                if (!active) binding.ObservedGrant = 0;
-                else if (began || binding.ObservedGrant == 0) binding.ObservedGrant = frame.FrameNumber;
+                if (added == null || binding == added) binding.Observe(StateVersion, frame, reconnect, seed);
             }
-        }
-
-        // 招式起止相位来自当帧行为时间，位移权限和动画淡入都不会重置时钟。
-        private void ObserveAttack(Binding binding, CharacterBehaviorFrameResult step, bool active, bool reconnect, bool seed)
-        {
-            bool matches = step.Attack.Move == binding.Rule.AttackMove;
-            long instance = matches && active ? step.Attack.InstanceId : 0;
-            bool newInstance = instance != 0 && binding.AttackInstance != instance;
-            if (newInstance)
-            {
-                binding.AttackPhase = 0f;
-                binding.AttackEntryPhase = step.Attack.StartProgress;
-            }
-            binding.AttackInstance = instance;
-            binding.TimedActive = instance != 0;
-            if (!matches)
-            {
-                if (step.AttackMoveStarted)
-                {
-                    binding.ResumeTimed = false;
-                    if (!seed) QueueEdge(binding, CharacterActionPlaybackStatus.Withdrawn);
-                }
-                return;
-            }
-
-            binding.FirstPose = step.Attack.StartProgress;
-            binding.LastPose = step.Attack.Progress;
-            binding.Duration = step.Attack.Duration;
-            binding.SetHandoff(step.Attack.Handoff, step.MoveApproved, reconnect || newInstance);
-            if (!active)
-            {
-                binding.ResumeTimed = false;
-                if (!seed && step.AttackMoveStarted) QueueEdge(binding, CharacterActionPlaybackStatus.Pending);
-                if (!seed) QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
-            }
-            else if (reconnect && !step.AttackMoveStarted)
-            {
-                binding.ResumeTimed = true;
-            }
-            else if (newInstance || step.AttackMoveStarted)
-            {
-                binding.ResumeTimed = false;
-                QueueEdge(binding, CharacterActionPlaybackStatus.Pending, seed
-                    ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
-            }
-        }
-
-        // 用当帧行为时钟或配置的时长推进单次动作。
-        private void ObserveConfigured(Binding binding, CharacterBehaviorObservation frame, bool active,
-            bool began, bool reconnect, bool seed)
-        {
-            var step = frame.Behavior;
-            bool entering = began || reconnect;
-            bool wasActive = binding.TimedActive;
-            binding.TimedActive = active;
-            if (!active && !began && !wasActive) return;
-            bool hasClock = binding.Rule.BehaviorId != CharacterBehaviorId.Move &&
-                step.DisplacementProvider == binding.Rule.BehaviorId && step.ActionMotion.StartPhase.HasValue &&
-                step.ActionMotion.Duration > 0f;
-            if (hasClock)
-            {
-                binding.FirstPose = step.ActionMotion.StartPhase;
-                binding.LastPose = step.ActionMotion.EndPhase;
-                binding.Duration = step.ActionMotion.Duration;
-            }
-            else
-            {
-                if (entering || !wasActive) binding.Duration = binding.HandoffSettings.Duration;
-                float age = step.GrantAgeAtStepStart(binding.Rule.BehaviorId);
-                binding.FirstPose = Mathf.Clamp01(age / binding.Duration);
-                binding.LastPose = Mathf.Clamp01((age + frame.DeltaTime) / binding.Duration);
-            }
-            binding.SetHandoff(default, step.MoveApproved, entering);
-            if (entering && (active || !seed && began))
-                QueueEdge(binding, CharacterActionPlaybackStatus.Pending, (seed || reconnect && !began)
-                    ? CharacterPlaybackStartSource.Rebind : CharacterPlaybackStartSource.BehaviorGrant);
-            if (!active && !seed && (step.InterruptedBehaviors & binding.Rule.BehaviorId) == 0 &&
-                (step.WithdrawnBehaviors & binding.Rule.BehaviorId) == 0)
-                QueueEdge(binding, CharacterActionPlaybackStatus.Completed);
         }
 
         // 入队时复制身份，避免后续行为片段把尚未消费的开始边沿改为新招式。
-        private void QueueEdge(Binding binding, CharacterActionPlaybackStatus status,
+        internal void QueueEdge(Binding binding, CharacterActionPlaybackStatus status,
             CharacterPlaybackStartSource start = CharacterPlaybackStartSource.BehaviorGrant,
             CharacterPlaybackEndSource end = CharacterPlaybackEndSource.BehaviorWindowEnded)
         {
@@ -286,107 +158,67 @@ namespace ThreeC.CharacterBehavior
             {
                 if (binding.IsPulse)
                 {
-                    if (!valid) ClearPulse(binding, CharacterActionPlaybackStatus.Withdrawn, invalid);
-                    continue;
+                    if (!valid) binding.Pulse?.End(CharacterActionPlaybackStatus.Withdrawn, invalid);
                 }
-                long grant = binding.Rule.BehaviorId == CharacterBehaviorId.Guard ? guardGrant : binding.ObservedGrant;
-                if (!valid) grant = 0;
-                if (grant != binding.CurrentGrant)
-                {
-                    var reason = binding.Interrupted ? CharacterActionPlaybackStatus.Interrupted : CharacterActionPlaybackStatus.Withdrawn;
-                    var source = !valid ? invalid : binding.GrantEnd == CharacterPlaybackEndSource.None
-                        ? CharacterPlaybackEndSource.BehaviorWindowEnded : binding.GrantEnd;
-                    if (binding.Entry != null) composer.End(binding.Entry.Key, binding.Entry.InstanceId, reason, source);
-                    if (binding.Hold.InstanceId != 0) composer.Withdraw(binding.Hold.SemanticKey, binding.Hold.InstanceId);
-                    binding.CurrentGrant = grant;
-                    binding.Entry = null;
-                    binding.Hold = default;
-                    if (grant != 0)
-                    {
-                        binding.EntryAction = binding.Rule.EntryAction;
-                        binding.HoldAction = binding.Rule.HoldAction;
-                        binding.GrantWeight = binding.Rule.Weight;
-                        binding.EntryRecovery = binding.Rule.EntryRecovery;
-                    }
-                }
-                binding.Interrupted = false;
-                binding.GrantEnd = CharacterPlaybackEndSource.None;
+                else binding.Grant.UpdateGrant(valid, guardGrant, invalid);
             }
         }
 
-        // 按行为结束相位提交本帧许可及播放请求。
+        // 先按全局顺序消费冻结的边沿，再逐绑定提交最终许可与相位。
         public void SubmitGranted()
         {
             while (edges.Count > 0)
             {
                 var (binding, edge, origin, start, end) = edges.Dequeue();
                 if (binding.Removed) continue;
-                if (edge != CharacterActionPlaybackStatus.Pending)
-                {
-                    ClearPulse(binding, edge, end);
-                    continue;
-                }
-                StartPulse(binding, origin, start);
+                if (edge == CharacterActionPlaybackStatus.Pending) binding.Pulse.Start(origin, start);
+                else binding.Pulse.End(edge, end);
             }
             foreach (var binding in bindings)
             {
-                if (binding.IsPulse)
-                {
-                    if (binding.ResumeTimed && binding.ObservedActive)
-                        StartPulse(binding, binding.Origin, CharacterPlaybackStartSource.Rebind);
-                    binding.ResumeTimed = false;
-                    if (binding.Entry != null && binding.FirstPose.HasValue && binding.Duration > 0f)
-                    {
-                        float phase = Mathf.Clamp01(binding.LastPose);
-                        if (binding.AttackInstance != 0) binding.AttackPhase = Mathf.Max(binding.AttackPhase, phase);
-                        float? start = binding.ResumedEntry ? binding.AttackPhase :
-                            binding.AttackInstance != 0 ? binding.AttackEntryPhase : binding.FirstPose;
-                        composer.Sample(binding.Entry, start, phase, binding.Handoff,
-                            !binding.Handoff.UsesRouteBlend && binding.HandoffSettings?.StartAtZero == true, binding.ResumedEntry);
-                    }
-                    continue;
-                }
-                if (binding.CurrentGrant == 0 || binding.Hold.InstanceId != 0) continue;
-                if (!string.IsNullOrWhiteSpace(binding.EntryAction))
-                {
-                    if (binding.Entry?.WasPreempted == true && binding.EntryRecovery == CharacterGrantedEntryRecovery.ReplayEntry)
-                    {
-                        if (composer.HasActive(binding.EntryAction)) continue;
-                        binding.Entry = null;
-                        binding.NextEntryStart = CharacterPlaybackStartSource.ArbitrationRecovery;
-                    }
-                    if (binding.Entry == null)
-                    {
-                        if (!resources.CanPlayOnce(binding.EntryAction))
-                        {
-                            Report(binding, binding.EntryAction, "需要可用的非循环进入动作");
-                            continue;
-                        }
-                        var source = binding.NextEntryStart == default ? CharacterPlaybackStartSource.BehaviorGrant : binding.NextEntryStart;
-                        binding.Entry = composer.PlayOnce(binding.EntryAction, binding.GrantWeight, binding.Origin, source);
-                        binding.NextEntryStart = default;
-                    }
-                    if (binding.Entry == null || binding.Entry.ObservedStatus != CharacterActionPlaybackStatus.Completed &&
-                        !binding.Entry.WasPreempted) continue; // 显式撤销和无效素材不会触发失去部位后的自动恢复。
-                }
-                if (string.IsNullOrWhiteSpace(binding.HoldAction)) continue;
-                if (!resources.CanSubmit(binding.HoldAction))
-                {
-                    Report(binding, binding.HoldAction, "持续动作不可用");
-                    continue;
-                }
-                long id = composer.NextInstance(binding.HoldAction);
-                var request = new CharacterAnimationRequest(binding.HoldAction, id, binding.GrantWeight);
-                if (composer.Submit(request)) binding.Hold = request;
+                if (binding.IsPulse) binding.Pulse?.Submit();
+                else binding.Grant.Submit();
             }
         }
 
+        // 判断资源绑定是否仍指向这个逻辑实例的原素材。
+        internal bool SameClip(CharacterActionPlayback playback) => playback != null && playback.ClipId != 0 &&
+            resources.OneShotClipId(playback.Key) == playback.ClipId;
+
+        // 按冻结的执行身份提交非循环进入动作，并区分素材不可用与合成器拒绝。
+        internal bool TryPlayEntry(Binding binding, CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source,
+            out CharacterActionPlayback entry)
+        {
+            var rule = binding.Rule;
+            bool playable = resources.CanPlayOnce(rule.EntryAction);
+            entry = playable ? Composer.PlayOnce(rule.EntryAction, rule.Weight, origin, source, clipId: resources.OneShotClipId(rule.EntryAction)) : null;
+            if (!playable || binding.IsPulse && entry == null)
+                Report(binding, rule.EntryAction, binding.IsPulse ? "单次动作需要可用的非循环片段" : "需要可用的非循环进入动作");
+            return playable;
+        }
+
+        // 为可用的持续姿势分配实例，只返回已获合成器接收的需求。
+        internal CharacterAnimationRequest SubmitHold(Binding binding)
+        {
+            var rule = binding.Rule;
+            if (!resources.CanSubmit(rule.HoldAction))
+            {
+                Report(binding, rule.HoldAction, "持续动作不可用");
+                return default;
+            }
+            var request = new CharacterAnimationRequest(rule.HoldAction, Composer.NextInstance(rule.HoldAction), rule.Weight);
+            return Composer.Submit(request) ? request : default;
+        }
+
         private readonly Queue<string> warnings = new Queue<string>();
+
+        // 在统一的日志交付阶段输出已积累的配置问题。
         internal void FlushWarnings()
         {
             while (warnings.Count > 0) Debug.LogWarning(warnings.Dequeue(), context);
         }
 
+        // 每条绑定只记录首次遇到的无效资源。
         private void Report(Binding binding, string key, string error)
         {
             if (binding.Reported) return;
@@ -394,92 +226,31 @@ namespace ThreeC.CharacterBehavior
             warnings.Enqueue($"行为 {binding.Rule.BehaviorId} 的表现配置：{error}（{key}）。");
         }
 
-        // 用当前句柄撤销本绑定的单次需求，保留已经冻结的回执。
-        private void ClearPulse(Binding binding, CharacterActionPlaybackStatus reason, CharacterPlaybackEndSource source)
-        {
-            var entry = binding.Entry;
-            if (entry != null) composer.End(entry.Key, entry.InstanceId, reason, source);
-            binding.Entry = null;
-            binding.EntryAttackInstance = 0;
-            binding.ResumedEntry = false;
-        }
-
-        // 从开始边沿的原始执行身份创建播放，将恢复点留给已有相位采样规则。
-        private void StartPulse(Binding binding, CharacterPlaybackOrigin origin, CharacterPlaybackStartSource source)
-        {
-            var rule = binding.Rule;
-            binding.ResumeTimed = false; // 同一帧的真实开始边沿优先于重绑续播。
-            binding.ResumedEntry = source == CharacterPlaybackStartSource.Rebind && origin.Move != 0;
-            binding.EntryAttackInstance = origin.Move;
-            binding.Entry = resources.CanPlayOnce(rule.EntryAction) ? composer.PlayOnce(rule.EntryAction, rule.Weight, origin, source) : null;
-            if (binding.Entry == null) Report(binding, rule.EntryAction, "单次动作需要可用的非循环片段");
-        }
-
         // 播放库重绑后只重新申请仍获准且尚未终结的进入动作。
         public void RebindGrantedEntries()
         {
             foreach (var binding in bindings)
             {
-                if (binding.IsPulse)
-                {
-                    if (binding.ObservedActive && binding.TimedActive && (binding.Entry == null ||
-                        binding.Entry.ObservedStatus == CharacterActionPlaybackStatus.Pending ||
-                        binding.Entry.ObservedStatus == CharacterActionPlaybackStatus.Started))
-                    {
-                        binding.RememberAttackCursor();
-                        binding.Entry = null; // 仲裁器结束旧句柄，同一行为实例只从当前相位重建播放。
-                        binding.ResumeTimed = true;
-                    }
-                    continue;
-                }
-                if (binding.CurrentGrant == 0) continue;
-                if (binding.Entry?.Status == CharacterActionPlaybackStatus.Pending ||
-                    binding.Entry?.Status == CharacterActionPlaybackStatus.Started)
-                {
-                    binding.Entry = null;
-                    binding.NextEntryStart = CharacterPlaybackStartSource.Rebind;
-                }
-            }
-        }
-
-        // 中断逐帧提交的脉冲，并记住仍在计时的恢复点。
-        public void SuspendPulses(CharacterPlaybackEndSource source)
-        {
-            edges.Clear();
-            foreach (var binding in bindings)
-            {
-                if (!binding.IsPulse) continue;
-                binding.RememberAttackCursor();
-                ClearPulse(binding, CharacterActionPlaybackStatus.Interrupted, source);
-                binding.ResumeTimed = binding.TimedActive;
+                if (binding.IsPulse) binding.Pulse?.Rebind();
+                else binding.Grant.Rebind();
             }
         }
 
         // 清理失去时间窗且始终未获部位的请求。
         public void ReleaseExpiredRequests()
         {
-            foreach (var binding in bindings)
-                if (binding.FirstPose.HasValue && !binding.TimedActive && binding.Entry?.Status == CharacterActionPlaybackStatus.Pending)
-                    ClearPulse(binding, CharacterActionPlaybackStatus.Withdrawn, CharacterPlaybackEndSource.BehaviorWindowEnded);
+            foreach (var binding in bindings) binding.Pulse?.ReleaseExpired();
         }
 
-        // 在角色代次或模拟连续性边界停止绑定，下一次观察从新身份重新建立。
+        // 角色硬边界撤销绑定观察，暂停与同素材重绑不调用此重置。
         public void Reset(CharacterPlaybackEndSource source)
         {
             UpdateGrants(false, 0, source);
             version = null;
             foreach (var binding in bindings)
             {
-                binding.Origin = default;
-                binding.NextEntryStart = default;
-                binding.ObservedActive = false;
-                binding.ObservedGrant = 0;
-                binding.AttackInstance = binding.EntryAttackInstance = 0;
-                binding.ResumedEntry = false;
-                binding.FirstPose = null;
-                binding.Handoff = default;
-                binding.MoveStart = null;
-                binding.ResumeTimed = binding.TimedActive = false;
+                binding.Attack?.Cancel(Composer.Time, CharacterActionPlaybackStatus.Interrupted, source);
+                binding.ResetObservation();
             }
         }
     }

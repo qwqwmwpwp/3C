@@ -68,25 +68,25 @@ MonoBehaviour:
   mappings:
   - Behavior: 8
     Trigger: 1
-    AttackMove: 1
+    AttackStateId: 1
     EntryAction: full.light_attack
     HoldAction:
     Weight: 1
   - Behavior: 8
     Trigger: 1
-    AttackMove: 2
+    AttackStateId: 2
     EntryAction: full.light_attack_2
     HoldAction:
     Weight: 1
   - Behavior: 8
     Trigger: 1
-    AttackMove: 3
+    AttackStateId: 3
     EntryAction: full.heavy_attack
     HoldAction:
     Weight: 1
   - Behavior: 8
     Trigger: 1
-    AttackMove: 4
+    AttackStateId: 4
     EntryAction: full.skill_2
     HoldAction:
     Weight: 1

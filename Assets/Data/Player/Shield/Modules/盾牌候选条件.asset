@@ -25,16 +25,20 @@ MonoBehaviour:
     Phases: 127
     Speed: {x: 0, y: 100}
     SignedAngle: {x: -180, y: 180}
-    Groups:
-    - 跑步循环
-    - 步行循环
-    - 冲刺循环
-    - 步行左转32度
-    - 步行右转32度
-    - 跑步左转32度
-    - 跑步右转32度
-    - 冲刺左转32度
-    - 冲刺右转32度
+    SearchMode: 0
+    RespondToInputTurn: 0
+    Sources:
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - c07d3f94ccae407f8695cd5c8889eba1
+      - f6bea5bcc1054ba9899c3ea974f133df
+      - 170561e54f334e52abac9a541c44696d
+      - 457a0812ad704bc1929aa1c919d31aea
+      - 5fc04b31662e40388537abf38761c6ae
+      - 9581fa8a4e0c42b4a1dad3d94bd730bb
+      - d3840edfa2d2485db0a99db9e23bcaca
+      - 37e780db5bfb48bab8c4fae899fd9308
+      - 3b37943662d94dfc8688a68375aed7c5
     Features: 15
     Empty: 0
   - Name: 起步
@@ -48,23 +52,27 @@ MonoBehaviour:
     Phases: 127
     Speed: {x: 0, y: 100}
     SignedAngle: {x: -180, y: 180}
-    Groups:
-    - 跑步循环
-    - 步行循环
-    - 冲刺循环
-    - 步行起步
-    - 步行左转32度
-    - 步行右转32度
-    - 跑步起步
-    - 跑步左转32度
-    - 跑步右转32度
-    - 冲刺起步
-    - 冲刺左转32度
-    - 冲刺右转32度
-    - 步行转跑步
-    - 跑步转步行
-    - 跑步转冲刺
-    - 冲刺转跑步
+    SearchMode: 0
+    RespondToInputTurn: 0
+    Sources:
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - c07d3f94ccae407f8695cd5c8889eba1
+      - f6bea5bcc1054ba9899c3ea974f133df
+      - 170561e54f334e52abac9a541c44696d
+      - ce55663e3fef49f2ba25a2fd2e9a7c74
+      - 457a0812ad704bc1929aa1c919d31aea
+      - 5fc04b31662e40388537abf38761c6ae
+      - fcc95bf242da4cfe8163ce9ebc48ba98
+      - 9581fa8a4e0c42b4a1dad3d94bd730bb
+      - d3840edfa2d2485db0a99db9e23bcaca
+      - 9d05a6d3cb3a4d57a6e7041b64ddb24c
+      - 37e780db5bfb48bab8c4fae899fd9308
+      - 3b37943662d94dfc8688a68375aed7c5
+      - c6d70546f5884f77a7c77225b5647c43
+      - 7ebb6d6e8bc041638f0cc22bf11264bf
+      - c6e5fc0617754114ba310b1faad1dceb
+      - 0db2d84e7e074f4497b947ca3223bf63
     Features: 15
     Empty: 0
   - Name: 转向
@@ -78,19 +86,23 @@ MonoBehaviour:
     Phases: 127
     Speed: {x: 0, y: 100}
     SignedAngle: {x: -180, y: 180}
-    Groups:
-    - 跑步左转90度
-    - 跑步右转90度
-    - 步行左转90度
-    - 步行右转90度
-    - 步行左转180度
-    - 步行右转180度
-    - 跑步左转180度
-    - 跑步右转180度
-    - 冲刺左转90度
-    - 冲刺右转90度
-    - 冲刺左转180度
-    - 冲刺右转180度
+    SearchMode: 0
+    RespondToInputTurn: 0
+    Sources:
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - 068d6fab9bae43f29fa6d36fe7d7edbe
+      - 8601fc42b9b94ee8b49efb94ba8d28a2
+      - f4902d8855d14cd7b0780bb8e9b99448
+      - 175601c1e1ef49e48d98266c58f311df
+      - 7987a6b3bc0d43c5a0dd265ce1d9440f
+      - 6e06d514838744c783c51f0d1b9bfeb7
+      - 83759f83efcc48cf86f596c666ae1efb
+      - b279e725a3184b4b9c3d5e059ab2f4c0
+      - e0b0eb2e93874a00a860fe40cab09ade
+      - 6d3df871346746298f077628cdee9e6a
+      - 75ac690477ba4f52b56825f09b0c64fc
+      - 964f357c82f544d682037eba6eb98a44
     Features: 15
     Empty: 0
   - Name: 收步
@@ -104,10 +116,14 @@ MonoBehaviour:
     Phases: 127
     Speed: {x: 0, y: 100}
     SignedAngle: {x: -180, y: 180}
-    Groups:
-    - 跑步收步
-    - 步行收步
-    - 冲刺收步
+    SearchMode: 0
+    RespondToInputTurn: 0
+    Sources:
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - d7d80e3f3f5c4c99a01eb5d4c89e4a30
+      - ba002a167fcc402a91f739b4c0d12d70
+      - 6e1eda3e34a14df9931e18c25e3b5ff9
     Features: 15
     Empty: 0
   - Name: 换步
@@ -121,19 +137,119 @@ MonoBehaviour:
     Phases: 127
     Speed: {x: 0, y: 100}
     SignedAngle: {x: -180, y: 180}
-    Groups:
-    - 跑步循环
-    - 步行循环
-    - 冲刺循环
-    - 步行左转32度
-    - 步行右转32度
-    - 跑步左转32度
-    - 跑步右转32度
-    - 冲刺左转32度
-    - 冲刺右转32度
-    - 步行转跑步
-    - 跑步转步行
-    - 跑步转冲刺
-    - 冲刺转跑步
+    SearchMode: 0
+    RespondToInputTurn: 0
+    Sources:
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - c07d3f94ccae407f8695cd5c8889eba1
+      - f6bea5bcc1054ba9899c3ea974f133df
+      - 170561e54f334e52abac9a541c44696d
+      - 457a0812ad704bc1929aa1c919d31aea
+      - 5fc04b31662e40388537abf38761c6ae
+      - 9581fa8a4e0c42b4a1dad3d94bd730bb
+      - d3840edfa2d2485db0a99db9e23bcaca
+      - 37e780db5bfb48bab8c4fae899fd9308
+      - 3b37943662d94dfc8688a68375aed7c5
+      - c6d70546f5884f77a7c77225b5647c43
+      - 7ebb6d6e8bc041638f0cc22bf11264bf
+      - c6e5fc0617754114ba310b1faad1dceb
+      - 0db2d84e7e074f4497b947ca3223bf63
     Features: 15
     Empty: 0
+  - Name: 持盾左转180度·左脚承重
+    Priority: 30
+    Use: 3
+    Gait: 2
+    Support: 1
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 4
+    Phases: 127
+    Speed: {x: 3.5, y: 5.5}
+    SignedAngle: {x: -180, y: -150}
+    SearchMode: 0
+    RespondToInputTurn: 1
+    Sources:
+    - Library: {fileID: 11400000, guid: 3041a502c8445351a18df1a74b04659e, type: 2}
+      GroupIds:
+      - dd88bc7b6cb0440587cabe0727493445
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - 7987a6b3bc0d43c5a0dd265ce1d9440f
+      - 83759f83efcc48cf86f596c666ae1efb
+      - 75ac690477ba4f52b56825f09b0c64fc
+    Features: 15
+    Empty: 1
+  - Name: 持盾左转180度·右脚承重
+    Priority: 30
+    Use: 3
+    Gait: 2
+    Support: 2
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 4
+    Phases: 127
+    Speed: {x: 3.5, y: 5.5}
+    SignedAngle: {x: -180, y: -150}
+    SearchMode: 0
+    RespondToInputTurn: 1
+    Sources:
+    - Library: {fileID: 11400000, guid: 3041a502c8445351a18df1a74b04659e, type: 2}
+      GroupIds:
+      - d1bb887e2bd14570a352a00d36c3bd3e
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - 7987a6b3bc0d43c5a0dd265ce1d9440f
+      - 83759f83efcc48cf86f596c666ae1efb
+      - 75ac690477ba4f52b56825f09b0c64fc
+    Features: 15
+    Empty: 1
+  - Name: 持盾右转180度·左脚承重
+    Priority: 30
+    Use: 3
+    Gait: 2
+    Support: 1
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 4
+    Phases: 127
+    Speed: {x: 3.5, y: 5.5}
+    SignedAngle: {x: 150, y: 180}
+    SearchMode: 0
+    RespondToInputTurn: 1
+    Sources:
+    - Library: {fileID: 11400000, guid: 3041a502c8445351a18df1a74b04659e, type: 2}
+      GroupIds:
+      - df6bf8de7633428390c49ce70d9bae7e
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - 6e06d514838744c783c51f0d1b9bfeb7
+      - b279e725a3184b4b9c3d5e059ab2f4c0
+      - 964f357c82f544d682037eba6eb98a44
+    Features: 15
+    Empty: 1
+  - Name: 持盾右转180度·右脚承重
+    Priority: 30
+    Use: 3
+    Gait: 2
+    Support: 2
+    MoveApproved: 0
+    Returning: 0
+    RequiredActive: 4
+    Phases: 127
+    Speed: {x: 3.5, y: 5.5}
+    SignedAngle: {x: 150, y: 180}
+    SearchMode: 0
+    RespondToInputTurn: 1
+    Sources:
+    - Library: {fileID: 11400000, guid: 3041a502c8445351a18df1a74b04659e, type: 2}
+      GroupIds:
+      - b8ca3ad7c616403d8f488386d60b987a
+    - Library: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
+      GroupIds:
+      - 6e06d514838744c783c51f0d1b9bfeb7
+      - b279e725a3184b4b9c3d5e059ab2f4c0
+      - 964f357c82f544d682037eba6eb98a44
+    Features: 15
+    Empty: 1

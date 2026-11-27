@@ -13,7 +13,7 @@ namespace ThreeC.CharacterBehavior
         private readonly CharacterForecastGeometry geometry;
         private readonly CharacterSimulationContinuity continuity;
         private readonly Func<CharacterBehaviorFlow> createFrameCopy;
-        private readonly Func<CharacterBehaviorFlow> createCopy;
+        private readonly Func<bool, Func<CharacterBehaviorFlow>> captureTaskFactory;
         private CharacterBehaviorFlow latestBehavior;
         private CharacterForecastFrame latest, publishedFrame;
         private CharacterForecastWork active, retired;
@@ -25,14 +25,19 @@ namespace ThreeC.CharacterBehavior
         private float forcedBraking;
         internal bool HasFrameAssumptions => Output.Available || active != null && !obsolete;
 
-        // 分别绑定帧末行为副本和任务行为副本的创建策略。
+        // 预演与独立调用者可让每个行为副本沿用原有工厂。
         internal CharacterMovementPredictor(Func<CharacterBehaviorFlow> createFrameCopy, CharacterForecastGeometry geometry,
             Func<CharacterBehaviorFlow> createCopy, CharacterSimulationContinuity continuity = null)
+            : this(createFrameCopy, geometry, _ => createCopy, continuity) { }
+
+        // 分别绑定帧末副本和本次任务的数据捕获策略，工厂只在主线程执行。
+        internal CharacterMovementPredictor(Func<CharacterBehaviorFlow> createFrameCopy, CharacterForecastGeometry geometry,
+            Func<bool, Func<CharacterBehaviorFlow>> captureTaskFactory, CharacterSimulationContinuity continuity)
         {
             this.createFrameCopy = createFrameCopy;
             this.geometry = geometry;
             this.continuity = continuity;
-            this.createCopy = createCopy;
+            this.captureTaskFactory = captureTaskFactory;
         }
 
         // 记录击退的控制归还时刻，并立即撤销受击前的预测。
@@ -126,8 +131,7 @@ namespace ThreeC.CharacterBehavior
 
         // 空闲帧先校验轻量观测；需要调度或有在途任务时才冻结命令、配置与行为种子。
         internal void SubmitObservation(in CharacterForecastObservation current, CharacterRigidbodyBlackboard commands,
-            CharacterMovementSettings movement, in CharacterDriveParameters drive, CharacterBehaviorFlow live, bool threaded,
-            bool immediateAlignment, bool frameEnd)
+            CharacterMovementSettings movement, in CharacterDriveParameters drive, CharacterBehaviorFlow live, bool threaded)
         {
             if (active == null && retired == null && Output.Available && dirty == ForecastRefreshReason.None &&
                 current.Window.Steps > 0 && !RefreshDue(current) &&
@@ -136,7 +140,7 @@ namespace ThreeC.CharacterBehavior
             {
                 nextVersion++;
 #if UNITY_EDITOR
-                if (frameEnd) Output.NotifyFrameSubmitted();
+                Output.NotifyFrameSubmitted();
 #endif
                 return;
             }
@@ -145,7 +149,7 @@ namespace ThreeC.CharacterBehavior
             using (continuity?.Protect() ?? default)
                 frame = new CharacterForecastFrame(current, commands, movement, drive);
             if (revision == beforeCapture && !live.DispatchCancelled)
-                SubmitFrame(frame, live, threaded, immediateAlignment, frameEnd);
+                SubmitFrame(frame, live, threaded);
         }
 
         // 常规刷新间隔到期或已发布窗口不足时，都需要重新从当前时刻推演。
@@ -154,8 +158,7 @@ namespace ThreeC.CharacterBehavior
             !Output.EnvironmentLimited && current.Time + current.Window.Horizon > Output.StartTime + Output.ValidSeconds;
 
         // 接受主线程已完整冻结的帧，为它分配版本并保留可独立推进的行为副本。
-        internal void SubmitFrame(in CharacterForecastFrame frame, CharacterBehaviorFlow live, bool threaded,
-            bool immediateAlignment = false, bool frameEnd = true)
+        internal void SubmitFrame(in CharacterForecastFrame frame, CharacterBehaviorFlow live, bool threaded)
         {
             if (suppressed) return;
             if (frame.Window.Steps == 0)
@@ -192,16 +195,14 @@ namespace ThreeC.CharacterBehavior
             latest = frame.ForSubmission(++nextVersion, controlReturnsAt, forcedBraking);
 #if UNITY_EDITOR
             int before = revision;
-            if (frameEnd) Output.NotifyFrameSubmitted();
+            Output.NotifyFrameSubmitted();
             if (revision != before) return;
 #endif
-            // 跟随请求的同步推演只访问主线程几何；已退役任务持有独立的数值快照和查询缓冲。
-            if (immediateAlignment) RetireActive();
-            ScheduleLatest(threaded && !immediateAlignment, immediateAlignment);
+            ScheduleLatest(threaded);
         }
 
         // 每次通知都覆盖尚未启动的待办；旧任务若仍可信可先发布，再从最新版本补算窗口。
-        private void ScheduleLatest(bool threaded, bool immediateAlignment)
+        private void ScheduleLatest(bool threaded)
         {
             int before = revision;
             if (Output.Available)
@@ -233,14 +234,12 @@ namespace ThreeC.CharacterBehavior
             if (retired != null)
             {
                 if (retired.Released) retired = null;
-                else if (!immediateAlignment) return;
+                else return;
             }
             var reason = dirty;
             if (reason == ForecastRefreshReason.None)
             {
                 if (!Output.Available) reason = ForecastRefreshReason.Initial;
-                else if (immediateAlignment && latest.Time == publishedFrame.Time && latest.Origin.Number == publishedFrame.Origin.Number)
-                    return; // 同一时刻的提前补发已通过上方校验，零刷新间隔也不在帧末重复推演。
                 else if (RefreshDue(latest.Observation))
                     reason = ForecastRefreshReason.Scheduled;
                 else return;
@@ -266,6 +265,8 @@ namespace ThreeC.CharacterBehavior
                 // 工厂、状态复制和定义重绑均可调用扩展；它们须在角色生命周期稳定时成组完成。
                 using (continuity?.Protect() ?? default)
                 {
+                    var createCopy = captureTaskFactory(behavior.SupportsSharedForecastAttack);
+                    if (!CanStart(source.Version, startRevision)) return;
                     seed = createCopy();
                     if (!CanStart(source.Version, startRevision)) return;
                     behavior.CopyStateTo(seed);

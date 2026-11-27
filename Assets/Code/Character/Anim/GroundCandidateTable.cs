@@ -6,18 +6,31 @@ namespace ThreeC.CharacterBehavior
 {
     // 描述筛选开关以及无法选出候选时的去向，均不改变行为层许可。
     internal enum GroundRuleGate { Any, Required, Excluded }
-    // 决定无匹配行或空候选组时是否放宽至同一绑定库。
+    // 决定无匹配行或空候选组时是否继续在已绑定的库范围内搜索。
     internal enum GroundRuleFallback { BoundLibrary, BehaviorRules }
+
+    // 顺序模式采用首个有合法入点的库，联合模式在同一评分空间中择优。
+    internal enum GroundLibrarySearchMode { Ordered, Union }
+
+    // 约束一条候选规则在某个已登记库内可用的动作组。
+    [Serializable] internal sealed class GroundCandidateSource
+    {
+        public CharacterMotionDatabase Library;
+        [UnityEngine.Serialization.FormerlySerializedAs("Groups")]
+        public string[] GroupIds;
+    }
 
     // 在 Inspector 中按独立行为位编辑完整的 64 位活动许可集合。
     internal sealed class CharacterBehaviorMaskAttribute : PropertyAttribute { }
 
-    // 将一个只读上下文映射到当前播放库的一组状态和特征子集。
+    // 规定命中条件、候选范围和是否允许输入急转触发搜索。
     [Serializable] internal sealed class GroundCandidateRule
     {
         public string Name;
         public int Priority;
         public GroundMotionUse Use; // 0 匹配所有用途。
+        [InspectorName("响应输入急转"), Tooltip("仅用途为 Any 或 Turn 的规则可启用。输入急转由正常排序选出的规则决定。")]
+        public bool RespondToInputTurn;
         public GroundTrackGait Gait;
         public GroundTrackSide Support;
         public GroundRuleGate MoveApproved, Returning;
@@ -25,7 +38,8 @@ namespace ThreeC.CharacterBehavior
         private CharacterBehaviorId RequiredBehaviors => (CharacterBehaviorId)RequiredActive;
         [Tooltip("勾选可用的移动阶段。")] public GroundRulePhases Phases = GroundRulePhases.All;
         public Vector2 Speed = new Vector2(0f, 100f), SignedAngle = new Vector2(-180f, 180f);
-        [Tooltip("空列表使用当前绑定库内所有合法组。")] public string[] Groups;
+        [InspectorName("库选择模式")] public GroundLibrarySearchMode SearchMode;
+        [InspectorName("候选库与组")] public GroundCandidateSource[] Sources;
         public GroundFeatureGroups Features = GroundFeatureGroups.All;
         public GroundRuleFallback Empty = GroundRuleFallback.BehaviorRules;
 
@@ -49,8 +63,13 @@ namespace ThreeC.CharacterBehavior
             (Returning == 0 || b.Returning == 0 || Returning == b.Returning) && (Phases & b.Phases) != 0 &&
             Speed.x <= b.Speed.y && b.Speed.x <= Speed.y && SignedAngle.x <= b.SignedAngle.y && b.SignedAngle.x <= SignedAngle.y;
 
-        // 固定规则定义，原始资产不泄漏到后台搜索。
-        internal GroundCandidateRule Copy() => (GroundCandidateRule)MemberwiseClone();
+        // 固定后台使用的规则条件，来源库与组由独立范围保存。
+        internal GroundCandidateRule Copy()
+        {
+            var copy = (GroundCandidateRule)MemberwiseClone();
+            copy.Sources = null;
+            return copy;
+        }
     }
 
     // 与角色移动阶段逐项对应的表条件位。
@@ -60,86 +79,181 @@ namespace ThreeC.CharacterBehavior
     [CreateAssetMenu(menuName = "3C/地面候选条件表")]
     public sealed class GroundCandidateTable : ScriptableObject
     {
+#if UNITY_EDITOR
+        // 标记已装配的角色搜索范围，使编辑器修改在下一批次重新生效。
+        private void OnValidate() => GroundSearchLibraries.InvalidateBindings();
+#endif
         [SerializeField] internal GroundRuleFallback NoMatch;
         [SerializeField] internal GroundCandidateRule[] Rules;
     }
 
-    // 保持一条已命中规则的候选范围、缺失回退和可用特征组。
+    // 保存角色条件命中的已冻结库范围；按优先库逐次搜索时进一步限定到单库。
     internal readonly struct GroundRuleSelection
     {
-        private readonly HashSet<string> states;
         internal readonly GroundCandidateRule Rule;
+        internal readonly GroundLibraryScope Scope;
         internal readonly string Label;
-        internal readonly bool Skip, Relaxed;
+        internal readonly bool Skip, Relaxed, IsInputTurn;
+        private readonly int? only;
         internal GroundFeatureGroups Features => Rule?.Features ?? GroundFeatureGroups.All;
-        internal bool Relax => states != null && Rule.Empty == GroundRuleFallback.BoundLibrary;
+        internal bool Relax => !Relaxed && Rule?.Empty == GroundRuleFallback.BoundLibrary;
+        internal bool UnionBlocked => Rule?.SearchMode == GroundLibrarySearchMode.Union && Scope?.UnionIssue != null;
+        internal bool Ordered => Rule?.SearchMode != GroundLibrarySearchMode.Union || Relaxed && Scope?.RelaxedUnionIssue != null;
+        internal int Count => Scope?.Indices.Length ?? 0;
 
-        // 将已解析的状态集合与同次查询使用的特征配置作为整体传递。
-        internal GroundRuleSelection(GroundCandidateRule rule, HashSet<string> states, string label, bool skip = false, bool relaxed = false)
-        { Rule = rule; this.states = states; Label = label; Skip = skip; Relaxed = relaxed; }
+        // 固定候选规则及范围，记录是否由输入急转触发以便区分诊断。
+        internal GroundRuleSelection(GroundCandidateRule rule, GroundLibraryScope scope, string label,
+            bool skip = false, bool relaxed = false, int? only = null, bool isInputTurn = false)
+        {
+            Rule = rule;
+            Scope = scope;
+            Label = label;
+            Skip = skip;
+            Relaxed = relaxed;
+            IsInputTurn = isInputTurn;
+            this.only = only;
+        }
 
-        // 核对候选是否位于该规则输出的绑定库状态集合。
-        internal bool Allows(CharacterMotionTrack track) => !Skip && (states == null || states.Contains(track.States[0]));
+        // 单库优先搜索不将尚未尝试的其他库计入本轮淘汰。
+        internal bool InSearchedLibrary(int index) => !only.HasValue || only == index;
 
-        // 保留特征和全部硬约束，仅解除当前表行的组范围。
-        internal GroundRuleSelection WithoutGroups() => new GroundRuleSelection(Rule, null, Label + " · 回退到绑定库", relaxed: true);
+        // 检查候选的真实来源库和库内路径是否在本次范围。
+        internal bool Allows(CharacterMotionTrack track) => !Skip && (!UnionBlocked || Relaxed) && InSearchedLibrary(track.LibraryIndex) &&
+            Scope != null && Scope.Allows(track, Relaxed);
+
+        // 将本次试算或已命中结果固定到一个优先库。
+        internal GroundRuleSelection ForLibrary(int index) => new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, index, IsInputTurn);
+
+        // 保持候选表给出的库范围，只放宽组过滤。
+        internal GroundRuleSelection WithoutGroups() => new GroundRuleSelection(Rule, Scope, Label + " · 放宽组过滤", relaxed: true, isInputTurn: IsInputTurn);
+
+#if UNITY_EDITOR
+        // 标记由输入边沿触发的候选查询，供诊断区分常规转向。
+        internal GroundRuleSelection ForInputTurn() => new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, only, isInputTurn: true);
+#endif
     }
 
-    // 装配时解析组名并诊断重叠与非法范围，查询时只读纯托管规则。
+    // 解析候选组并校验表规则，查询时按优先级接受程序允许的合法行。
     internal sealed class GroundCandidatePolicy
     {
-        private readonly List<GroundRuleSelection> rows = new List<GroundRuleSelection>();
+        private readonly List<(int index, GroundRuleSelection selection)> rows = new List<(int, GroundRuleSelection)>();
         private readonly GroundRuleFallback fallback;
+        private readonly AnimationDecisionEvaluator decisions;
         internal readonly string Issue;
+#if UNITY_EDITOR
+        private int inspectedIndex;
+        private string inspectedRule;
+#endif
 
-        // 将当前库的组名解析到发布状态，无法解析时按显式回退处理。
-        internal GroundCandidatePolicy(GroundCandidateTable table, CharacterMotionDatabase database)
+        private readonly GroundLibraryScope defaults;
+        internal readonly bool SupportsInputTurn;
+
+        // 使用角色主线程已编译的库约束生成后台候选策略。
+        internal static GroundCandidatePolicy Bind(GroundCandidateTable table, GroundSearchLibraries libraries,
+            CompiledAnimationDecisions program = null) => new GroundCandidatePolicy(libraries, table, program);
+
+        // 按声明顺序编译库范围，缺少的库或组仅影响其所属的行和来源。
+        private GroundCandidatePolicy(GroundSearchLibraries libraries, GroundCandidateTable table, CompiledAnimationDecisions program)
         {
+            defaults = GroundLibraryScope.ForDeclaredLibraries(libraries);
             if (!table) return;
             fallback = table.NoMatch;
             if (!Enum.IsDefined(typeof(GroundRuleFallback), fallback)) { Issue = "候选表无匹配回退无效"; return; }
-            var groups = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-            foreach (var g in database && database.Groups ? database.Groups.Groups ?? Array.Empty<GroundAnimationGroup>() : Array.Empty<GroundAnimationGroup>())
+            var rules = table.Rules ?? Array.Empty<GroundCandidateRule>();
+            for (int i = 0; i < rules.Length; i++)
             {
-                if (g == null || string.IsNullOrWhiteSpace(g.Name)) continue;
-                var states = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var t in g.Variants ?? Array.Empty<CharacterMotionTrack>())
-                    foreach (var s in t?.States ?? Array.Empty<string>()) states.Add(s);
-                groups[g.Name] = states;
-            }
-            foreach (var source in table.Rules ?? Array.Empty<GroundCandidateRule>())
-            {
+                var source = rules[i];
                 if (source == null || string.IsNullOrWhiteSpace(source.Name) || source.Use < 0 || source.Use > GroundMotionUse.Transition ||
                     !Enum.IsDefined(typeof(GroundTrackGait), source.Gait) || !Enum.IsDefined(typeof(GroundTrackSide), source.Support) ||
                     !Enum.IsDefined(typeof(GroundRuleGate), source.MoveApproved) || !Enum.IsDefined(typeof(GroundRuleGate), source.Returning) ||
+                    !Enum.IsDefined(typeof(GroundLibrarySearchMode), source.SearchMode) ||
                     !Enum.IsDefined(typeof(GroundRuleFallback), source.Empty) || (source.Phases & ~GroundRulePhases.All) != 0 ||
                     (source.Features & ~GroundFeatureGroups.All) != 0 || !(source.Speed.x >= 0f && source.Speed.y >= source.Speed.x) ||
                     !(source.SignedAngle.x >= -180f && source.SignedAngle.y <= 180f && source.SignedAngle.y >= source.SignedAngle.x) || source.Phases == 0)
                 { Issue = "候选表名称、速度、阶段或角度范围无效"; return; }
+                if (source.RespondToInputTurn && source.Use != GroundMotionUse.Any && source.Use != GroundMotionUse.Turn)
+                { Issue = $"候选表行 {i} · {source.Name} 的用途不支持输入急转"; return; }
                 var rule = source.Copy();
-                HashSet<string> states = null;
-                foreach (var name in source.Groups ?? Array.Empty<string>())
-                {
-                    if (string.IsNullOrWhiteSpace(name) || !groups.TryGetValue(name, out var group))
-                    { Issue = $"规则 {rule.Name} 引用了当前库外的组 {name}"; return; }
-                    (states ??= new HashSet<string>(StringComparer.Ordinal)).UnionWith(group);
-                }
-                foreach (var prior in rows)
-                    if (rule.Overlaps(prior.Rule)) { Issue = $"规则 {rule.Name} 与 {prior.Label} 同优先级重叠"; return; }
-                rows.Add(new GroundRuleSelection(rule, states, rule.Name));
+                var scope = GroundLibraryScope.Resolve(libraries, source);
+                foreach (var (_, prior) in rows)
+                    if (rule.Overlaps(prior.Rule)) { Issue = $"规则 {rule.Name} 与 {prior.Rule.Name} 同优先级重叠"; return; }
+                // 没有可用来源库时直接回退；严格范围失效时，仅显式允许放宽的行继续搜索。
+                bool mustUseStrictScope = scope.Indices.Length == 0 || rule.Empty == GroundRuleFallback.BehaviorRules;
+                string blockIssue = mustUseStrictScope ? scope.StrictBlockIssue : null;
+                string label = blockIssue != null ? $"{rule.Name} · {blockIssue}" : rule.Name;
+                rows.Add((i, new GroundRuleSelection(rule, scope, label, skip: blockIssue != null)));
             }
-            rows.Sort((a, b) => b.Rule.Priority.CompareTo(a.Rule.Priority));
+            rows.Sort((a, b) => b.selection.Rule.Priority.CompareTo(a.selection.Rule.Priority));
+            SupportsInputTurn = rows.Exists(row => row.selection.Rule.RespondToInputTurn);
+            if (program != null && rows.Count > 0)
+                decisions = new AnimationDecisionEvaluator(program, AnimationDecisionStage.CandidateSelection);
         }
 
-        // 选择首个命中优先级，未命中或表有错误时输出配置指定的回退。
+        // 只让按正常条件和优先级选中的启用行响应输入急转，保留该行的空候选回退。
+        internal bool TrySelectInputTurn(in GroundPoseQuery edge, in CharacterBehaviorFrameResult behavior,
+            CharacterLocomotionPhase phase, GroundTrackSide support, out GroundPoseQuery query)
+        {
+            query = default;
+            var selection = Select(edge, behavior, phase, support, false);
+            if (selection.Rule?.RespondToInputTurn != true) return false;
+#if UNITY_EDITOR
+            selection = selection.ForInputTurn();
+            inspectedRule = selection.Label + " · 输入急转";
+#endif
+            query = new GroundPoseQuery(edge, selection);
+            return true;
+        }
+
+        // 选择首个满足原有表条件且被程序接受的行，耗尽可选行时按表回退。
         internal GroundRuleSelection Select(in GroundPoseQuery query, in CharacterBehaviorFrameResult behavior,
             CharacterLocomotionPhase phase, GroundTrackSide support, bool returning)
         {
             if (Issue == null)
-                foreach (var row in rows)
-                    if (row.Rule.Matches(query, behavior, phase, support, returning)) return row;
+            {
+                if (decisions != null)
+                {
+                    decisions.Begin(AnimationDecisionStage.CandidateSelection);
+                    decisions.Set(AnimationDecisionInput.Speed, query.EntrySpeed);
+                    decisions.Set(AnimationDecisionInput.SignedAngle, query.Angle);
+                    decisions.Set(AnimationDecisionInput.MoveApproved, behavior.MoveApproved);
+                    decisions.Set(AnimationDecisionInput.Returning, returning);
+                }
+                foreach (var (index, row) in rows)
+                    if (row.Rule.Matches(query, behavior, phase, support, returning) && AllowsRule(index, row.Rule))
+                        return row;
+            }
             bool skip = fallback == GroundRuleFallback.BehaviorRules;
-            return new GroundRuleSelection(null, null, Issue ?? (skip ? "无匹配规则，交回行为规则" : "无匹配规则，使用绑定库"), skip);
+            return new GroundRuleSelection(null, defaults, Issue ?? (skip ? "无匹配规则，交回行为规则" : "无匹配规则，使用绑定库"), skip);
         }
+
+        // 应用本次候选许可，并在编辑器记录命中条件的原表位置。
+        private bool AllowsRule(int index, GroundCandidateRule rule)
+        {
+#if UNITY_EDITOR
+            inspectedIndex = index;
+            inspectedRule = rule.Name;
+#endif
+            return decisions?.Flag(AnimationDecisionOutput.AllowCandidateRule) ?? true;
+        }
+
+        // 开始新一次选姿前清除候选表的上一轮诊断。
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        internal void ClearTrace()
+        {
+#if UNITY_EDITOR
+            decisions?.ClearTrace();
+            inspectedRule = null;
+#endif
+        }
+
+#if UNITY_EDITOR
+        // 输出最近求值的候选行及其程序分支，并保留声明行号。
+        internal void AppendTrace(System.Text.StringBuilder trace)
+        {
+            if (inspectedRule != null)
+                trace.Append("候选表行 ").Append(inspectedIndex).Append(" · ").AppendLine(inspectedRule);
+            decisions?.AppendTrace(trace);
+        }
+#endif
     }
 }

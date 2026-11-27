@@ -39,6 +39,14 @@ namespace ThreeC.CharacterBehavior
     {
         private static long lastPlaybackId;
         internal CharacterPlaybackOrigin Origin { get; }
+        internal CharacterPlaybackClock Clock;
+        internal readonly int ClipId;
+        internal CharacterClipProgress? Cursor { get; private set; }
+        internal CharacterPlaybackEndSource StopSource { get; private set; }
+        internal CharacterActionPlaybackStatus StopStatus { get; private set; }
+        internal double LastEvaluatedAt { get; private set; }
+        internal float? EntryCoverage; // 仅在首次真实求值后锁定，图重建不重置正在执行的权重过渡。
+        internal float InitialPhase; // 仅用于中途装配时跳过请求之前的事件。
         public string Key { get; }
         public long InstanceId { get; } // 原有的动作键内序号。
         public long PlaybackId { get; } // 可跨动作键、动画重绑及组件启停追踪。
@@ -61,13 +69,35 @@ namespace ThreeC.CharacterBehavior
 
         // 为这次申请分配播放编号，并冻结动作键和原始业务身份。
         internal CharacterActionPlayback(string key, long instanceId, CharacterPlaybackOrigin origin,
-            CharacterPlaybackStartSource startSource)
+            CharacterPlaybackStartSource startSource, CharacterPlaybackClock clock = default, int clipId = 0)
         {
             Key = key;
             InstanceId = instanceId;
             Origin = origin;
             StartSource = startSource;
+            Clock = clock;
+            ClipId = clipId;
             PlaybackId = System.Threading.Interlocked.Increment(ref lastPlaybackId);
+        }
+
+        // 对这个逻辑实例安排权重淡出，调用不操作播放图。
+        internal void FadeOut(double at, float seconds) => Clock.FadeOut(at, seconds);
+
+        // 记录合法采样的截止与唯一终止原因；相同时刻的显式打断优先于自然窗口退出。
+        internal void Cancel(double at, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source)
+        {
+            if (at > Clock.StopAt || at == Clock.StopAt && StopSource != CharacterPlaybackEndSource.BehaviorWindowEnded) return;
+            Clock.Cancel(at);
+            StopStatus = status;
+            StopSource = source;
+        }
+
+        // 图求值后只接收当前句柄与素材的真实游标，暂停和同素材重绑保留该值。
+        internal void RecordCursor(in CharacterClipProgress sample, double at)
+        {
+            if (sample.PlaybackId != PlaybackId || sample.ClipId != ClipId || sample.loop) return;
+            Cursor = sample;
+            LastEvaluatedAt = at;
         }
 
         // 只在播放端实际下发指令后确认首次开始。

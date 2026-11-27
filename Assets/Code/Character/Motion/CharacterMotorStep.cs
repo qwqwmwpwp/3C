@@ -180,28 +180,6 @@ namespace ThreeC.CharacterBehavior
         internal static Vector2 GroundVelocity(Vector3 velocity, Vector3 ground) =>
             IsGroundSupported(velocity, ground) ? new Vector2(velocity.x, velocity.z) : default;
 
-        // 将给定目标投影到支撑面，维持原目标的速度大小。
-        internal static Vector3 GroundTarget(Vector3 target, Vector3 plane, bool openingStep) =>
-            GroundTarget(target, plane, openingStep, out _);
-
-        // 同时返回归一化前的投影，使各速度分量使用同一比例。
-        private static Vector3 GroundTarget(Vector3 target, Vector3 plane, bool openingStep, out Vector3 projected)
-        {
-            projected = ProjectTarget(target, plane, openingStep);
-            return projected.normalized * target.magnitude;
-        }
-
-        // 普通步正交投影，攻击前摇保留锁定的世界 XZ 航向。
-        private static Vector3 ProjectTarget(Vector3 target, Vector3 plane, bool openingStep)
-        {
-            if (openingStep && plane.y > 0f)
-            {
-                target.y = -(target.x * plane.x + target.z * plane.z) / plane.y;
-                return target;
-            }
-            return Vector3.ProjectOnPlane(target, plane);
-        }
-
         internal static Vector3 Target(CharacterBehaviorFrameResult frame, float dt) =>
             new Vector3(frame.Displacement.x, 0f, frame.Displacement.y) / dt;
 
@@ -225,7 +203,8 @@ namespace ThreeC.CharacterBehavior
             var action = burst ? new Vector3(frame.ActionDisplacement.x, 0f, frame.ActionDisplacement.y) / dt : Vector3.zero;
             Vector3 constrained = stepped ? requested : steep.Limit(requested, ref action);
             Vector3 plane = supported && !stepped ? ground : Vector3.up;
-            Vector3 target = GroundTarget(constrained, plane, motion.OpeningStep, out var projected);
+            Vector3 projected = Vector3.ProjectOnPlane(constrained, plane);
+            Vector3 target = projected.normalized * constrained.magnitude;
             Vector3 current = Vector3.ProjectOnPlane(velocity, plane);
             float change = supported ? drive.GroundAcceleration : settings.airAcceleration;
             if (supported && frame.ActionMotion.Braking > 0f) change = frame.ActionMotion.Braking;
@@ -258,7 +237,7 @@ namespace ThreeC.CharacterBehavior
             if (angle != 0f) rotation = Quaternion.AngleAxis(angle, Vector3.up) * rotation;
             Vector3 next;
             if (brake.IsActive) next = brake.Apply(current, dt);
-            else if (burst || supported && motion.OpeningStep) next = target;
+            else if (burst) next = target;
             else if (ordinary) next = steering.Velocity(current, target, dt);
             else next = Vector3.MoveTowards(current, target, change * dt);
             runBrakeLeadInRemaining = brake.AfterStep(dt).LeadInSeconds;
@@ -272,18 +251,18 @@ namespace ThreeC.CharacterBehavior
                 velocity += next - current;
             if (supported && !stepped && drive.UseGravity) // 只抵消沿坡重力，保留贴地的法向重力。
                 velocity -= Vector3.ProjectOnPlane(drive.Gravity, plane) * dt;
-            previousBurstVelocity = burst ? AppliedBurstVelocity(action, constrained, projected, target, plane, motion.OpeningStep) : Vector3.zero;
+            previousBurstVelocity = burst ? AppliedBurstVelocity(action, constrained, projected, target, plane) : Vector3.zero;
             return supported && !stepped && (frame.MoveApproved || frame.ActionMotion.RecoversMovement || braking)
                 ? new CharacterGroundDrive(plane, target, change, current, brake, steering, yawRate) : default;
         }
 
         // 使用合成目标的投影比例计算动作分量，扣除量以实际施加的同向速度为上限。
         private static Vector3 AppliedBurstVelocity(Vector3 action, Vector3 constrained, Vector3 projected, Vector3 target,
-            Vector3 plane, bool openingStep)
+            Vector3 plane)
         {
             if (action.Equals(constrained)) return target;
             if (target == Vector3.zero) return Vector3.zero;
-            Vector3 planar = ProjectTarget(action, plane, openingStep);
+            Vector3 planar = Vector3.ProjectOnPlane(action, plane);
             Vector3 axis = planar.normalized;
             float speed = planar.magnitude * constrained.magnitude / projected.magnitude;
             return axis * Mathf.Clamp(Vector3.Dot(target, axis), 0f, speed);
@@ -396,19 +375,8 @@ namespace ThreeC.CharacterBehavior
 
             yawRate = 0f;
             if (motion.ControlsFacing)
-                return ActionTurn(forward, motion, turnSpeed * dt);
-            return frame.MoveApproved ? LimitedTurn(forward, input.Direction, turnSpeed * movementSeconds) : 0f;
-        }
-
-        // 在作者的参考坐标中执行原有限转向，再按本片预算附加偏航；不削减原动作本来获准的转角。
-        internal static float ActionTurn(Vector3 forward, in CharacterActionMotion motion, float physicalLimit)
-        {
-            if (motion.AlignmentYawAtStart == 0f && motion.AlignmentYawDelta == 0f)
                 return LimitedTurn(forward, motion.Facing, motion.MaxTurn);
-            Vector3 authoredForward = Quaternion.AngleAxis(-motion.AlignmentYawAtStart, Vector3.up) * forward;
-            float authored = LimitedTurn(authoredForward, motion.Facing, motion.MaxTurn);
-            float limit = Mathf.Max(Mathf.Abs(authored), physicalLimit);
-            return Mathf.Clamp(authored + motion.AlignmentYawDelta, -limit, limit);
+            return frame.MoveApproved ? LimitedTurn(forward, input.Direction, turnSpeed * movementSeconds) : 0f;
         }
 
         private static float LimitedTurn(Vector3 forward, Vector2 target, float limit) =>

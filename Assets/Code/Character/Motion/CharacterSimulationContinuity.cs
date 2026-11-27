@@ -1,5 +1,4 @@
 using System;
-using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
@@ -16,14 +15,14 @@ namespace ThreeC.CharacterBehavior
         internal bool Pending => pending != Change.None;
         internal bool InCallback => callbackDepth > 0 || flow?.IsDispatching == true;
 
-        // 驱动器初始化完成后接入可独立执行的重生和连续性切换。
-        internal void Bind(CharacterBehaviorFlow behavior, Action resetState, Action sync, CharacterMovementSettings movement)
+        // 绑定重生与同步回调，并在首次初始化期间按重生优先级合并请求。
+        internal void Bind(CharacterBehaviorFlow behavior, Action resetState, Action sync, Action initialize)
         {
             flow = behavior;
             reset = resetState;
             synchronize = sync;
             applying = Change.Reset;
-            try { flow.Reset(movement); }
+            try { initialize(); }
             finally { applying = Change.None; }
             Flush();
         }
@@ -86,29 +85,6 @@ namespace ThreeC.CharacterBehavior
                 }
                 finally { applying = Change.None; }
             }
-        }
-
-        // 在连续性边界冻结仍活动的运动；回调申请重生时不写入旧代命令或输入。
-        internal static void EndInput(CharacterBlackboard board, CharacterBehaviorTimeline timeline,
-            CharacterBehaviorFlow flow, CharacterRigidbodyMotor motor, CharacterMovementSettings movement,
-            bool ownsBody, bool receivesInput)
-        {
-            if (ownsBody && flow != null && motor.Available)
-            {
-                if (flow.Alignment.Plan != null)
-                    board.Rigidbody.CancelAlignment(flow.Alignment.Stop(CharacterActionAlignmentStatus.Cancelled));
-                var state = motor.ReadStepState();
-                var active = flow.Tick(default, state.Facing, 0f, movement, state.GroundVelocity);
-                if (flow.DispatchCancelled) return;
-                var command = flow.CaptureMotion(timeline.Time, active, default, state.Facing, state.GroundVelocity, movement);
-                if (flow.DispatchCancelled) return;
-                board.Rigidbody.Write(command);
-            }
-            flow?.EndInputContinuity();
-            if (flow?.DispatchCancelled == true) return;
-            timeline.EndContinuity(Time.realtimeSinceStartupAsDouble);
-            CharacterPlayerInputAdapter.EndContinuity(board.Input, receivesInput);
-            board.Simulation.AdvanceContinuity();
         }
     }
 }

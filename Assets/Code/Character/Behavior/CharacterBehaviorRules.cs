@@ -12,6 +12,7 @@ namespace ThreeC.CharacterBehavior
         Dash = 1UL << 1,
         Guard = 1UL << 2,
         Attack = 1UL << 3,
+        [Obsolete("请使用 Attack。")]
         LightAttack = Attack // 兼容旧脚本和动画映射，具体招式由行为帧给出。
     }
 

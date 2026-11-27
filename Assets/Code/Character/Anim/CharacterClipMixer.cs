@@ -14,15 +14,31 @@ namespace ThreeC.CharacterBehavior
         {
             public CharacterClipState State;
             public CharacterMotionPlayable Motion;
+#if UNITY_EDITOR
+            public AnimationClip DebugClip;
+#endif
             public Playable Clip => Motion.Root;
             public string ActionKey;
             public double StepStart, StepEnd; // 本次求值实际覆盖的素材逻辑区间，不含切换跳转。
             public bool Locomotion;
             public long InstanceId;
-            public int Hash, Port;
+            public CharacterActionPlayback Playback;
+            public long PlaybackId => Playback?.PlaybackId ?? 0;
+            public int Hash, ClipId, Port;
             public Vector3 InertiaSuppression;
             public float StartWeight, StartWeightSpeed, Weight, WeightSpeed, LogicalRate;
-            public CharacterClipProgress Progress => new CharacterClipProgress(Hash, Motion.Length > 0f ? (float)(Clip.GetTime() / Motion.Length) : 0f, Motion.Loop);
+            public bool Timed;
+            // 单次素材只有在图时钟实际走到末端时才报告完成，避免浮点转换提前结算末尾事件。
+            public CharacterClipProgress Progress
+            {
+                get
+                {
+                    double seconds = Clip.GetTime();
+                    double phase = Motion.Length > 0f ? seconds / Motion.Length : 0d;
+                    float observed = Timed && phase < 1d ? Mathf.Min(0.99999994f, (float)phase) : (float)phase;
+                    return new CharacterClipProgress(Hash, observed, Motion.Loop, ClipId, PlaybackId, seconds);
+                }
+            }
         }
 
         private readonly PlayableGraph graph;
@@ -31,12 +47,11 @@ namespace ThreeC.CharacterBehavior
         private readonly List<Voice> voices = new List<Voice>();
         public readonly AnimationMixerPlayable Mixer;
         private float fadeTime, elapsed, carrySeconds;
-        private float routeClockDuration, routeEntryCoverage;
+        private float entryCoverage;
         private bool smoothFade;
         private Voice target;
         internal CharacterTransitionProfile EntryProfile, ExitProfile;
         public bool Empty => target == null;
-        public float? ClockPhase { get; set; }
 
         public CharacterClipMixer(PlayableGraph graph)
         {
@@ -46,16 +61,16 @@ namespace ThreeC.CharacterBehavior
 
         // 切换目标片段并根据上身、全身与接管时钟选择淡入曲线。
         public void Enter(CharacterClipState state, AnimationClip asset, CharacterClipCurves curves, CharacterClipCurves secondary, int hash,
-            float start, float duration, bool resumeLoop, bool resetEvents, in CharacterAnimationDemand demand)
+            double start, float duration, bool resumeLoop, bool resetEvents, in CharacterAnimationDemand demand)
         {
             fadeTime = target != null ? Mathf.Max(0f, duration) : 0f;
-            routeClockDuration = demand.HasHandoff && demand.Timing.Handoff.UsesRouteBlend ? demand.Timing.Handoff.Duration : 0f;
-            routeEntryCoverage = demand.EntryCoverage;
-            if (routeClockDuration > 0f && fadeTime > 0f)
-                fadeTime = routeClockDuration * demand.Timing.Handoff.FullFrom;
+            bool timed = demand.Timing.Sample.Valid;
+            entryCoverage = demand.EntryCoverage;
+            if (timed && fadeTime > 0f)
+                fadeTime = demand.Timing.Sample.Clock.BlendIn;
             elapsed = 0f;
             carrySeconds = fadeTime / 3f;
-            smoothFade = routeClockDuration > 0f || demand.Source == CharacterAnimationSource.UpperBody ||
+            smoothFade = timed || demand.Source == CharacterAnimationSource.UpperBody ||
                 demand.Source == CharacterAnimationSource.FullBodyOverlay;
             Voice returning = null;
             for (int i = voices.Count - 1; i >= 0; i--)
@@ -81,6 +96,7 @@ namespace ThreeC.CharacterBehavior
                 returning.ActionKey = demand.Key;
                 returning.Locomotion = demand.IsLocomotion;
                 returning.InstanceId = demand.InstanceId;
+                returning.Playback = demand.Playback;
                 target = returning; // 保留源片段的真实时间，反向淡回当前步态。
                 return;
             }
@@ -89,16 +105,28 @@ namespace ThreeC.CharacterBehavior
             if (port == Mixer.GetInputCount()) Mixer.SetInputCount(port + 1);
             CharacterMotionPlayable motion;
             using (CreateNode.Auto()) motion = new CharacterMotionPlayable(graph, asset, state.Blend, curves, secondary);
-            motion.Seek(start);
-            if (resetEvents) motion.Seek(start); // 同步上次求值时间，跳过恢复点之前的片段事件（Timeline 1184106）。
+            int clipId = asset.GetInstanceID();
+            double startSeconds = start;
+            if (demand.Playback?.Cursor is CharacterClipProgress cursor && cursor.ClipId == clipId)
+            {
+                startSeconds = cursor.Seconds;
+                resetEvents = true;
+            }
+            motion.Seek(startSeconds);
+            if (resetEvents) motion.Seek(startSeconds); // 同步上次求值时间，跳过恢复点之前的片段事件（Timeline 1184106）。
             graph.Connect(motion.Root, 0, Mixer, port);
             target = new Voice { ActionKey = demand.Key, Locomotion = demand.IsLocomotion, InstanceId = demand.InstanceId, State = state, Motion = motion, Hash = hash, Port = port,
+                Timed = timed, ClipId = clipId, Playback = demand.Playback,
                 Weight = fadeTime > 0f ? 0f : 1f };
+#if UNITY_EDITOR
+            target.DebugClip = asset;
+#endif
             voices.Add(target);
             Mixer.SetInputWeight(port, target.Weight);
         }
 
 #if UNITY_EDITOR
+        // 从已应用到图上的声部读取实际片段、时钟和混合。
         internal CharacterDebugClipMix ReadDebugMix()
         {
             if (target == null) return default;
@@ -106,7 +134,9 @@ namespace ThreeC.CharacterBehavior
             foreach (var voice in voices)
                 if (voice != target && (outgoing == null || voice.Weight > outgoing.Weight)) outgoing = voice;
             return new CharacterDebugClipMix(target.State.Path, target.Weight, outgoing?.State.Path,
-                outgoing?.Weight ?? 0f, Mathf.Max(0, voices.Count - 2), target.Progress.normalizedTime);
+                outgoing?.Weight ?? 0f, Mathf.Max(0, voices.Count - 2), target.Progress, target.LogicalRate,
+                target.DebugClip, target.State.Blend.Second, outgoing?.DebugClip,
+                outgoing == null ? null : outgoing.State.Blend.Second);
         }
 #endif
 
@@ -121,7 +151,6 @@ namespace ThreeC.CharacterBehavior
         public void Release(bool keepMixer)
         {
             for (int i = voices.Count - 1; i >= 0; i--) Remove(i);
-            ClockPhase = null;
             target = null;
             elapsed = fadeTime = 0f;
             if (keepMixer) Mixer.SetInputCount(0);
@@ -145,13 +174,13 @@ namespace ThreeC.CharacterBehavior
             return sum;
         }
 
-        // 按各声部自身的步态和状态倍率推进逻辑时钟，包括尚未淡出的声部。
-        public void Advance(float dt, CharacterClipPlayback playback, in CharacterAnimationPlaybackPlan frame)
+        // 独立播放跟随实例的素材与权重时钟，已停止的旧声部只贡献最后姿势。
+        public void Advance(float dt, CharacterClipPlayback playback, in CharacterAnimationPlaybackPlan frame, in CharacterActionTiming timing)
         {
-            bool routeBlend = routeClockDuration > 0f && ClockPhase.HasValue;
-            elapsed = routeBlend ? ClockPhase.Value * routeClockDuration : elapsed + dt;
+            bool timed = timing.Sample.Valid;
+            elapsed = timed ? (float)timing.Sample.Elapsed : elapsed + dt;
             var blend = CharacterBlendCurve.Sample(elapsed, fadeTime, smoothFade, carrySeconds);
-            if (routeBlend) blend = blend.WithinLayer(routeEntryCoverage);
+            if (timed) blend = blend.WithinLayer(entryCoverage);
             for (int i = voices.Count - 1; i >= 0; i--)
             {
                 var voice = voices[i];
@@ -163,13 +192,18 @@ namespace ThreeC.CharacterBehavior
                 voice.Weight = blend.Apply(voice.StartWeight, voice.StartWeightSpeed, voice == target ? 1f : 0f,
                     out voice.WeightSpeed);
                 Mixer.SetInputWeight(voice.Port, voice.Weight);
-                float rate = playback.Pace(voice.Hash).Rate(frame.StrideSpeed, frame.StartSpeed, frame.StopRate, out _);
-                if (voice == target && ClockPhase.HasValue && dt > 0f)
+                bool ended = voice.Playback != null && voice.Playback.EndSource != CharacterPlaybackEndSource.None;
+                double rate = voice.Timed || ended ? 0d : playback.Pace(voice.Hash).Rate(frame.StrideSpeed, frame.StartSpeed, frame.StopRate, out _);
+                if (!ended && voice == target && timing.ClipPhase.HasValue && dt > 0f)
                 {
-                    double seconds = (double)ClockPhase.Value * voice.Motion.Length;
-                    rate = (float)(System.Math.Max(0d, seconds - voice.Clip.GetTime()) / dt);
+                    double seconds = timed ? timing.Sample.MaterialSeconds(voice.Motion.Length) : (double)timing.ClipPhase.Value * voice.Motion.Length;
+                    double current = voice.Clip.GetTime();
+                    rate = System.Math.Max(0d, seconds - current) / dt;
+                    // 自然终点仅在实际素材末端向上取一位，防止除再乘遗漏最后一个事件。
+                    if (timed && timing.Sample.Time >= timing.Sample.Clock.NaturalEnd && current + rate * dt < seconds)
+                        rate = System.BitConverter.Int64BitsToDouble(System.BitConverter.DoubleToInt64Bits(rate) + 1);
                 }
-                voice.LogicalRate = rate;
+                voice.LogicalRate = (float)rate;
                 voice.StepStart = voice.Clip.GetTime();
                 voice.Motion.Advance(rate, dt);
                 voice.StepEnd = voice.Motion.EvaluationTime(dt);

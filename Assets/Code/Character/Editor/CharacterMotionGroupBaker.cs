@@ -53,6 +53,7 @@ namespace ThreeC.CharacterBehavior
             result.Apply(db);
             EditorUtility.SetDirty(db);
             AssetDatabase.SaveAssetIfDirty(db);
+            CharacterSearchLibraryBakeIssues.Refresh();
             Debug.Log($"{db.name}：已校验 {result.Tracks.Length} 条地面轨道，重新采样 {result.Resampled} 条。", db);
             result.ReportQuality(db);
         }
@@ -88,10 +89,12 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 解析组定义并采样变更轨道，返回尚未写入的完整数据。
+        // 验证组身份并编译变更轨道，返回尚未写入的完整数据。
         internal static Result Compile(CharacterMotionDatabase db, bool changedOnly = false)
         {
             if (!db.Groups) throw new InvalidOperationException("请选择基础动画数据组。");
+            db.Groups.IndexGroups(out string groupIssue);
+            if (groupIssue != null) throw new InvalidOperationException(groupIssue);
             if (!db.Avatar || !db.Avatar.isHuman || !db.Avatar.isValid)
                 throw new InvalidOperationException("请选择有效的 Humanoid 模型 Avatar。");
             var layout = BakeLayout(db);
@@ -164,11 +167,14 @@ namespace ThreeC.CharacterBehavior
             return new Result(playback, tracks, resampled, warnings);
         }
 
-        // 只读取源配方和依赖指纹，供已发布动作库审计逐状态比对。
+        // 检查来源组 ID 并读取源配方指纹，供已发布动作库审计逐状态比对。
         internal static Dictionary<string, string> ReadExpectedHashes(CharacterMotionDatabase db, List<string> errors)
         {
             var expected = new Dictionary<string, string>(StringComparer.Ordinal);
-            if (!db.Groups || !db.Avatar) return expected;
+            if (!db.Groups) return expected;
+            db.Groups.IndexGroups(out string groupIssue);
+            if (groupIssue != null) errors.Add(groupIssue);
+            if (!db.Avatar) return expected;
             string avatarHash;
             try { avatarHash = FingerprintOf(db.Avatar) + BakeLayout(db).Fingerprint; }
             catch (InvalidOperationException error) { errors.Add(error.Message); return expected; }

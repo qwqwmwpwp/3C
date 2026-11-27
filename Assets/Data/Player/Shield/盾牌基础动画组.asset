@@ -109,6 +109,7 @@ MonoBehaviour:
     Speed: 1
   Groups:
   - Name: 跑步循环
+    GroupId: c07d3f94ccae407f8695cd5c8889eba1
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: 0}
     Weights: {x: 0, y: 0, z: 0}
@@ -134,6 +135,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.66666667
       Seconds: 0.66666667
   - Name: 步行循环
+    GroupId: f6bea5bcc1054ba9899c3ea974f133df
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 0}
     Weights: {x: 0, y: 0, z: 0}
@@ -159,6 +161,7 @@ MonoBehaviour:
       LastEntrySeconds: 1.1333333
       Seconds: 1.1333333
   - Name: 跑步收步
+    GroupId: d7d80e3f3f5c4c99a01eb5d4c89e4a30
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Weights: {x: 0, y: 0.65, z: 1}
@@ -202,6 +205,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.09
       Seconds: 0.43333333
   - Name: 冲刺循环
+    GroupId: 170561e54f334e52abac9a541c44696d
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 0}
     Weights: {x: 0, y: 0, z: 0}
@@ -227,6 +231,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.6
       Seconds: 0.6
   - Name: 步行收步
+    GroupId: ba002a167fcc402a91f739b4c0d12d70
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Weights: {x: 0, y: 0.65, z: 1}
@@ -270,6 +275,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.065
       Seconds: 0.36666667
   - Name: 冲刺收步
+    GroupId: 6e1eda3e34a14df9931e18c25e3b5ff9
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Weights: {x: 0, y: 0.65, z: 1}
@@ -313,6 +319,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.065
       Seconds: 0.5
   - Name: 跑步左转90度
+    GroupId: 068d6fab9bae43f29fa6d36fe7d7edbe
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -396,6 +403,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.12
       Seconds: 0.8
   - Name: 跑步右转90度
+    GroupId: 8601fc42b9b94ee8b49efb94ba8d28a2
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -479,6 +487,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.12
       Seconds: 0.8
   - Name: 步行起步
+    GroupId: ce55663e3fef49f2ba25a2fd2e9a7c74
     First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Second: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Weights: {x: 0, y: 0.58, z: 1}
@@ -588,6 +597,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.1
       Seconds: 0.56666667
   - Name: 步行左转90度
+    GroupId: f4902d8855d14cd7b0780bb8e9b99448
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -709,6 +719,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 步行右转90度
+    GroupId: 175601c1e1ef49e48d98266c58f311df
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -830,6 +841,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 步行左转180度
+    GroupId: 7987a6b3bc0d43c5a0dd265ce1d9440f
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -951,6 +963,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 步行右转180度
+    GroupId: 6e06d514838744c783c51f0d1b9bfeb7
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -1072,6 +1085,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 步行左转32度
+    GroupId: 457a0812ad704bc1929aa1c919d31aea
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -1154,6 +1168,7 @@ MonoBehaviour:
       LastEntrySeconds: 1.1333333
       Seconds: 1.1333333
   - Name: 步行右转32度
+    GroupId: 5fc04b31662e40388537abf38761c6ae
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -1236,6 +1251,7 @@ MonoBehaviour:
       LastEntrySeconds: 1.1333333
       Seconds: 1.1333333
   - Name: 跑步起步
+    GroupId: fcc95bf242da4cfe8163ce9ebc48ba98
     First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Weights: {x: 0, y: 0.58, z: 1}
@@ -1345,6 +1361,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.1
       Seconds: 0.56666667
   - Name: 跑步左转180度
+    GroupId: 83759f83efcc48cf86f596c666ae1efb
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -1466,6 +1483,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 跑步右转180度
+    GroupId: b279e725a3184b4b9c3d5e059ab2f4c0
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -1587,6 +1605,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 跑步左转32度
+    GroupId: 9581fa8a4e0c42b4a1dad3d94bd730bb
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -1648,6 +1667,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.66666667
       Seconds: 0.66666667
   - Name: 跑步右转32度
+    GroupId: d3840edfa2d2485db0a99db9e23bcaca
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -1709,6 +1729,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.66666667
       Seconds: 0.66666667
   - Name: 冲刺起步
+    GroupId: 9d05a6d3cb3a4d57a6e7041b64ddb24c
     First: {fileID: 2076941017338654744, guid: 315ac933a0551744a837e93af3d25704, type: 3}
     Second: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Weights: {x: 0, y: 0.58, z: 1}
@@ -1818,6 +1839,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.1
       Seconds: 0.56666667
   - Name: 冲刺左转90度
+    GroupId: e0b0eb2e93874a00a860fe40cab09ade
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -1939,6 +1961,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 冲刺右转90度
+    GroupId: 6d3df871346746298f077628cdee9e6a
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.48, z: 0}
@@ -2060,6 +2083,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 冲刺左转180度
+    GroupId: 75ac690477ba4f52b56825f09b0c64fc
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -2181,6 +2205,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 冲刺右转180度
+    GroupId: 964f357c82f544d682037eba6eb98a44
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.68, z: 0}
@@ -2302,6 +2327,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.73333333
   - Name: 冲刺左转32度
+    GroupId: 37e780db5bfb48bab8c4fae899fd9308
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: -3385256625208390612, guid: d4bdb2e5723f137449fb3bd296926054, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -2360,6 +2386,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.6
       Seconds: 0.6
   - Name: 冲刺右转32度
+    GroupId: 3b37943662d94dfc8688a68375aed7c5
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 855038537665776665, guid: 6a9b692f3b902284980eebd98c0d63af, type: 3}
     Weights: {x: 0, y: 0.18, z: 0}
@@ -2418,6 +2445,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.6
       Seconds: 0.6
   - Name: 步行转跑步
+    GroupId: c6d70546f5884f77a7c77225b5647c43
     First: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Weights: {x: 0, y: 0.5, z: 1}
@@ -2527,6 +2555,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.6
   - Name: 跑步转步行
+    GroupId: 7ebb6d6e8bc041638f0cc22bf11264bf
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: -8468773270457790315, guid: 020598ec7075891469d39c8001089e9f, type: 3}
     Weights: {x: 0, y: 0.5, z: 1}
@@ -2636,6 +2665,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.6
   - Name: 跑步转冲刺
+    GroupId: c6e5fc0617754114ba310b1faad1dceb
     First: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Second: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Weights: {x: 0, y: 0.5, z: 1}
@@ -2745,6 +2775,7 @@ MonoBehaviour:
       LastEntrySeconds: 0.14
       Seconds: 0.6
   - Name: 冲刺转跑步
+    GroupId: 0db2d84e7e074f4497b947ca3223bf63
     First: {fileID: -7603445652327439315, guid: 4c5460041af046348ae1b736d1a97e0b, type: 3}
     Second: {fileID: 409126674583403400, guid: 2336e21b03e6d85468ba775ae8809a76, type: 3}
     Weights: {x: 0, y: 0.5, z: 1}

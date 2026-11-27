@@ -24,7 +24,8 @@ namespace ThreeC.CharacterBehavior
         internal int StateVersion { get; private set; }
         internal bool Paused { get; private set; }
         private long sequence;
-        private double elapsed;
+        private double elapsed, pauseStart, pausedSeconds;
+        internal double Time => (Paused ? pauseStart : UnityEngine.Time.timeAsDouble) - pausedSeconds;
         private Dictionary<CharacterBehaviorId, double> grants;
 
         // 验证外部实测和移动许可，成功后同步更新最近固定步和该步的表现轨迹。
@@ -59,6 +60,9 @@ namespace ThreeC.CharacterBehavior
         internal void SetPaused(bool paused)
         {
             if (Paused == paused) return;
+            double now = UnityEngine.Time.timeAsDouble;
+            if (paused) pauseStart = now;
+            else pausedSeconds += now - pauseStart;
             Paused = paused;
             Version++;
             Latest = default;

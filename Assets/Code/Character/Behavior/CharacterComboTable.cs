@@ -4,136 +4,102 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    // 提供角色起手及接续请求查阅的招式路线与输入窗口。
-    [CreateAssetMenu(menuName = "3C/角色数据/02 连招表", fileName = "02 连招表")]
+    // 汇总角色攻击状态的定义、起手入口和各状态的可选转移。
+    [CreateAssetMenu(menuName = "3C/角色数据/02 攻击状态表", fileName = "02 攻击状态表")]
     public sealed class CharacterComboTable : ScriptableObject
     {
-        [SerializeField, InspectorName("接续配置"), Tooltip("下一次输入按当前路线与窗口判断，已接受的预输入保留原招式与接入时刻。")]
-        internal CharacterComboRoutes Routes = new CharacterComboRoutes();
+        [SerializeField, InspectorName("攻击状态总表")] internal CharacterAttackTable Data = new CharacterAttackTable();
 
 #if UNITY_EDITOR
-        private void OnValidate() =>
-            CharacterComboValidation.CheckRoutes(Routes, problem => Debug.LogWarning($"{name} / {problem}", this));
+        // 编辑表时检查纯数据引用；片段读取留给主线程的角色配置检查。
+        private void OnValidate() => CharacterComboValidation.CheckTable(Data, false, problem => Debug.LogWarning($"{name} / {problem}", this));
 #endif
     }
 
+    // 持有四个具名攻击状态及其公共起手规则，状态身份由字段固定。
+    [Serializable]
+    internal sealed class CharacterAttackTable
+    {
+        [InspectorName("允许短突进打断的阶段")] public CharacterBehaviorPhase DashInterruptPhases =
+            CharacterBehaviorPhase.Startup | CharacterBehaviorPhase.Recovery;
+        [InspectorName("起手路线"), Tooltip("只接受按键路线，按列表顺序匹配。")] public CharacterAttackLink[] Openers = Array.Empty<CharacterAttackLink>();
+
+        [InspectorName("轻击一")] public CharacterAttackMoveSettings LightOne = new CharacterAttackMoveSettings { Name = "轻击一" };
+        [InspectorName("轻击二")] public CharacterAttackMoveSettings LightTwo = new CharacterAttackMoveSettings { Name = "轻击二" };
+        [InspectorName("重击")] public CharacterAttackMoveSettings Heavy = new CharacterAttackMoveSettings { Name = "重击" };
+        [InspectorName("技能二")] public CharacterSkillAttackSettings SkillTwo = new CharacterSkillAttackSettings { Name = "技能二" };
+
+        // 将路线和动画映射使用的稳定编号解析到对应的具名字段。
+        internal CharacterAttackDefinition Find(int id) => (CharacterAttackMove)id switch {
+            CharacterAttackMove.LightOne => LightOne,
+            CharacterAttackMove.LightTwo => LightTwo,
+            CharacterAttackMove.Heavy => Heavy,
+            CharacterAttackMove.SkillTwo => SkillTwo,
+            _ => null
+        };
+
+        // 冻结四招的执行参数与路线，预测线程只读取本次捕获的数据。
+        internal CharacterAttackTable Snapshot()
+        {
+            var copy = (CharacterAttackTable)MemberwiseClone();
+            copy.Openers = (CharacterAttackLink[])Openers?.Clone();
+            copy.LightOne = Freeze(LightOne);
+            copy.LightTwo = Freeze(LightTwo);
+            copy.Heavy = Freeze(Heavy);
+            copy.SkillTwo = Freeze(SkillTwo);
+            return copy;
+        }
+
+        // 保留具名字段的具体类型，并为该预测表复制可编辑的后续路线。
+        private static T Freeze<T>(T source) where T : CharacterAttackMoveSettings
+        {
+            if (source == null) return null;
+            var copy = (T)source.Snapshot();
+            copy.Links = (CharacterAttackLink[])source.Links?.Clone();
+            return copy;
+        }
+    }
+
+    // 指定按键、归一化时刻、自然完成或自定义结果触发的转移。
+    internal enum CharacterAttackTrigger
+    {
+        [InspectorName("按键")] Input,
+        [InspectorName("到达指定进度")] Time,
+        [InspectorName("状态完成")] Completed,
+        [InspectorName("状态结果")] Result
+    }
+
+    // 定义单条转移的触发、目标、预输入窗口。
     [Serializable]
     internal struct CharacterAttackLink
     {
+        [InspectorName("触发方式")] public CharacterAttackTrigger Trigger;
         [InspectorName("按键")] public AttackButton Button;
-        [InspectorName("下一招")] public CharacterAttackMove To;
-        [InspectorName("起手条件")] public CharacterComboOpeningCondition OpeningCondition;
-        [Range(0f, 1f), InspectorName("缓入结束比例"), Tooltip("下一招的动画在此进度完成缓入。")]
-        public float BlendInEnd;
-        [Range(0f, 1f), InspectorName("缓出开始比例"), Tooltip("下一招的动画从此进度开始缓出。")]
-        public float BlendOutStart;
-        private const float DefaultBlendIn = 0.1f, DefaultBlendOut = 0.9f;
+        [InspectorName("目标状态")] public CharacterAttackMove To;
+        internal int TargetId => (int)To;
+        [InspectorName("首招移动条件")] public CharacterComboOpeningCondition OpeningCondition;
+        [Range(0f, 1f), InspectorName("开放接续 / 定时转移进度"), Tooltip("使用状态报告的归一化进度。自定义进度由状态报告变化边界。")] public float LinkStart;
+        [Range(0f, 1f), InspectorName("关闭输入进度")] public float LinkEnd;
+        [Min(0f), InspectorName("提前输入（秒）"), Tooltip("按固定线性时钟换算开放时刻。无固定时长或自定义进度的状态填 0，仅在窗口内即时接续。")] public float EarlySeconds;
+        [InspectorName("匹配状态结果（非零）")] public int Result;
+        internal bool HasValidTime => LinkStart >= 0f && LinkStart <= 1f;
+        internal bool HasValidWindow => HasValidTime && LinkStart <= LinkEnd && LinkEnd > 0f && LinkEnd <= 1f &&
+            EarlySeconds >= 0f && !float.IsInfinity(EarlySeconds);
 
+        // 按本次连招最初获得许可时的地速分类匹配路线。
         internal bool AllowsOpening(bool moving) => OpeningCondition == CharacterComboOpeningCondition.Any ||
             OpeningCondition == (moving ? CharacterComboOpeningCondition.Moving : CharacterComboOpeningCondition.Standing);
 
-        internal bool HasValidBlend => BlendInEnd >= 0f && BlendInEnd <= BlendOutStart && BlendOutStart <= 1f;
-        internal Vector2 BlendRange => HasValidBlend ? new Vector2(BlendInEnd, BlendOutStart) :
-            new Vector2(DefaultBlendIn, DefaultBlendOut);
+        // 为专属状态的动态请求提供固定的目标编号。
+        internal static CharacterAttackLink ToState(int id) => new CharacterAttackLink { To = (CharacterAttackMove)id };
 
-        public CharacterAttackLink(AttackButton button, CharacterAttackMove to)
-        {
-            Button = button;
-            To = to;
-            OpeningCondition = CharacterComboOpeningCondition.Any;
-            BlendInEnd = DefaultBlendIn;
-            BlendOutStart = DefaultBlendOut;
-        }
     }
 
+    // 以最初的首招分类限制本条路线。
     internal enum CharacterComboOpeningCondition
     {
-        [InspectorName("无")] Any,
+        [InspectorName("不限")] Any,
         [InspectorName("移动起手")] Moving,
         [InspectorName("待机起手")] Standing
-    }
-
-    [Serializable]
-    internal sealed class CharacterComboMoveRoutes
-    {
-        [Min(0f), InspectorName("提前输入（秒）"), Tooltip("允许在开放接续前多少秒记住按键。")]
-        public float EarlySeconds;
-        [Range(0f, 1f), InspectorName("开放接续"), Tooltip("按当前招式进度计算，0.6 表示 60%。")]
-        public float LinkStart;
-        [Range(0f, 1f), InspectorName("关闭接续"), Tooltip("按当前招式进度计算，0.7 表示 70%。")]
-        public float LinkEnd;
-        [InspectorName("后续路线"), Tooltip("同一按键按列表顺序匹配；列表为空表示本招没有后续路线。")]
-        public CharacterAttackLink[] Links = Array.Empty<CharacterAttackLink>();
-
-        internal bool HasValidWindow => EarlySeconds >= 0f && !float.IsInfinity(EarlySeconds) &&
-            LinkStart >= 0f && LinkStart <= LinkEnd && LinkEnd > 0f && LinkEnd <= 1f;
-
-        internal CharacterComboMoveRoutes Snapshot()
-        {
-            var copy = (CharacterComboMoveRoutes)MemberwiseClone();
-            copy.Links = (CharacterAttackLink[])Links?.Clone();
-            return copy;
-        }
-    }
-
-    [Serializable]
-    internal struct CharacterComboRouteEntry
-    {
-        [InspectorName("来源招式")] public CharacterAttackMove Id;
-        [InspectorName("接续配置")] public CharacterComboMoveRoutes Routes;
-
-        internal CharacterComboRouteEntry Snapshot() =>
-            new CharacterComboRouteEntry { Id = Id, Routes = Routes?.Snapshot() };
-    }
-
-    [Serializable]
-    internal class CharacterComboRoutes
-    {
-        [InspectorName("起手路线"), Tooltip("从空闲状态出招。起手只检查按键和起手条件。")]
-        public CharacterAttackLink[] Openers = Array.Empty<CharacterAttackLink>();
-        [InspectorName("轻击一")] public CharacterComboMoveRoutes LightOneRoutes = new CharacterComboMoveRoutes();
-        [InspectorName("轻击二")] public CharacterComboMoveRoutes LightTwoRoutes = new CharacterComboMoveRoutes();
-        [InspectorName("重击")] public CharacterComboMoveRoutes HeavyRoutes = new CharacterComboMoveRoutes();
-        [InspectorName("技能 2")] public CharacterComboMoveRoutes SkillTwoRoutes = new CharacterComboMoveRoutes();
-
-        [InspectorName("追加招式路线")] public CharacterComboRouteEntry[] Additional;
-
-        internal CharacterComboMoveRoutes ForMove(CharacterAttackMove move) => move switch
-        {
-            CharacterAttackMove.LightOne => LightOneRoutes,
-            CharacterAttackMove.LightTwo => LightTwoRoutes,
-            CharacterAttackMove.Heavy => HeavyRoutes,
-            CharacterAttackMove.SkillTwo => SkillTwoRoutes,
-            CharacterAttackMove.None => null,
-            _ => AdditionalRoute(move)
-        };
-
-        private CharacterComboMoveRoutes AdditionalRoute(CharacterAttackMove move)
-        {
-            if (Additional != null)
-                foreach (var row in Additional)
-                    if (row.Id == move) return row.Routes;
-            return null;
-        }
-
-        internal CharacterComboRoutes Snapshot()
-        {
-            var copy = (CharacterComboRoutes)MemberwiseClone();
-            copy.Openers = (CharacterAttackLink[])Openers?.Clone();
-            copy.LightOneRoutes = LightOneRoutes?.Snapshot();
-            copy.LightTwoRoutes = LightTwoRoutes?.Snapshot();
-            copy.HeavyRoutes = HeavyRoutes?.Snapshot();
-            copy.SkillTwoRoutes = SkillTwoRoutes?.Snapshot();
-            copy.Additional = Additional == null ? null : Array.ConvertAll(Additional, row => row.Snapshot());
-            return copy;
-        }
-
-        internal static CharacterAttackLink Find(CharacterAttackLink[] links, AttackButton button, bool? moving = null)
-        {
-            if (button == AttackButton.None || links == null) return default;
-            foreach (var link in links)
-                if (link.Button == button && (!moving.HasValue || link.AllowsOpening(moving.Value))) return link;
-            return default;
-        }
     }
 }

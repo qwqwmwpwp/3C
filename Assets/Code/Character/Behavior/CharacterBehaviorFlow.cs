@@ -50,7 +50,6 @@ namespace ThreeC.CharacterBehavior
         public bool HistoryEnabled { get => journal.HistoryEnabled; set => journal.HistoryEnabled = value; }
         public IReadOnlyList<CharacterBehaviorDecision> DecisionHistory => journal.History;
         private bool unavailableForCopy;
-        internal CharacterActionAlignmentRuntime Alignment;
 
         // 当前端点裁决后查询全部活动参与者，截取下一段可推进的角色时间。
         internal double NextBoundary(double time, double limit, bool inputAtLimit = false)
@@ -79,30 +78,12 @@ namespace ThreeC.CharacterBehavior
             return next;
         }
 
-        // 对齐投影可能回读扩展动作冻结的采样器，同样在分发保护下运行。
-        internal CharacterAlignmentOrigin ProjectAlignmentOrigin(CharacterRigidbodyBlackboard body, double time,
-            in CharacterAlignmentOrigin actual, float turnSpeed)
-        {
-            using var dispatch = EnterDispatch();
-            return body.ProjectAlignmentOrigin(time, actual, turnSpeed);
-        }
-
         // 运动采样撤销了已裁决的一帧时，把已发生的请求与执行边沿留给下个有效边界。
         internal void RetainUnpublished(in CharacterBehaviorFrameResult frame) => journal.RetainUnpublished(frame);
 
         // 在裁决后捕获活动位移动作的精确采样器和持续输入，供之后的物理区间读取。
         internal CharacterMotionCommand CaptureMotion(double time, CharacterBehaviorFrameResult result,
             CharacterInputSnapshot input, Vector2 facing, Vector2 velocity, CharacterMovementSettings settings)
-            => BuildMotion(time, result, input, facing, velocity, settings, false, default);
-
-        // 在行为发布边界提交该实例的目标方案，再冻结可重复读取的命令。
-        internal CharacterMotionCommand PublishMotion(double time, CharacterBehaviorFrameResult result,
-            CharacterInputSnapshot input, Vector2 facing, Vector2 velocity, CharacterMovementSettings settings,
-            in CharacterAlignmentOrigin origin) => BuildMotion(time, result, input, facing, velocity, settings, true, origin);
-
-        // 合成许可、普通移动和动作区间采样，仅显式发布时允许写入目标方案。
-        private CharacterMotionCommand BuildMotion(double time, CharacterBehaviorFrameResult result, CharacterInputSnapshot input,
-            Vector2 facing, Vector2 velocity, CharacterMovementSettings settings, bool publish, in CharacterAlignmentOrigin origin)
         {
             using var dispatch = EnterDispatch();
             settings ??= fallbackSettings;
@@ -111,10 +92,7 @@ namespace ThreeC.CharacterBehavior
                 if (!rule.ProvidesDisplacement || (active & rule.Id) == 0) continue;
                 var interval = rule.Behavior as ICharacterIntervalMotion;
                 if (interval == null)
-                {
-                    if (publish && Alignment.Plan != null) Alignment.Publish(null, origin, time, default);
                     return new CharacterMotionCommand(time, result, input, settings, rule.Id, null);
-                }
 
                 float turnSpeed = InputMath.NonNegative(settings.MoveTurnSpeed, CharacterMovementSettings.DefaultMoveTurnSpeed);
                 var capture = new CharacterMotionCapture(time, facing, velocity, input, turnSpeed);
@@ -122,16 +100,8 @@ namespace ThreeC.CharacterBehavior
                 if (DispatchCancelled) return default;
                 if (motion == null)
                     throw new InvalidOperationException($"行为 {rule.Id} 已声明精确区间运动，须提供冻结采样器。");
-                if (publish && (Alignment.HasTarget || Alignment.Instance != 0))
-                {
-                    Vector2 ordinary = result.MoveApproved ? CharacterMoveBehavior.TargetVelocity(input, settings, result.OrdinarySpeedLimit) : default;
-                    Alignment.Publish(motion, origin, time, ordinary);
-                }
-                if (Alignment.Plan != null && motion.AlignmentWindow.Instance == Alignment.Plan.Instance)
-                    motion = new CharacterFrozenAlignedMotion(motion, Alignment.Plan, time);
                 return new CharacterMotionCommand(time, result, input, settings, rule.Id, motion);
             }
-            if (publish && Alignment.Plan != null) Alignment.Publish(null, origin, time, default);
             return new CharacterMotionCommand(time, result, input, settings, CharacterBehaviorId.None, null);
         }
 
@@ -178,6 +148,20 @@ namespace ThreeC.CharacterBehavior
             journal = new CharacterBehaviorJournal(rules.Participants, snapshot);
         }
 
+        // 查询当前攻击行为及其保留的待执行招式能否共享冻结预测表。
+        internal bool SupportsSharedForecastAttack
+        {
+            get
+            {
+                foreach (var rule in rules.Actions)
+                {
+                    if (rule.Behavior is CharacterAttackBehavior attack && !attack.SupportsSharedForecastTable)
+                        return false;
+                }
+                return true;
+            }
+        }
+
         // 预检整组行为后复制流程与动作状态，并让目标绑定自己的预测定义。
         internal void CopyStateTo(CharacterBehaviorFlow copy)
         {
@@ -194,7 +178,6 @@ namespace ThreeC.CharacterBehavior
             journal.CopyTo(copy.journal);
             copy.active = active;
             copy.simulationSeconds = simulationSeconds;
-            copy.Alignment = Alignment;
             copy.grantTimes = null; // 预测不发布许可时刻。
             copy.FrameNumber = FrameNumber;
             runtime.CopyStateTo(copy.runtime);
@@ -278,7 +261,6 @@ namespace ThreeC.CharacterBehavior
         {
             using var dispatch = EnterDispatch();
             LastResetResult = active == default && !journal.HasPending ? default : InterruptCore(CharacterBehaviorEndReason.Reset, settings);
-            Alignment = default;
             locomotion.Reset();
             foreach (var rule in rules.Participants)
             {
@@ -307,26 +289,24 @@ namespace ThreeC.CharacterBehavior
         public CharacterBehaviorFrameResult Tick(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
             CharacterMovementSettings settings, Vector2 groundVelocity)
         {
-            return Run(input, facing, deltaTime, settings, groundVelocity, false);
+            float dt = InputMath.NonNegative(deltaTime, 0f);
+            return dt == 0f ? ReadCurrentState(input, facing, settings, groundVelocity) :
+                Run(input, facing, dt, settings, groundVelocity, false);
         }
 
         // 逐帧入口按事件及动作边界精确分段；零长片段也可在该时刻裁决一次按下。
         internal CharacterBehaviorFrameResult AdvanceTimeline(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
-            CharacterMovementSettings settings, Vector2 groundVelocity) =>
-            Run(input, facing, deltaTime, settings, groundVelocity, true);
+            CharacterMovementSettings settings, Vector2 groundVelocity, double? start = null, double? end = null) =>
+            Run(input, facing, InputMath.NonNegative(deltaTime, 0f), settings, groundVelocity, true, start, end);
 
-        // 同一套规则服务逐帧裁决和显式步进调用，后者保留零步长只读语义。
-        private CharacterBehaviorFrameResult Run(CharacterInputSnapshot input, Vector2 facing, float deltaTime,
-            CharacterMovementSettings settings, Vector2 groundVelocity, bool separateBoundaries)
+        // 使用同一套规则推进显式步进和时间线区间，由时间线处理端点分段。
+        private CharacterBehaviorFrameResult Run(CharacterInputSnapshot input, Vector2 facing, float dt,
+            CharacterMovementSettings settings, Vector2 groundVelocity, bool separateBoundaries, double? start = null, double? end = null)
         {
             using var dispatch = EnterDispatch();
+            if (start.HasValue) simulationSeconds = start.Value;
             settings ??= fallbackSettings;
-            float dt = InputMath.NonNegative(deltaTime, 0f);
-            var step = new CharacterBehaviorStep { Active = active, StartSeconds = simulationSeconds,
-                GrantTimes = grantTimes, SkipGrantHistory = forecasting };
-
-            if (dt == 0f && !separateBoundaries)
-                return ReadCurrentFrame(input, facing, settings, groundVelocity, ref step);
+            var step = CreateStep();
 
             runtime.BeginStep(settings);
             journal.Time = simulationSeconds;
@@ -346,7 +326,7 @@ namespace ThreeC.CharacterBehavior
                 foreach (var rule in rules.Participants)
                     rule.Behavior.AfterStep(dt);
             runtime.ReadOutcome(context, ref step);
-            if (step.DurationCommitted) simulationSeconds += dt;
+            if (step.DurationCommitted) simulationSeconds = end ?? simulationSeconds + dt;
             journal.Time = simulationSeconds;
             if (!DispatchCancelled) journal.Commit(ref step);
             return new CharacterBehaviorFrameResult(++FrameNumber, displacement, step);
@@ -357,8 +337,8 @@ namespace ThreeC.CharacterBehavior
         {
             var movement = locomotion.BeginStep(context.DeltaTime, ref step);
             locomotion.ReadRequest(context);
-            ReleaseWithdrawn(context, ref step);
-            if (!DispatchCancelled) ResolveRequests(ref context, ref step);
+            bool attackContinued = ReleaseBeforeRequests(context, ref step);
+            if (!DispatchCancelled) ResolveRequests(ref context, ref step, attackContinued);
             if (DispatchCancelled) return default;
             // 从首个运动回调开始，同段推进不可拆分，所有已活动行为共用完整时长。
             step.DurationCommitted = true;
@@ -377,11 +357,17 @@ namespace ThreeC.CharacterBehavior
             return displacement;
         }
 
-        // 读取当前帧状态，供无效步长时保持观测而不推进流程。
-        private CharacterBehaviorFrameResult ReadCurrentFrame(CharacterInputSnapshot input, Vector2 facing,
-            CharacterMovementSettings settings, Vector2 groundVelocity, ref CharacterBehaviorStep step)
+        // 从现有活动许可和角色时钟建立本次推进或观测的起点。
+        private CharacterBehaviorStep CreateStep() => new CharacterBehaviorStep { Active = active, StartSeconds = simulationSeconds,
+            GrantTimes = grantTimes, SkipGrantHistory = forecasting };
+
+        // 在分发保护下读取当前行为帧，保持角色时钟、帧号与许可状态。
+        internal CharacterBehaviorFrameResult ReadCurrentState(CharacterInputSnapshot input, Vector2 facing,
+            CharacterMovementSettings settings, Vector2 groundVelocity)
         {
-            var context = runtime.CreateContext(input, facing, 0f, settings, simulationSeconds, groundVelocity);
+            using var dispatch = EnterDispatch();
+            var step = CreateStep();
+            var context = runtime.CreateContext(input, facing, 0f, settings ?? fallbackSettings, simulationSeconds, groundVelocity);
             locomotion.ReadOutcome(ref step);
             foreach (var rule in rules.Participants)
                 rule.Behavior.ReadOutcome(ref step);
@@ -390,22 +376,35 @@ namespace ThreeC.CharacterBehavior
             return new CharacterBehaviorFrameResult(FrameNumber, Vector2.zero, step);
         }
 
-        // 在处理新请求前释放已撤销的活动许可。
-        private void ReleaseWithdrawn(CharacterBehaviorContext context, ref CharacterBehaviorStep step)
+        // 新请求仲裁前释放已撤销的许可，并让已到自然终点的招式优先尝试自身接续。
+        private bool ReleaseBeforeRequests(CharacterBehaviorContext context, ref CharacterBehaviorStep step)
         {
+            bool attackContinued = false;
             foreach (var rule in rules.Actions)
             {
-                if (DispatchCancelled) return;
-                if (!step.IsActive(rule.Id) || rule.Behavior.ShouldContinue(context) || DispatchCancelled)
-                    continue;
-
-                step.Withdrawn |= rule.Id;
-                step.End(rule, CharacterBehaviorEndReason.Withdrawn);
+                if (DispatchCancelled) return false;
+                if (!step.IsActive(rule.Id)) continue;
+                bool keep = rule.Behavior.ShouldContinue(context);
+                if (DispatchCancelled) return false;
+                if (!keep)
+                {
+                    step.Withdrawn |= rule.Id;
+                    step.End(rule, CharacterBehaviorEndReason.Withdrawn);
+                }
+                else if (rule.Behavior is CharacterAttackBehavior attack && attack.IsComplete)
+                {
+                    attackContinued = attack.TryContinueAtEndpoint(context);
+                    if (attackContinued || DispatchCancelled) continue;
+                    // 先冻结旧招末相位；若同刻有新首招，本步执行结果将发布新实例。
+                    attack.ReadOutcome(ref step);
+                    step.End(rule);
+                }
             }
+            return attackContinued;
         }
 
         // 按已装配的优先顺序判断请求，所有检查通过后再提交行为变更。
-        private void ResolveRequests(ref CharacterBehaviorContext context, ref CharacterBehaviorStep step)
+        private void ResolveRequests(ref CharacterBehaviorContext context, ref CharacterBehaviorStep step, bool attackContinued)
         {
             ulong missing = (ulong)(context.Input.Requests & ~rules.Registered);
             while (missing != 0)
@@ -419,6 +418,8 @@ namespace ThreeC.CharacterBehavior
             {
                 if (DispatchCancelled) return;
                 var behavior = rule.Behavior;
+                // 同批突进可能刚打断已接续的新招；已用作接续的攻击键不能再次申请首招。
+                if (attackContinued && behavior is CharacterAttackBehavior) continue;
                 bool explicitRequest = (context.Input.Requests & rule.Id) != 0;
                 bool continuedHold = rule.Id == CharacterBehaviorId.Guard && explicitRequest && behavior.HeldRequest;
                 behavior.HeldRequest = explicitRequest;

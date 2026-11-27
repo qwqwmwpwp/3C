@@ -59,6 +59,10 @@ namespace ThreeC.CharacterBehavior
             return changed ? new CharacterPresentationInput(this, published, snapshot) : this;
         }
 
+        // 用同一已发布预测重新投影指定库的时间窗，外部观测保留真实提供的窗长。
+        internal CharacterMatchTrajectory MatchAt(Vector2 requested) => Motion.Trajectory.Match.Windows == requested
+            ? Motion.Trajectory.Match : CharacterForecastQuery.Project(Frame, originalTrajectory, Forecast, Time, forecastEnabled, requested).Match;
+
         // 以原固定步的时刻为步态选择查询本帧已核对的预测。
         internal CharacterAnimationMotion ProjectStep(in CharacterControllerFrameResult frame,
             in CharacterAnimationMotion motion, double time)

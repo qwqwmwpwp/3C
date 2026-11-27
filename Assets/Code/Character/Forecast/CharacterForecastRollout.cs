@@ -22,28 +22,25 @@ namespace ThreeC.CharacterBehavior
                 output.EndAtContact();
                 return;
             }
-            simulation.Alignment.Observe(frame.Pending, origin.Pose.Position, motion.Position, motion.Facing, motion.Contacts);
 
             bool forced = frame.Time < frame.ControlReturnsAt;
             if (forced) simulation.ReleasePredictionActions();
             var behavior = frame.Behavior;
             var slices = new List<CharacterMotionSlice>(4);
             output.Begin(window.Steps + 1, frame.Time, frame, reason);
-            output.Append(motion.Sample(behavior, frame.Held.Gait, forced));
+            output.Append(motion.Sample(behavior, frame.Held.Gait, frame.Time, forced));
             for (int i = 0; i < window.Steps; i++)
             {
                 double start = frame.Time + i * (double)window.Step;
                 double end = frame.Time + (i + 1) * (double)window.Step;
                 slices.Clear();
-                Vector3 stepStart = motion.Position;
                 PlanStep(simulation, motion, frame, start, end, slices, ref behavior);
                 if (!motion.Solve(slices, geometry, frame, ref startCursor))
                 {
                     output.EndAtContact();
                     break;
                 }
-                simulation.Alignment.Observe(slices, stepStart, motion.Position, motion.Facing, motion.Contacts);
-                var sample = motion.Sample(behavior, frame.Held.Gait, end < frame.ControlReturnsAt);
+                var sample = motion.Sample(behavior, frame.Held.Gait, end, end < frame.ControlReturnsAt);
                 output.Append(sample);
                 if (simulation.AllowsStationaryForecast && end >= frame.ControlReturnsAt && motion.AtRest(frame.Held, behavior))
                 {
@@ -59,7 +56,6 @@ namespace ThreeC.CharacterBehavior
         {
             Vector2 facing = motion.Facing;
             Vector2 groundVelocity = motion.GroundVelocity;
-            var origin = new CharacterAlignmentOrigin { Time = time, Position = motion.Position, Facing = facing };
             while (time < end)
             {
                 bool forced = time < frame.ControlReturnsAt;
@@ -70,27 +66,26 @@ namespace ThreeC.CharacterBehavior
                     flow.AdvanceExternal(returns - time);
                     time = returns;
                     if (time >= frame.ControlReturnsAt)
-                        behavior = flow.AdvanceTimeline(frame.Held, facing, 0f, frame.Movement, groundVelocity);
+                        behavior = flow.AdvanceTimeline(frame.Held, facing, 0f, frame.Movement, groundVelocity, time, time);
                     continue;
                 }
                 var input = frame.Held;
                 double next = flow.NextBoundary(time, end);
-                var command = flow.PublishMotion(time, behavior, input, facing, groundVelocity, frame.Movement, origin);
+                var command = flow.CaptureMotion(time, behavior, input, facing, groundVelocity, frame.Movement);
                 float seconds = (float)(next - time);
-                var advanced = flow.AdvanceTimeline(input, facing, seconds, frame.Movement, groundVelocity);
+                var advanced = flow.AdvanceTimeline(input, facing, seconds, frame.Movement, groundVelocity, time, next);
                 if (flow.HasCustomMotion(advanced)) command = new CharacterMotionCommand(time, next, advanced, input);
                 double cursor = time;
                 while (cursor < next)
                 {
                     var slice = command.SampleNext(cursor, next);
                     slices.Add(slice);
-                    if (flow.Alignment.HasTarget) origin.Advance(slice, frame.Drive.TurnSpeed);
                     cursor = slice.End;
                 }
                 time = next;
                 // 已到接续窗口或控制归还的同一时刻，先落地新实例和费用再捕获下一命令。
                 behavior = flow.AdvanceTimeline(frame.Held,
-                    facing, 0f, frame.Movement, groundVelocity);
+                    facing, 0f, frame.Movement, groundVelocity, time, time);
             }
         }
 
@@ -102,8 +97,6 @@ namespace ThreeC.CharacterBehavior
             private Quaternion rotation;
             private CollisionFlags contacts;
             private CharacterSlopeContacts steep;
-            internal Vector3 Position => position;
-            internal CollisionFlags Contacts => contacts;
             internal Vector2 GroundVelocity => CharacterMotorStep.GroundVelocity(velocity, ground);
             internal Vector2 Facing
             {
@@ -176,8 +169,8 @@ namespace ThreeC.CharacterBehavior
                 ((behavior.ActiveBehaviors | behavior.ExecutedBehaviors) & ~(CharacterBehaviorId.Move | CharacterBehaviorId.Guard)) == 0;
 
             // 把同一时刻的运动与行为结果写成采样点。
-            internal CharacterForecastSample Sample(in CharacterBehaviorFrameResult behavior, CharacterMoveGait gait, bool forced) =>
-                new CharacterForecastSample(position, velocity, rotation, forced ? default : behavior, contacts, gait, forced);
+            internal CharacterForecastSample Sample(in CharacterBehaviorFrameResult behavior, CharacterMoveGait gait, double time, bool forced) =>
+                new CharacterForecastSample(position, velocity, rotation, forced ? default : behavior, contacts, gait, time, forced);
         }
     }
 }

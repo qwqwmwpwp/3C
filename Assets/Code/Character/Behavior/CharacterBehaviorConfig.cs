@@ -11,9 +11,6 @@ namespace ThreeC.CharacterBehavior
         [SerializeField, InspectorName("短突进参数"), Tooltip("每次获准时锁定速度、时长、冷却与消耗。初始体力只在角色初始化或显式重置时读取。")]
         internal CharacterDashSettings Dash = new CharacterDashSettings();
 
-        [Header("攻击 · 输入匹配起手招式时请求")]
-        [SerializeField, InspectorName("攻击参数")] internal CharacterLightAttackSettings Attack = new CharacterLightAttackSettings();
-
         [Header("持物 / 举盾 · 按住维持，松开结束")]
         [SerializeField, InspectorName("持物打断规则"), Tooltip("角色装配行为时固定打断规则；重置状态会沿用已装配的规则。")]
         internal CharacterGuardSettings Guard = new CharacterGuardSettings();
@@ -37,10 +34,10 @@ namespace ThreeC.CharacterBehavior
     {
         internal readonly bool Guard;
         internal readonly CharacterBehaviorDescriptor[] Descriptors;
+        private readonly CharacterAttackTable shareableAttackSource;
 
         // 初始化时冻结角色的参与者及关系，各流程构造时再在主线程解析自己使用的数值。
-        internal CharacterBehaviorRegistration(bool allowGuard, CharacterLightAttackSettings attack,
-            CharacterComboRoutes routes, CharacterGuardSettings guard, CharacterBehaviorDefinition[] additional = null)
+        internal CharacterBehaviorRegistration(bool allowGuard, CharacterAttackTable attack, CharacterGuardSettings guard, CharacterBehaviorDefinition[] additional = null)
         {
             Guard = allowGuard;
             var entries = new System.Collections.Generic.List<CharacterBehaviorDescriptor> {
@@ -50,18 +47,18 @@ namespace ThreeC.CharacterBehavior
                 entries.Add(new CharacterBehaviorDescriptor(CharacterBehaviorId.Guard, _ => new CharacterGuardBehavior(),
                     conflicts: CharacterBehaviorId.Dash, interrupts: guard?.DashInterrupts != false
                         ? new[] { new CharacterBehaviorInterrupt(CharacterBehaviorId.Dash, CharacterBehaviorId.Guard) } : null));
-            if (attack != null && routes != null && (attack.AllowWithoutClip || attack.Moves?.HasClip == true))
+            if (attack != null)
             {
-                var interrupts = new System.Collections.Generic.List<CharacterBehaviorInterrupt> {
-                    new CharacterBehaviorInterrupt(CharacterBehaviorId.Attack, CharacterBehaviorId.Move)
-                };
+                // 扩展工厂可以在两次装配之间修改作者表，保留每个流程独立捕获的时机。
+                if (additional == null || additional.Length == 0) shareableAttackSource = attack;
+                var interrupts = new System.Collections.Generic.List<CharacterBehaviorInterrupt>();
                 if (allowGuard && guard?.AttackInterrupts != false)
                     interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Attack, CharacterBehaviorId.Guard));
                 var phases = attack.DashInterruptPhases & CharacterBehaviorPhase.Any;
                 if (phases != 0) interrupts.Add(new CharacterBehaviorInterrupt(CharacterBehaviorId.Dash, CharacterBehaviorId.Attack, phases));
                 entries.Add(new CharacterBehaviorDescriptor(CharacterBehaviorId.Attack, snapshot => new CharacterAttackBehavior(
-                    snapshot ? attack.Snapshot() : attack, snapshot ? routes.Snapshot() : routes),
-                    80, allowGuard ? CharacterBehaviorId.Guard : default, motion: CharacterBehaviorMotionCapability.ExactInterval,
+                    CharacterAttackLookup.Create(attack, snapshot)),
+                    80, CharacterBehaviorId.Dash | (allowGuard ? CharacterBehaviorId.Guard : default),
                     interrupts: interrupts.ToArray()));
             }
             if (additional != null)
@@ -74,6 +71,14 @@ namespace ThreeC.CharacterBehavior
                     entries.Add(entry);
                 }
             Descriptors = entries.ToArray();
+        }
+
+        // 在任务启动时回读注册的作者表，供本次任务的种子与模拟体分别装配独立行为。
+        internal Func<CharacterBehaviorFlow> CaptureForecastFactory(bool allowSharedAttack)
+        {
+            var sharedAttack = allowSharedAttack && shareableAttackSource != null
+                ? CharacterAttackLookup.Create(shareableAttackSource, true) : null;
+            return () => CharacterBehaviorAssembly.ForCharacter(this, true, sharedAttack);
         }
     }
 }

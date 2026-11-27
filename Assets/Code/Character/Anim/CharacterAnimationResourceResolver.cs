@@ -53,6 +53,7 @@ namespace ThreeC.CharacterBehavior
     /// <summary>保存单个播放源的片段、播放动作与混合参数。</summary>
     internal readonly struct CharacterAnimationLayerPlan
     {
+        internal double? RestoredSeconds { get; }
         public bool HasState { get; }
         public CharacterAnimationDemand Demand { get; }
         public CharacterAnimationBinding Binding { get; }
@@ -73,6 +74,7 @@ namespace ThreeC.CharacterBehavior
             CharacterAnimationPlaybackReason reason, float weight, CharacterClipStart start, CharacterBlendDuration transition, float blendSeconds,
             bool resumeLoop = false)
         {
+            RestoredSeconds = null;
             EntryProfile = ExitProfile = null;
             HasState = true;
             Demand = demand;
@@ -106,6 +108,47 @@ namespace ThreeC.CharacterBehavior
             if (EntryProfile.Method == TransitionMethod.Inertial || EntryProfile.FadeSeconds >= 0f)
                 Blend = CharacterBlendDuration.Seconds(EntryProfile.Duration(0f));
             Command = Blend.Value > 0f ? CharacterAnimationPlaybackCommand.CrossFade : CharacterAnimationPlaybackCommand.Play;
+        }
+
+        // 延续原图的部位与蒙版，从已显示的素材时刻重建同素材声部。
+        internal CharacterAnimationLayerPlan(in CharacterAnimationLayerPlan source, in CharacterLayerObservation seen,
+            CharacterClipPlayback clips, CharacterAnimationComposer composer, in CharacterAnimationPlaybackPlan frame,
+            in CharacterPlaybackFrameStep step)
+        {
+            this = source;
+            if (!source.HasState) return;
+            var cursor = seen.Destination;
+            var handle = source.Demand.Playback;
+            if (!seen.Ready || cursor.fullPathHash != source.StateHash || !clips.MatchesMaterial(cursor) ||
+                handle != null && (handle.EndSource != default || handle.PlaybackId != cursor.PlaybackId ||
+                handle.StopSource == CharacterPlaybackEndSource.ResourceUnavailable))
+            {
+                this = default;
+                return;
+            }
+            Command = CharacterAnimationPlaybackCommand.Keep;
+            RestoredSeconds = cursor.Seconds;
+            if (handle == null) return;
+            var timing = source.Demand.Timing;
+            if (handle.Clock.Valid)
+                timing = new CharacterActionTiming(handle.Clock.Sample(step.End), handle.Cursor, handle.InitialPhase);
+            else if (timing.WeightPhase.HasValue)
+            {
+                bool followClip = !timing.ClipPhase.HasValue;
+                float phase = timing.WeightPhase.Value;
+                var latest = composer.CurrentTiming(handle);
+                if (followClip && seen.DestinationLength > 0f)
+                {
+                    float rate = clips.Pace(source.StateHash).Rate(frame.StrideSpeed, frame.StartSpeed, frame.StopRate, out _);
+                    phase = Mathf.Clamp01((float)((cursor.Seconds + step.GraphDelta * rate) / seen.DestinationLength));
+                }
+                else if (latest.WeightPhase.HasValue)
+                    phase = Mathf.Lerp(phase, latest.WeightPhase.Value, (float)step.Fraction);
+                timing = new CharacterActionTiming(timing.StartClipPhase, phase,
+                    latest.Handoff.Valid ? latest.Handoff : timing.Handoff, timing.StartAtZero, timing.Resumed, followClip);
+            }
+            Demand = Demand.WithTiming(timing);
+            Weight = Demand.Weight;
         }
 
         public float WeightAfter(float current, float deltaTime)
@@ -145,6 +188,20 @@ namespace ThreeC.CharacterBehavior
         public float StopEntryTravelPhase { get; }
         public CharacterStopPoseSample StopPose { get; }
         public CharacterReleaseDecision ReleaseDecision { get; }
+
+        // 装配切换后清除旧基础库入点与制动时钟，保留独立动作层的已提交计划。
+        internal CharacterAnimationPlaybackPlan WithoutGround() => new CharacterAnimationPlaybackPlan(default,
+            LowerBody, UpperBody, Overlay, null, null, false, 1f, default, default);
+
+        // 按上次真实提交的分层关系生成本段截止时刻的姿态，完成或换素材的声部退出。
+        internal CharacterAnimationPlaybackPlan(in CharacterAnimationPlaybackPlan source, CharacterLayerObservation[] seen,
+            CharacterClipPlayback clips, CharacterAnimationComposer composer, in CharacterPlaybackFrameStep step)
+        {
+            this = source;
+            FullBody = new CharacterAnimationLayerPlan(source.FullBody, seen[(int)source.FullBody.Demand.Source], clips, composer, source, step);
+            UpperOwner = new CharacterAnimationLayerPlan(source.UpperOwner, seen[(int)source.UpperOwner.Demand.Source], clips, composer, source, step);
+            LowerOwner = new CharacterAnimationLayerPlan(source.LowerOwner, seen[(int)source.LowerOwner.Demand.Source], clips, composer, source, step);
+        }
 
         // 保存已获选的基础和覆盖计划，给每个部位确定最终姿态来源。
         public CharacterAnimationPlaybackPlan(CharacterAnimationLayerPlan fullBody,
