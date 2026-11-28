@@ -7,15 +7,22 @@ namespace ThreeC.CharacterBehavior
     internal sealed class GroundLibraryScope
     {
         internal readonly int[] Indices;
-        internal readonly string Label, Issue, UnionIssue, RelaxedUnionIssue, StrictBlockIssue;
+        internal readonly string Issue, UnionIssue, RelaxedUnionIssue, StrictBlockIssue;
         private readonly Dictionary<int, HashSet<string>> groups;
+#if UNITY_EDITOR
+        internal readonly (int Index, string Name, string Issue)[] Declarations;
+        internal readonly string DeclaredLibraries;
+#endif
 
         // 固定库内状态范围，并记录严格搜索无法产生候选或无法联合评分的原因。
-        private GroundLibraryScope(List<int> indices, List<string> labels, List<string> issues,
-            Dictionary<int, HashSet<string>> groups, string unionIssue, string relaxedUnionIssue)
+        private GroundLibraryScope(List<int> indices, List<string> issues,
+            Dictionary<int, HashSet<string>> groups, string unionIssue, string relaxedUnionIssue
+#if UNITY_EDITOR
+            , List<(int Index, string Name, string Issue)> declarations
+#endif
+            )
         {
             Indices = indices.ToArray();
-            Label = string.Join(" → ", labels);
             Issue = issues.Count == 0 ? null : string.Join("；", issues);
             UnionIssue = unionIssue;
             RelaxedUnionIssue = relaxedUnionIssue;
@@ -23,6 +30,10 @@ namespace ThreeC.CharacterBehavior
             StrictBlockIssue = unionIssue;
             if (StrictBlockIssue == null && !indices.Exists(index => AllowsLibrary(index, relaxed: false)))
                 StrictBlockIssue = Issue ?? "所选动作组没有候选状态";
+#if UNITY_EDITOR
+            Declarations = declarations.ToArray();
+            DeclaredLibraries = string.Join(" → ", declarations.ConvertAll(declaration => declaration.Name));
+#endif
         }
 
         // 为无匹配规则或无条件表的回退按登记顺序纳入所有有效库。
@@ -39,15 +50,26 @@ namespace ThreeC.CharacterBehavior
             GroundLibrarySearchMode searchMode, bool useDeclaredLibraries, bool allowRelaxation = false)
         {
             var indices = new List<int>();
-            var labels = new List<string>();
             var issues = new List<string>();
             var groups = new Dictionary<int, HashSet<string>>();
+#if UNITY_EDITOR
+            var declarations = new List<(int Index, string Name, string Issue)>();
+#endif
             if (useDeclaredLibraries)
                 foreach (var db in libraries.Databases) Add(db, null, null);
             else if (!(sources?.Length > 0))
                 issues.Add("候选规则未配置来源库（Sources）");
             else if (libraries == null)
+            {
                 issues.Add("角色未登记来源库");
+#if UNITY_EDITOR
+                foreach (var source in sources)
+                {
+                    var database = source?.Library;
+                    declarations.Add((-1, database ? database.name : "缺失来源库", "角色未登记来源库"));
+                }
+#endif
+            }
             else
                 for (int sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
                 {
@@ -66,16 +88,37 @@ namespace ThreeC.CharacterBehavior
                         issues.Add($"放宽组过滤后，{relaxedUnionIssue}");
                 }
             }
-            return new GroundLibraryScope(indices, labels, issues, groups, unionIssue, relaxedUnionIssue);
+            return new GroundLibraryScope(indices, issues, groups, unionIssue, relaxedUnionIssue
+#if UNITY_EDITOR
+                , declarations
+#endif
+                );
 
             // 将稳定 ID 解析为本库状态集合，无效引用仅从严格范围中排除。
             void Add(CharacterMotionDatabase db, string[] groupIds, string sourceLabel)
             {
                 int i = db ? Array.IndexOf(libraries.Databases, db) : -1;
-                if (i < 0) { issues.Add(sourceLabel + (db ? $"库 {db.name} 未登记" : "未指定或缺失来源库")); return; }
+                if (i < 0)
+                {
+                    string issue = db ? $"库 {db.name} 未登记" : "未指定或缺失来源库";
+                    issues.Add(sourceLabel + issue);
+#if UNITY_EDITOR
+                    declarations.Add((-1, db ? db.name : "缺失来源库", issue));
+#endif
+                    return;
+                }
                 string label = libraries.Names[i];
-                if (groups.ContainsKey(i)) { issues.Add($"{sourceLabel}{label} 重复指定"); return; }
-                labels.Add(label);
+                if (groups.ContainsKey(i))
+                {
+                    issues.Add($"{sourceLabel}{label} 重复指定");
+#if UNITY_EDITOR
+                    declarations.Add((i, label, "重复指定"));
+#endif
+                    return;
+                }
+#if UNITY_EDITOR
+                declarations.Add((i, label, libraries.Issues[i]));
+#endif
                 HashSet<string> states = null;
                 if (groupIds?.Length > 0)
                 {

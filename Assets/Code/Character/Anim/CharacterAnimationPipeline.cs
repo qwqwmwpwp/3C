@@ -57,6 +57,7 @@ namespace ThreeC.CharacterBehavior
             steps.Consume(steps.Count, ref batch);
             modules.Composer.SetTime(seed.Time);
             if (changes.GroundChanged) committedPlan = committedPlan.WithoutGround();
+            CharacterMatchDebugCapture.MarkBoundary(animator, changes.GroundChanged ? "地面库或规则重新装配" : null);
             modules.Reconfigure(config, changes, seed);
             observer.ConfigureTeleport(config.IkTeleportDistance);
         }
@@ -64,6 +65,7 @@ namespace ThreeC.CharacterBehavior
         // 瞬移切断旧候选与预测入点，保留独立动作的时钟。
         private void ResetGroundHistory()
         {
+            CharacterMatchDebugCapture.MarkBoundary(animator, "地面运动观测不连续");
             Discard();
             committedPlan = committedPlan.WithoutGround();
             Pose.ClearPose();
@@ -135,7 +137,7 @@ namespace ThreeC.CharacterBehavior
                 animatorUnavailable = true;
                 modules.Intent.InvalidateMotion();
 #if UNITY_EDITOR
-                CharacterMatchDebugCapture.Clear(animator);
+                CharacterMatchDebugCapture.MarkBoundary(animator, "Animator 停用");
                 debugTrace.SetStatus(CharacterAnimationDebugStatus.AnimatorUnavailable);
 #endif
                 return false;
@@ -151,7 +153,7 @@ namespace ThreeC.CharacterBehavior
                 else Pose.SetFrozen(true);
                 modules.Intent.InvalidateMotion();
 #if UNITY_EDITOR
-                CharacterMatchDebugCapture.Clear(animator);
+                CharacterMatchDebugCapture.MarkBoundary(animator, simulating ? "播放资源不可用" : "角色模拟暂停");
                 if (!simulating)
                     debugTrace.SetStatus(CharacterAnimationDebugStatus.Paused);
 #endif
@@ -302,8 +304,8 @@ namespace ThreeC.CharacterBehavior
             modules.Player.EvaluatePose(plan, step);
             if (generation != graphGeneration || clearMotionSources) return; // 片段事件已切换到新的运动基线。
 #if UNITY_EDITOR
-            Matcher.Publish(candidate.Match, plan);
-            debugTrace.Publish(plan, emission, modules.Player.CaptureDebugMix(), Pose.RootDebug);
+            var playback = debugTrace.Publish(plan, emission, modules.Player.CaptureDebugMix(), Pose.RootDebug);
+            Matcher.Publish(candidate.Match, plan, playback, batch.Input.Time, batch.Input.Frame.FrameNumber);
 #endif
             modules.Bindings.FlushWarnings();
             modules.Player.FlushWarnings(logContext);
@@ -334,6 +336,7 @@ namespace ThreeC.CharacterBehavior
         // 消费已结算固定步并重新建立位移及姿态历史。
         public void ResetPoseHistory()
         {
+            CharacterMatchDebugCapture.MarkBoundary(animator, "重置姿态历史");
             graphGeneration++;
             Join();
             Discard();
@@ -375,7 +378,7 @@ namespace ThreeC.CharacterBehavior
             committedPlan = default;
             clearMotionSources = true;
 #if UNITY_EDITOR
-            CharacterMatchDebugCapture.Clear(animator);
+            CharacterMatchDebugCapture.MarkBoundary(animator, kind);
             debugTrace.Clear();
 #endif
         }
@@ -433,7 +436,7 @@ namespace ThreeC.CharacterBehavior
             committedPlan = default;
             modules.Player.AfterEvaluation(() => { Pose.Reset(); modules.Player.ResetPlayback(); });
 #if UNITY_EDITOR
-            CharacterMatchDebugCapture.Clear(animator);
+            CharacterMatchDebugCapture.MarkBoundary(animator, "角色状态重置");
             debugTrace.Clear();
 #endif
         }
@@ -452,7 +455,7 @@ namespace ThreeC.CharacterBehavior
                 modules.RefreshPlayback();
                 reportedError = null;
 #if UNITY_EDITOR
-                CharacterMatchDebugCapture.Clear(animator);
+                CharacterMatchDebugCapture.MarkBoundary(animator, "播放图或模型重绑");
                 debugTrace.Clear();
 #endif
             }
@@ -476,7 +479,7 @@ namespace ThreeC.CharacterBehavior
         public void Release(CharacterPlaybackEndSource source)
         {
 #if UNITY_EDITOR
-            CharacterMatchDebugCapture.Clear(animator);
+            CharacterMatchDebugCapture.MarkBoundary(animator, "角色播放图释放");
 #endif
             Join();
             Discard(source);

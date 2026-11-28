@@ -93,7 +93,7 @@ namespace ThreeC.CharacterBehavior
         internal readonly GroundCandidateRule Rule;
         internal readonly GroundLibraryScope Scope;
         internal readonly string Label;
-        internal readonly bool Skip, Relaxed, IsInputTurn;
+        internal readonly bool Skip, Relaxed, IsInputTurn, BoundLibraryFallback;
         private readonly int? only;
         internal GroundFeatureGroups Features => Rule?.Features ?? GroundFeatureGroups.All;
         internal bool Relax => !Relaxed && Rule?.Empty == GroundRuleFallback.BoundLibrary;
@@ -101,9 +101,9 @@ namespace ThreeC.CharacterBehavior
         internal bool Ordered => Rule?.SearchMode != GroundLibrarySearchMode.Union || Relaxed && Scope?.RelaxedUnionIssue != null;
         internal int Count => Scope?.Indices.Length ?? 0;
 
-        // 固定候选规则及范围，记录是否由输入急转触发以便区分诊断。
+        // 固定候选规则和范围，保留输入急转及候选表无匹配回退的来源。
         internal GroundRuleSelection(GroundCandidateRule rule, GroundLibraryScope scope, string label,
-            bool skip = false, bool relaxed = false, int? only = null, bool isInputTurn = false)
+            bool skip = false, bool relaxed = false, int? only = null, bool isInputTurn = false, bool boundLibraryFallback = false)
         {
             Rule = rule;
             Scope = scope;
@@ -111,6 +111,7 @@ namespace ThreeC.CharacterBehavior
             Skip = skip;
             Relaxed = relaxed;
             IsInputTurn = isInputTurn;
+            BoundLibraryFallback = boundLibraryFallback;
             this.only = only;
         }
 
@@ -122,14 +123,17 @@ namespace ThreeC.CharacterBehavior
             Scope != null && Scope.Allows(track, Relaxed);
 
         // 将本次试算或已命中结果固定到一个优先库。
-        internal GroundRuleSelection ForLibrary(int index) => new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, index, IsInputTurn);
+        internal GroundRuleSelection ForLibrary(int index) =>
+            new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, index, IsInputTurn, BoundLibraryFallback);
 
         // 保持候选表给出的库范围，只放宽组过滤。
-        internal GroundRuleSelection WithoutGroups() => new GroundRuleSelection(Rule, Scope, Label + " · 放宽组过滤", relaxed: true, isInputTurn: IsInputTurn);
+        internal GroundRuleSelection WithoutGroups() =>
+            new GroundRuleSelection(Rule, Scope, Label + " · 放宽组过滤", relaxed: true, isInputTurn: IsInputTurn, boundLibraryFallback: BoundLibraryFallback);
 
 #if UNITY_EDITOR
         // 标记由输入边沿触发的候选查询，供诊断区分常规转向。
-        internal GroundRuleSelection ForInputTurn() => new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, only, isInputTurn: true);
+        internal GroundRuleSelection ForInputTurn() =>
+            new GroundRuleSelection(Rule, Scope, Label, Skip, Relaxed, only, isInputTurn: true, boundLibraryFallback: BoundLibraryFallback);
 #endif
     }
 
@@ -138,11 +142,13 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly List<(int index, GroundRuleSelection selection)> rows = new List<(int, GroundRuleSelection)>();
         private readonly GroundRuleFallback fallback;
+        private readonly bool hasTable;
         private readonly AnimationDecisionEvaluator decisions;
         internal readonly string Issue;
 #if UNITY_EDITOR
         private int inspectedIndex;
         private string inspectedRule;
+        internal string InputTurnDecision { get; private set; }
 #endif
 
         private readonly GroundLibraryScope defaults;
@@ -157,6 +163,7 @@ namespace ThreeC.CharacterBehavior
         {
             defaults = GroundLibraryScope.ForDeclaredLibraries(libraries);
             if (!table) return;
+            hasTable = true;
             fallback = table.NoMatch;
             if (!Enum.IsDefined(typeof(GroundRuleFallback), fallback)) { Issue = "候选表无匹配回退无效"; return; }
             var rules = table.Rules ?? Array.Empty<GroundCandidateRule>();
@@ -195,6 +202,10 @@ namespace ThreeC.CharacterBehavior
         {
             query = default;
             var selection = Select(edge, behavior, phase, support, false);
+#if UNITY_EDITOR
+            InputTurnDecision = selection.Rule == null ? Issue ?? "没有满足条件且获许可的候选规则" :
+                selection.Rule.RespondToInputTurn ? selection.Label : $"{selection.Rule.Name} 未启用输入急转";
+#endif
             if (selection.Rule?.RespondToInputTurn != true) return false;
 #if UNITY_EDITOR
             selection = selection.ForInputTurn();
@@ -222,8 +233,10 @@ namespace ThreeC.CharacterBehavior
                     if (row.Rule.Matches(query, behavior, phase, support, returning) && AllowsRule(index, row.Rule))
                         return row;
             }
+            if (!hasTable) return new GroundRuleSelection(null, defaults, "未配置候选表，使用登记库");
             bool skip = fallback == GroundRuleFallback.BehaviorRules;
-            return new GroundRuleSelection(null, defaults, Issue ?? (skip ? "无匹配规则，交回行为规则" : "无匹配规则，使用绑定库"), skip);
+            string label = skip ? "无匹配规则，交回行为规则" : "无匹配规则，回退到登记库";
+            return new GroundRuleSelection(null, defaults, Issue ?? label, skip, boundLibraryFallback: !skip);
         }
 
         // 应用本次候选许可，并在编辑器记录命中条件的原表位置。
@@ -243,6 +256,7 @@ namespace ThreeC.CharacterBehavior
 #if UNITY_EDITOR
             decisions?.ClearTrace();
             inspectedRule = null;
+            InputTurnDecision = null;
 #endif
         }
 

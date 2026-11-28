@@ -12,6 +12,9 @@ namespace ThreeC.CharacterBehavior
         private readonly Animator animator;
         private readonly CharacterMotionDatabase database;
         private readonly Dictionary<int, CharacterClipState> states = new Dictionary<int, CharacterClipState>();
+#if UNITY_EDITOR
+        private readonly Dictionary<int, string> debugStateLibraries = new Dictionary<int, string>();
+#endif
         private readonly Dictionary<int, (CharacterClipCurves first, CharacterClipCurves second)> curves =
             new Dictionary<int, (CharacterClipCurves, CharacterClipCurves)>();
         private readonly Dictionary<int, GroundPlaybackPace> paces = new Dictionary<int, GroundPlaybackPace>();
@@ -55,6 +58,9 @@ namespace ThreeC.CharacterBehavior
         {
             states.Clear();
             curves.Clear();
+#if UNITY_EDITOR
+            debugStateLibraries.Clear();
+#endif
             library = database ? database.Playback : null;
             libraryError = database ? database.ValidatePlayback() : "动画配置缺少由基础动画数据组烘焙的播放库。";
             if (libraryError != null) return;
@@ -84,7 +90,12 @@ namespace ThreeC.CharacterBehavior
                 if (sources.Issues[i] != null || !db || db == database) continue;
                 foreach (var state in db.Playback.States)
                     if (state != null && state.Clip && !string.IsNullOrWhiteSpace(state.Path) && sources.TryKey(i, state.Path, out int key))
+                    {
                         states.Add(key, state);
+#if UNITY_EDITOR
+                        debugStateLibraries.Add(key, sources.Names[i]);
+#endif
+                    }
                 BindCurves(db.Playback, path => sources.TryKey(i, path, out int key) ? key : 0);
             }
         }
@@ -342,6 +353,12 @@ namespace ThreeC.CharacterBehavior
                     mixer.Enter(state, clip, permissions.first, permissions.second, plan.StateHash,
                         plan.RestoredSeconds ?? plan.Start.InSeconds(state.Blend.Second ? state.Blend.Seconds : clip.length),
                         duration, plan.ResumeLoop, plan.RestoredSeconds.HasValue || plan.Demand.Timing.Resumed, plan.Demand);
+#if UNITY_EDITOR
+                    groundTracks.TryGetValue(plan.StateHash, out var ground);
+                    string groundPath = ground?.States?.Length > 0 ? ground.States[0] : null;
+                    debugStateLibraries.TryGetValue(plan.StateHash, out string externalLibrary);
+                    mixer.CaptureSource(ground?.LibraryLabel ?? externalLibrary ?? database.name, ground?.TrackLabel ?? groundPath);
+#endif
                     played = true;
                 }
                 else if (entered) mixer.CompleteTransition();

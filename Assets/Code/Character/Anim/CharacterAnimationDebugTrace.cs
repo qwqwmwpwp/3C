@@ -16,7 +16,22 @@ namespace ThreeC.CharacterBehavior
         ResourceUnavailable
     }
 
-    // 描述一个片段源当前播放和淡出的片段。
+    // 在声部入图时保留库、轨道及实际素材名称，资产重绑后仍可查看。
+    internal readonly struct CharacterDebugClipSource
+    {
+        internal readonly string Library, Track, PrimaryName, SecondaryName;
+
+        // 主线程根据实际声部绑定冻结两路素材的显示名称。
+        internal CharacterDebugClipSource(string library, string track, AnimationClip primary, AnimationClip secondary)
+        {
+            Library = library;
+            Track = track;
+            PrimaryName = primary ? primary.name : null;
+            SecondaryName = secondary ? secondary.name : null;
+        }
+    }
+
+    // 描述一个片段源当前播放和淡出的素材、来源和权重。
     internal readonly struct CharacterDebugClipMix
     {
         public readonly string Target, Outgoing;
@@ -25,11 +40,23 @@ namespace ThreeC.CharacterBehavior
         public readonly double Seconds;
         public readonly float Rate;
         public readonly int OtherCount;
+        private readonly CharacterDebugClipSource source, outgoingSource;
+        internal readonly Vector2 SourceWeights, OutgoingSourceWeights;
+        internal string Library => source.Library;
+        internal string Track => source.Track;
+        internal string PrimaryName => source.PrimaryName;
+        internal string SecondaryName => source.SecondaryName;
+        internal string OutgoingLibrary => outgoingSource.Library;
+        internal string OutgoingTrack => outgoingSource.Track;
+        internal string OutgoingPrimaryName => outgoingSource.PrimaryName;
+        internal string OutgoingSecondaryName => outgoingSource.SecondaryName;
 
         // 保存已接入播放图的素材、逻辑时钟和混合权重。
         public CharacterDebugClipMix(string target, float targetWeight, string outgoing, float outgoingWeight,
             int otherCount, in CharacterClipProgress progress, float rate, AnimationClip primaryClip,
-            AnimationClip secondaryClip, AnimationClip outgoingPrimaryClip, AnimationClip outgoingSecondaryClip)
+            AnimationClip secondaryClip, AnimationClip outgoingPrimaryClip, AnimationClip outgoingSecondaryClip,
+            in CharacterDebugClipSource source, in CharacterDebugClipSource outgoingSource,
+            Vector2 sourceWeights, Vector2 outgoingSourceWeights)
         {
             Target = target;
             TargetWeight = targetWeight;
@@ -43,6 +70,10 @@ namespace ThreeC.CharacterBehavior
             SecondaryClip = secondaryClip;
             OutgoingPrimaryClip = outgoingPrimaryClip;
             OutgoingSecondaryClip = outgoingSecondaryClip;
+            this.source = source;
+            this.outgoingSource = outgoingSource;
+            SourceWeights = sourceWeights;
+            OutgoingSourceWeights = outgoingSourceWeights;
         }
     }
 
@@ -134,12 +165,10 @@ namespace ThreeC.CharacterBehavior
             return current;
         }
 
-        // 发布提交动画图后观测到的动作和片段混合结果。
-        public void Publish(in CharacterAnimationPlaybackPlan plan, in CharacterAnimationPlaybackEmission emission,
-            in CharacterDebugBodyMix mix, in VisualRootDebug root)
-        {
+        // 保存提交后的实际片段混合，并将同一份快照交给匹配历史。
+        public CharacterAnimationDebugSnapshot Publish(in CharacterAnimationPlaybackPlan plan,
+            in CharacterAnimationPlaybackEmission emission, in CharacterDebugBodyMix mix, in VisualRootDebug root) =>
             current = new CharacterAnimationDebugSnapshot(plan, emission, mix, root);
-        }
 
         // 更新当前动画的暂停、停用或资源状态。
         public void SetStatus(CharacterAnimationDebugStatus status, string error = null)

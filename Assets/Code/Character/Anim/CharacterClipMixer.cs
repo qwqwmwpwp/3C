@@ -16,6 +16,12 @@ namespace ThreeC.CharacterBehavior
             public CharacterMotionPlayable Motion;
 #if UNITY_EDITOR
             public AnimationClip DebugClip;
+            public CharacterDebugClipSource DebugSource;
+
+            // 从声部内部的实际混合端口读取两路素材比例；单素材贡献全部声部权重。
+            public Vector2 DebugWeights => DebugSource.SecondaryName != null
+                ? new Vector2(Motion.Root.GetInputWeight(0), Motion.Root.GetInputWeight(1))
+                : Vector2.right;
 #endif
             public Playable Clip => Motion.Root;
             public string ActionKey;
@@ -126,6 +132,13 @@ namespace ThreeC.CharacterBehavior
         }
 
 #if UNITY_EDITOR
+        // 从刚进入播放图的实际声部保存来源，回到旧声部时继续使用其原始标识。
+        internal void CaptureSource(string library, string track)
+        {
+            if (target.DebugSource.PrimaryName == null)
+                target.DebugSource = new CharacterDebugClipSource(library, track, target.DebugClip, target.State.Blend.Second);
+        }
+
         // 从已应用到图上的声部读取实际片段、时钟和混合。
         internal CharacterDebugClipMix ReadDebugMix()
         {
@@ -136,7 +149,8 @@ namespace ThreeC.CharacterBehavior
             return new CharacterDebugClipMix(target.State.Path, target.Weight, outgoing?.State.Path,
                 outgoing?.Weight ?? 0f, Mathf.Max(0, voices.Count - 2), target.Progress, target.LogicalRate,
                 target.DebugClip, target.State.Blend.Second, outgoing?.DebugClip,
-                outgoing == null ? null : outgoing.State.Blend.Second);
+                outgoing == null ? null : outgoing.State.Blend.Second, target.DebugSource, outgoing?.DebugSource ?? default,
+                target.DebugWeights, outgoing?.DebugWeights ?? Vector2.zero);
         }
 #endif
 

@@ -151,12 +151,13 @@ namespace ThreeC.CharacterBehavior
             CharacterAnimationMotion motion, CharacterFootObservation feet, float dt, in CharacterBehaviorFrameResult behavior)
         {
 #if UNITY_EDITOR
-            search.DebugFrame?.Reset();
-            search.DebugFrame?.SetLibraries(libraryNames);
-            if (search.DebugFrame != null) search.DebugFrame.CompatibilityIssue = libraryIssues;
+            var debug = search.DebugFrame;
+            CharacterMotionMatchDiagnostics.Begin(debug, libraryNames, libraryIssues, intent.InputTurn, history.HandledInputTurn,
+                feet.Support, behavior.ActiveBehaviors);
+            policy.ClearTrace();
             decisions.ClearTrace();
 #endif
-            if (mode == CharacterMatchMode.Rules) return Fallback("已配置常规规则");
+            if (mode == CharacterMatchMode.Rules) return Fallback("已配置常规规则", isFallback: false);
             bool stopping = intent.Phase == CharacterLocomotionPhase.BrakeLeadIn;
             bool recovering = lowerCoversFeet && matchRecovery && !stopping && intent.Phase != CharacterLocomotionPhase.Stopping;
             bool reverse = !recovering && intent.ReverseReleaseStep != 0 && history.HandledReverse != intent.ReverseReleaseStep;
@@ -196,7 +197,7 @@ namespace ThreeC.CharacterBehavior
             if (!reverse) history.Hold = 0f;
             if (intent.Phase == CharacterLocomotionPhase.Stopping)
             {
-                var keep = Fallback("沿用制动时钟");
+                CharacterMatchResult keep = default;
                 if (history.StopTrack != null)
                 {
                     var allowed = policy.Select(history.EntryQuery, behavior, history.EntryPhase, history.EntrySupport, false);
@@ -204,6 +205,10 @@ namespace ThreeC.CharacterBehavior
                         !(history.EntryQuery.Selection.Relaxed ? allowed.WithoutGroups() : allowed).Allows(history.StopTrack);
                     if (keep.RejectPreviousStop) history.StopTrack = null;
                 }
+#if UNITY_EDITOR
+                CharacterMotionMatchDiagnostics.Fallback(debug, keep.RejectPreviousStop ? "原收步候选已离开当前规则范围" : "沿用制动时钟",
+                    keep.RejectPreviousStop);
+#endif
                 return keep;
             }
             var current = seen.Full.Destination;
@@ -214,6 +219,10 @@ namespace ThreeC.CharacterBehavior
             bool checkInput = inputStep != 0 && history.HandledInputTurn != inputStep;
             GroundPoseQuery query = default;
             bool inputTurn = checkInput && policy.TrySelectInputTurn(input.Query, behavior, intent.Phase, feet.Support, out query);
+#if UNITY_EDITOR
+            if (checkInput) debug?.Trace.FinishInput(inputTurn, policy.InputTurnDecision);
+            else if (recovering || stopping) debug?.Trace.FinishInput(false, recovering ? "下身动作正交还地面移动" : "已进入前置制动");
+#endif
             // 候选表的拒绝和接收都随本次选姿历史一起提交或撤回。
             if (checkInput && !inputTurn) history.HandledInputTurn = inputStep;
             turn |= inputTurn;
@@ -235,7 +244,7 @@ namespace ThreeC.CharacterBehavior
             }
 
 #if UNITY_EDITOR
-            Describe(query);
+            CharacterMotionMatchDiagnostics.Describe(debug, query, libraryIssues);
 #endif
             if (query.Selection.Skip && query.Selection.Rule != null)
                 return SkipSearch(query, inputTurn ? inputStep : 0, intent.DirectTurnStep);
@@ -245,7 +254,7 @@ namespace ThreeC.CharacterBehavior
             bool moving = !stopping && !turn && !reverse;
             var strategy = decisions.BeforeSearch(!moving, unchanged, history.Playing != null, history.SearchDelay);
             if (strategy.Delay)
-                return Fallback("地面搜索策略延后本次查询");
+                return Fallback("地面搜索策略延后本次查询", isFallback: false);
             var frame = Frame(query, feet, motion);
             if (!inputTurn && history.Playing != null && strategy.AllowKeepPlaying &&
                 frame.TryLibrary(history.Playing.LibraryIndex, out _, out _, out _) &&
@@ -253,14 +262,18 @@ namespace ThreeC.CharacterBehavior
                     history.InputDirected && input != null ? input.Direction : motion.ExpectedVelocity, behavior, recovering))
             {
 #if UNITY_EDITOR
-                if (search.DebugFrame != null && hasCurrent)
+                if (debug != null)
                 {
-                    var continuingQuery = source.IsLoop ? query : history.EntryQuery;
-                    Describe(continuingQuery);
-                    if (Frame(continuingQuery, feet, motion).TryLibrary(source.LibraryIndex, out var continued, out _, out _))
-                        RecordContinuing(source, current, last, !source.IsLoop && history.EntryWithoutPast ?
-                            continued.WithoutHistory() : continued, continuingQuery);
-                    search.DebugFrame.Reason = "仍在续播窗口";
+                    debug.Reason = "仍在续播窗口";
+                    debug.Trace.ComparisonNote = "搜索前确认续播，本次没有新入点比较";
+                    if (hasCurrent)
+                    {
+                        var continuingQuery = source.IsLoop ? query : history.EntryQuery;
+                        var continuingFrame = Frame(continuingQuery, feet, motion);
+                        if (!source.IsLoop && history.EntryWithoutPast) continuingFrame = continuingFrame.WithoutHistory();
+                        debug.Trace.ContinuingIsReference = search.TryScoreCurrent(source, current, last, continuingFrame, continuingQuery, out _);
+                    }
+                    else CharacterMotionMatchDiagnostics.ContinuingTrackUnavailable(debug, source, current.fullPathHash, last.FullBody.StateHash);
                 }
 #endif
                 return new CharacterMatchResult { Choice = CharacterMatchChoice.Continue };
@@ -292,37 +305,39 @@ namespace ThreeC.CharacterBehavior
                     best.Cost = cost.Total;
                     winner = history.PreviewTrack;
 #if UNITY_EDITOR
-                    if (search.DebugFrame != null) search.DebugFrame.Reason = "预测交还入点仍在宽限内";
+                    if (debug != null)
+                    {
+                        debug.Reason = "预测交还入点仍在宽限内";
+                        debug.Trace.ChosenScoring = previewFrame.Features.Active ? GroundMatchScoring.Schema : GroundMatchScoring.Compatibility;
+                    }
 #endif
                 }
                 history.PreviewTrack = null;
             }
             float keepCost = 0f;
-            hasCurrent = hasCurrent && query.Selection.Allows(source);
-            bool canScoreCurrent = false;
-            if (hasCurrent && frame.TryLibrary(source.LibraryIndex, out var currentFrame, out _, out _))
-            {
-                canScoreCurrent = true;
-                var cost = currentFrame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
-                    out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
-                cost.Entry = query.EntryPenalty(source);
-                keepCost = cost.Total;
+            bool currentAllowed = hasCurrent && query.Selection.Allows(source);
 #if UNITY_EDITOR
-                if (search.DebugFrame != null)
-                    search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName, Library = source.LibraryLabel, Track = source.TrackLabel,
-                        Time = time, Rate = rate, Cost = cost };
-#endif
+            if (debug != null && !currentAllowed)
+            {
+                if (hasCurrent) debug.Trace.ContinuingUnavailableReason = $"库 {source.LibraryLabel} 的轨道 {source.TrackLabel} 不在当前候选范围";
+                else CharacterMotionMatchDiagnostics.ContinuingTrackUnavailable(debug, source, current.fullPathHash, last.FullBody.StateHash);
             }
+#endif
+            hasCurrent = currentAllowed;
+            bool canScoreCurrent = hasCurrent && search.TryScoreCurrent(source, current, last, frame, query, out keepCost);
             bool canWait = stopping ? !intent.MainBrakeDue : turn ? history.TurnWait + dt < maxHold :
                 !reverse || history.Hold + dt < maxHold;
             bool eligibleCycle = hasCurrent && source.IsLoop && search.Filter(source, current.fullPathHash, query, feet.Support) == GroundMatchFilter.None;
             bool sameCycle = moving && eligibleCycle && source == winner;
             bool canKeep = canScoreCurrent && last.FullBody.Demand.IsLocomotion && (!moving || eligibleCycle);
+#if UNITY_EDITOR
+            CharacterMotionMatchDiagnostics.DescribeComparison(debug, canScoreCurrent, canWait, canKeep, winner != null);
+#endif
             if (decisions.KeepCurrent(canWait, canKeep, sameCycle, idleCrossing, winner != null, moving, unchanged, keepCost, best.Cost, margin))
             {
                 best.Choice = CharacterMatchChoice.Continue;
 #if UNITY_EDITOR
-                if (search.DebugFrame != null) search.DebugFrame.Reason = sameCycle ? "同一循环保持相位" :
+                if (debug != null) debug.Reason = sameCycle ? "同一循环保持相位" :
                     idleCrossing ? "反向过零保持原步" : "地面搜索策略保留当前片段";
 #endif
             }
@@ -335,7 +350,12 @@ namespace ThreeC.CharacterBehavior
             if (reverse && (best.Choice == CharacterMatchChoice.Continue || idleCrossing && canWait)) history.Hold += dt;
             else if (reverse) history.HandledReverse = intent.ReverseReleaseStep;
             if (owner.Key == CharacterAnimationIntentConverter.IdleKey && best.HasEntry)
+            {
                 best.Choice = CharacterMatchChoice.Rules;
+#if UNITY_EDITOR
+                CharacterMotionMatchDiagnostics.Fallback(debug, "输入已回到待机，未提交新入点", true);
+#endif
+            }
             if (!stopping && !idleCrossing) history.BaseInstance = owner.InstanceId;
             if (best.Choice == CharacterMatchChoice.Continue && hasCurrent && source.IsLoop && query.AllowsGait(source) &&
                 moving)
@@ -370,9 +390,6 @@ namespace ThreeC.CharacterBehavior
             var found = search.FindScope(ref query, ref frame, out winner, record);
             if (winner != null || !query.Selection.Relax) return found;
             query = new GroundPoseQuery(query, query.Selection.WithoutGroups());
-#if UNITY_EDITOR
-            if (record) Describe(query);
-#endif
             return search.FindScope(ref query, ref frame, out winner, record);
         }
 
@@ -419,14 +436,17 @@ namespace ThreeC.CharacterBehavior
             if (inputStep != 0) history.CompleteTurn(inputStep, directStep);
             history.Playing = history.PreviewTrack = null;
             history.SearchDelay = 0f;
+#if UNITY_EDITOR
+            CharacterMotionMatchDiagnostics.SkipSearch(search.DebugFrame, query.Selection);
+#endif
             return Fallback(query.Selection.Label);
         }
 
         // 返回常规规则，并仅在诊断开启时保留具体原因。
-        private CharacterMatchResult Fallback(string reason)
+        private CharacterMatchResult Fallback(string reason, bool isFallback = true)
         {
 #if UNITY_EDITOR
-            if (search.DebugFrame != null) search.DebugFrame.Reason = reason;
+            CharacterMotionMatchDiagnostics.Fallback(search.DebugFrame, reason, isFallback);
 #endif
             return default;
         }
@@ -439,56 +459,11 @@ namespace ThreeC.CharacterBehavior
             decisions.AppendTrace(trace);
         }
 
-        // 记录最终试算使用的查询用途及来源、目标步态。
-        private void Describe(in GroundPoseQuery query)
-        {
-            if (search.DebugFrame == null) return;
-            search.DebugFrame.Rule = query.Selection.Label + (query.Selection.Ordered ? " · 按序试库" : " · 联合评分");
-            search.DebugFrame.Libraries = query.Selection.Scope?.Label;
-            search.DebugFrame.CompatibilityIssue = query.Selection.Scope?.Issue ?? libraryIssues;
-            string turnLabel = query.Selection.IsInputTurn ? "输入急转" : "常规转向";
-            search.DebugFrame.Query = $"{(query.Use == GroundMotionUse.Turn ? turnLabel : query.Use.ToString())} · {query.From} → {query.Target}";
-        }
-
-        // 只有监听角色需要为直接续播的窗口补算当前姿势代价。
-        private void RecordContinuing(CharacterMotionTrack source, CharacterClipProgress current,
-            in CharacterAnimationPlaybackPlan last, in GroundSearchFrame frame, in GroundPoseQuery query)
-        {
-            search.DebugFrame.StartScoring(frame);
-            var cost = frame.ScoreCurrent(source, current.normalizedTime, resources.Pace(current.fullPathHash),
-                out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
-            cost.Entry = query.EntryPenalty(source);
-            search.DebugFrame.Continuing = new CharacterMatchDebugEntry { State = last.FullBody.Binding.StateName, Library = source.LibraryLabel, Track = source.TrackLabel,
-                Time = time, Rate = rate, Cost = cost };
-        }
-
         // 根据实际已提交的播放计划发布本帧诊断，丢弃未被采用的试算结果。
-        internal void Publish(in CharacterMatchResult result, in CharacterAnimationPlaybackPlan plan)
+        internal void Publish(in CharacterMatchResult result, in CharacterAnimationPlaybackPlan plan,
+            in CharacterAnimationDebugSnapshot playback, double time, long motionStep)
         {
-            var debug = search.DebugFrame;
-            if (debug == null) return;
-            var layer = plan.FullBody;
-            if (result.HasEntry && layer.Reason == CharacterAnimationPlaybackReason.MatchPose && layer.StateHash == result.Binding.StateHash)
-            {
-                debug.Choice = result.Choice.ToString();
-                debug.Reason ??= "最低代价有效入点";
-                debug.Chosen = new CharacterMatchDebugEntry { State = layer.Binding.StateName, Library = layer.Binding.Library, Track = layer.Binding.Track, Time = result.Time,
-                    Rate = result.Rate, Cost = result.Components };
-            }
-            else if (result.Choice == CharacterMatchChoice.Continue && layer.Reason == CharacterAnimationPlaybackReason.ContinueMatch)
-            {
-                debug.Choice = "Continue";
-                debug.Reason ??= "等待当前片段进入播放观测";
-                debug.Chosen = debug.Continuing;
-            }
-            else
-            {
-                debug.Choice = "Rules";
-                if (result.HasEntry || result.Choice == CharacterMatchChoice.Continue)
-                    debug.Reason = "最终播放归属或制动规则已更新";
-                else debug.Reason ??= "无可用匹配入点";
-            }
-            CharacterMatchDebugCapture.Publish(animator, debug);
+            CharacterMotionMatchDiagnostics.Publish(animator, search.DebugFrame, result, plan, playback, time, motionStep);
             search.DebugFrame = null;
         }
 #endif

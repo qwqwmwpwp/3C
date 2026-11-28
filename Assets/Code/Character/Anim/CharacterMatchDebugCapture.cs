@@ -1,10 +1,12 @@
+using UnityEngine;
 #if UNITY_EDITOR
 using System;
 using System.Collections.Generic;
-using UnityEngine;
+#endif
 
 namespace ThreeC.CharacterBehavior
 {
+#if UNITY_EDITOR
     // 标记本次查询实际采用的评分来源。
     internal enum GroundMatchScoring { None, Compatibility, Schema }
 
@@ -68,6 +70,7 @@ namespace ThreeC.CharacterBehavior
         public string Query, Reason, Choice, Rule, Libraries, CompatibilityIssue;
         public GroundMatchDebugCounts Counts;
         public CharacterMatchDebugEntry Chosen, Continuing;
+        internal readonly GroundMatchQueryTrace Trace = new GroundMatchQueryTrace();
         public readonly CharacterMatchDebugEntry[] Top = new CharacterMatchDebugEntry[3];
         public int TopCount;
         public GroundMatchScoring Scoring;
@@ -85,6 +88,7 @@ namespace ThreeC.CharacterBehavior
             Counts = default;
             TopCount = 0;
             Chosen = Continuing = default;
+            Trace.Reset();
         }
 
         // 绑定已在主线程生成且装配期间保持不变的库名列表。
@@ -115,6 +119,7 @@ namespace ThreeC.CharacterBehavior
             Counts = source.Counts;
             Chosen = source.Chosen;
             Continuing = source.Continuing;
+            Trace.CopyFrom(source.Trace);
             TopCount = source.TopCount;
             Array.Copy(source.Top, Top, TopCount);
             SetLibraries(source.libraryNames);
@@ -126,6 +131,15 @@ namespace ThreeC.CharacterBehavior
         {
             Scoring = frame.Features.Active ? GroundMatchScoring.Schema : GroundMatchScoring.Compatibility;
             HistoryFallback = !frame.AllowPast;
+        }
+
+        // 每次真实扫描使用本轮的计数、排名和评分维度，前一次尝试保存在经过记录中。
+        internal void BeginScan(in GroundSearchFrame frame)
+        {
+            Array.Clear(libraryCounts, 0, LibraryCount);
+            Counts = default;
+            TopCount = 0;
+            StartScoring(frame);
         }
 
         // 区分整条轨道的淘汰与逐采样点的入场过滤。
@@ -152,46 +166,110 @@ namespace ThreeC.CharacterBehavior
         }
     }
 
-    // 仅为编辑器所选角色双缓冲记录匹配查询，主线程提交完成后才能读取。
+#endif
+
+    // 仅为编辑器监听的角色保存已提交的查询、播放结果和运行分界。
     internal static class CharacterMatchDebugCapture
     {
+#if UNITY_EDITOR
+        internal const int Capacity = 256;
         private static Animator selected;
-        private static CharacterMatchDebugFrame published, writable;
+        private static bool recording;
+        private static CharacterMatchDebugFrame writable, spare;
+        private static readonly CharacterMatchHistoryEntry[] entries = new CharacterMatchHistoryEntry[Capacity];
+        private static readonly List<string> boundaries = new List<string>();
+        private static long sequence;
+        private static int count;
 
-        // 切换诊断目标，同时使上一目标的数据失效。
+        // 切换诊断对象时释放旧会话的槽位，也令尚在后台工作的缓冲失去发布资格。
         internal static void Select(Animator animator)
         {
-            if (ReferenceEquals(selected, animator)) return;
+            if (ReferenceEquals(selected, animator) && (animator || count == 0)) return;
             selected = animator;
-            published = writable = null;
+            writable = spare = null;
+            recording = false;
+            count = 0;
+            sequence = 0;
+            boundaries.Clear();
+            Array.Clear(entries, 0, entries.Length);
         }
 
-        // 仅读取当前被监听角色已经提交的查询。
-        internal static CharacterMatchDebugFrame Read(Animator animator) =>
-            animator && ReferenceEquals(selected, animator) ? published : null;
+        // 在同一角色的会话中启停录制，收起窗口时保留历史并撤销未提交的试算。
+        internal static void SetRecording(Animator target, bool enabled)
+        {
+            if (!ReferenceEquals(selected, target)) Select(target);
+            if (recording == enabled || !target) return;
+            recording = enabled;
+            if (!enabled) MarkBoundary(target, "暂停采集");
+        }
+
+        // 同一角色更换模型时保留旧记录，作废旧模型的试算并在新模型首条提交处标出分界。
+        internal static void Rebind(Animator previous, Animator next)
+        {
+            if (!ReferenceEquals(selected, previous) || ReferenceEquals(previous, next)) return;
+            const string reason = "角色 Animator 更换";
+            if (count != 0 && !boundaries.Contains(reason)) boundaries.Add(reason);
+            selected = next;
+            writable = spare = null;
+            recording = false;
+        }
+
+        // 返回指定角色已提交且尚在环形缓冲中的记录数。
+        internal static int Count(Animator animator) => ReferenceEquals(selected, animator) ? count : 0;
+
+        // 按由新到旧的偏移读取记录；持有跨提交的视图应自行复制。
+        internal static CharacterMatchHistoryEntry ReadNewest(Animator animator, int offset) =>
+            (uint)offset < Count(animator) ? entries[(int)((sequence - 1 - offset) % Capacity)] : null;
 
         // 在主线程为选中角色取得独立的后台规划缓冲。
         internal static CharacterMatchDebugFrame Begin(Animator animator)
         {
-            if (!ReferenceEquals(selected, animator)) return null;
-            writable ??= new CharacterMatchDebugFrame();
+            if (!recording || !ReferenceEquals(selected, animator)) return null;
+            writable = spare ?? new CharacterMatchDebugFrame();
+            spare = null;
             writable.Reset();
             return writable;
         }
 
-        // 在最终播放计划提交后交换读写缓冲，并验证目标仍受监听。
-        internal static void Publish(Animator animator, CharacterMatchDebugFrame frame)
+        // 仅主线程在最终求值成功后提交一次，将临时查询和这次播放图的实际结果冻结到同一槽。
+        internal static void Publish(Animator animator, CharacterMatchDebugFrame frame,
+            in CharacterAnimationDebugSnapshot playback, double time, long motionStep)
         {
-            if (frame == null || !ReferenceEquals(selected, animator) || !ReferenceEquals(writable, frame)) return;
-            writable = published;
-            published = frame;
+            if (!recording || frame == null || !ReferenceEquals(selected, animator) || !ReferenceEquals(writable, frame)) return;
+            var entry = entries[(int)(sequence % Capacity)] ??= new CharacterMatchHistoryEntry();
+            string boundary = boundaries.Count == 0 ? null : string.Join("、", boundaries);
+            entry.Capture(++sequence, time, motionStep, boundary, frame, playback);
+            if (count < Capacity) count++;
+            boundaries.Clear();
+            spare = writable;
+            writable = null;
         }
 
-        // 使暂停、失效或重新绑定之前已发布的查询失效。
-        internal static void Clear(Animator animator)
+        // 关闭域重载时也从空会话开始，释放上一次播放的角色及素材引用。
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetSession() => Select(null);
+
+        // 将运动层已经确认的控制权切换标到下一次动画提交。
+        internal static void MarkBoundary(Animator animator, CharacterMotionBoundaryKind kind) =>
+            MarkBoundary(animator, kind switch
+            {
+                CharacterMotionBoundaryKind.Teleport => "瞬移",
+                CharacterMotionBoundaryKind.Knockback => "击退",
+                CharacterMotionBoundaryKind.Takeover => "外部接管",
+                CharacterMotionBoundaryKind.Recovery => "交还运动控制",
+                _ => "运动边界"
+            });
+#endif
+
+        // 在下次实际提交上标出采集间断，旧版本的后台试算不能再发布。
+        [System.Diagnostics.Conditional("UNITY_EDITOR")]
+        internal static void MarkBoundary(Animator animator, string reason)
         {
-            if (ReferenceEquals(selected, animator)) published = null;
+#if UNITY_EDITOR
+            if (reason == null || ReferenceEquals(selected, null) || !ReferenceEquals(selected, animator)) return;
+            writable = null;
+            if (count != 0 && !boundaries.Contains(reason)) boundaries.Add(reason);
+#endif
         }
     }
 }
-#endif

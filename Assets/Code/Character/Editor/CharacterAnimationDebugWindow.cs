@@ -7,25 +7,27 @@ namespace ThreeC.CharacterBehavior
     internal sealed class CharacterAnimationDebugWindow : EditorWindow
     {
         private readonly CharacterAnimationActionHistoryView actionHistory = new CharacterAnimationActionHistoryView();
+        private readonly CharacterMatchHistoryView matchHistory = new CharacterMatchHistoryView();
         private Vector2 scroll;
         private bool showActualPath;
-        private bool showMatch;
         private readonly Vector3[] actualPath = new Vector3[128];
+        private CharacterBehaviorAnimator displayedCharacter;
         private bool editorPaused;
         private CharacterAnimationDebugSnapshot currentSnapshot;
         private string forecastSnapshot;
-        private Animator matchAnimator;
-        private readonly CharacterMatchDebugFrame matchFrame = new CharacterMatchDebugFrame();
-        private bool hasMatchFrame;
 
         // 打开角色动画运行状态窗口。
         [MenuItem("Window/3C/角色动画调试")]
         private static void Open() => GetWindow<CharacterAnimationDebugWindow>("角色动画调试");
 
-        // 刷新新选中角色的当前状态。
+        // 订阅播放模式变化以便退出时立即释放诊断目标。
+        private void OnEnable() => EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+
+        // 刷新新选中角色的状态，并停止采集刚离开的角色。
         private void OnSelectionChange()
         {
             actionHistory.Clear();
+            matchHistory.StopIfSelectionChanged(FindSelectedCharacter());
             Repaint();
         }
 
@@ -35,28 +37,52 @@ namespace ThreeC.CharacterBehavior
             if (EditorApplication.isPlaying) Repaint();
         }
 
-        // 关闭窗口时结束当前角色的按需诊断采集。
+        // 关闭窗口时退订播放模式变化并结束诊断采集。
         private void OnDisable()
         {
+            EditorApplication.playModeStateChanged -= OnPlayModeStateChanged;
             actionHistory.Clear();
-            ObserveMatch(null);
+            matchHistory.Clear();
+        }
+
+        // 退出播放时立即丢弃本次匹配和动作历史。
+        private void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.ExitingPlayMode) return;
+            actionHistory.Clear();
+            matchHistory.Clear();
+        }
+
+        // 识别所选场景对象或其父层级中的运行时角色。
+        private static CharacterBehaviorAnimator FindSelectedCharacter()
+        {
+            if (!EditorApplication.isPlaying) return null;
+            var selected = Selection.activeGameObject;
+            var animator = selected ? selected.GetComponentInParent<CharacterBehaviorAnimator>(true) : null;
+            return animator && !EditorUtility.IsPersistent(animator) ? animator : null;
         }
 
         // 绘制所选角色当前的动作、匹配过程和独立移动预测。
         private void OnGUI()
         {
-            var selected = Selection.activeGameObject;
-            var animator = selected ? selected.GetComponentInParent<CharacterBehaviorAnimator>(true) : null;
-            if (!EditorApplication.isPlaying || !animator || EditorUtility.IsPersistent(animator))
+            if (Event.current.type == EventType.Layout)
             {
-                ObserveMatch(null);
-                actionHistory.Clear();
+                displayedCharacter = FindSelectedCharacter();
+                if (displayedCharacter) ReadCurrent(displayedCharacter);
+                else
+                {
+                    actionHistory.Clear();
+                    matchHistory.Clear();
+                }
+            }
+
+            var animator = displayedCharacter;
+            if (!animator)
+            {
                 EditorGUILayout.HelpBox("在播放模式下选择场景中的角色或其子对象。", MessageType.Info);
                 return;
             }
 
-            if (Event.current.type == EventType.Layout)
-                ReadCurrent(animator);
             using (var view = new EditorGUILayout.ScrollViewScope(scroll))
             {
                 scroll = view.scrollPosition;
@@ -65,9 +91,7 @@ namespace ThreeC.CharacterBehavior
                     EditorGUILayout.LabelField("编辑器已暂停", EditorStyles.miniLabel);
                 DrawSnapshot(currentSnapshot);
                 actionHistory.Draw(animator);
-                showMatch = EditorGUILayout.Foldout(showMatch, "地面匹配决策");
-                if (showMatch) DrawMatch(currentSnapshot, hasMatchFrame ? matchFrame : null);
-                else ObserveMatch(null);
+                matchHistory.Draw(animator);
                 var driver = animator.GetComponent<CharacterBehaviorDriver>();
                 if (driver)
                 {
@@ -104,127 +128,6 @@ namespace ThreeC.CharacterBehavior
             editorPaused = EditorApplication.isPaused;
             currentSnapshot = animator.ReadRuntimeDebug();
             forecastSnapshot = animator.GetComponent<CharacterBehaviorDriver>()?.DescribeForecast();
-            ObserveMatch(showMatch ? animator.PreviewAnimator : null);
-            var captured = matchAnimator ? CharacterMatchDebugCapture.Read(matchAnimator) : null;
-            hasMatchFrame = captured != null;
-            if (hasMatchFrame) matchFrame.CopyFrom(captured);
-        }
-
-        // 仅在调试折叠区展开时订阅当前选中的 Animator。
-        private void ObserveMatch(Animator target)
-        {
-            if (ReferenceEquals(matchAnimator, target)) return;
-            matchAnimator = target;
-            hasMatchFrame = false;
-            CharacterMatchDebugCapture.Select(target);
-        }
-
-        // 显示选库规则、候选代价、续播对照和最终在播的片段。
-        private static void DrawMatch(in CharacterAnimationDebugSnapshot snapshot, CharacterMatchDebugFrame frame)
-        {
-            if (snapshot.Status != CharacterAnimationDebugStatus.Running || frame == null)
-            {
-                EditorGUILayout.LabelField("等待当前角色的地面匹配查询。", EditorStyles.miniLabel);
-                return;
-            }
-            if (!string.IsNullOrEmpty(frame.Query))
-                EditorGUILayout.LabelField("查询", frame.Query, EditorStyles.wordWrappedLabel);
-            if (!string.IsNullOrEmpty(frame.Rule))
-                EditorGUILayout.LabelField("选库规则", frame.Rule, EditorStyles.wordWrappedLabel);
-            if (!string.IsNullOrEmpty(frame.Libraries))
-                EditorGUILayout.LabelField("规则选库", frame.Libraries, EditorStyles.wordWrappedLabel);
-            if (!string.IsNullOrEmpty(frame.CompatibilityIssue))
-                EditorGUILayout.HelpBox(frame.CompatibilityIssue, MessageType.Warning);
-            EditorGUILayout.LabelField("结果", $"{frame.Choice} · {frame.Reason}", EditorStyles.wordWrappedLabel);
-            DrawScoring(frame.Scoring);
-            if (frame.HistoryFallback) EditorGUILayout.HelpBox("当前评分已统一排除过去采样，适用于本次展示的入点与续播。", MessageType.Info);
-            DrawEntry("获选", frame.Chosen, frame.Scoring);
-            DrawEntry("延续对照", frame.Continuing, frame.Scoring);
-            DrawGroundPlayback(snapshot);
-            for (int i = 0; i < frame.TopCount; i++)
-                DrawEntry(i == 0 ? "最佳新入点" : $"新入点 {i + 1}", frame.Top[i], frame.Scoring);
-            DrawCounts("筛选与评分", frame.Counts);
-            for (int i = 0; i < frame.LibraryCount; i++)
-            {
-                var counts = frame.ReadLibrary(i, out string name);
-                DrawCounts(name, counts);
-            }
-        }
-
-        // 在同一帧的实际基础混合中显示下发状态、素材和播放时钟。
-        private static void DrawGroundPlayback(in CharacterAnimationDebugSnapshot snapshot)
-        {
-            var mix = snapshot.Mix.Base;
-            if (mix.Target == null)
-            {
-                EditorGUILayout.LabelField("最终地面播放", "无在播片段");
-                return;
-            }
-            string command = snapshot.SentBaselinePlayback ? "本帧下发" : "本帧未下发新播放指令";
-            float groundWeight = Mathf.Max(0f, 1f - snapshot.Mix.Coverage - snapshot.Mix.LowerWeight);
-            string detail = $"{ClipLabel(mix.Target, mix.PrimaryClip, mix.SecondaryClip)} · {mix.Seconds:F3}s · " +
-                $"{mix.Rate:F2}× · 基础源内权重 {mix.TargetWeight:P1} · 下身贡献 {groundWeight * mix.TargetWeight:P1} · {command}";
-            EditorGUILayout.LabelField("最终地面播放", detail, EditorStyles.wordWrappedLabel);
-            if (mix.Outgoing != null)
-                EditorGUILayout.LabelField("地面淡出", $"{ClipLabel(mix.Outgoing, mix.OutgoingPrimaryClip, mix.OutgoingSecondaryClip)} · " +
-                    $"源内权重 {mix.OutgoingWeight:P1}", EditorStyles.wordWrappedLabel);
-        }
-
-        // 显示当前查询或单个库各类筛选原因的计数。
-        private static void DrawCounts(string label, in GroundMatchDebugCounts counts) =>
-            EditorGUILayout.LabelField(label, $"评分入点 {counts.Evaluated} · 前史不足 {counts.History} · 候选范围 {counts.Group} · " +
-                $"用途 {counts.Use} · 步态 {counts.Gait} · 资源 {counts.Resource} · 速度 {counts.Speed} · " +
-                $"承重 {counts.Support} · 时间窗 {counts.Window}", EditorStyles.wordWrappedLabel);
-
-        // 将播放状态和其在图上使用的单源或混合素材显示在一起。
-        private static string ClipLabel(string state, AnimationClip first, AnimationClip second)
-        {
-            if (!first) return state;
-            return second ? $"{state}（{first.name} + {second.name}）" : $"{state}（{first.name}）";
-        }
-
-        // 指明当前查询使用的评分配置以及共用通道的归属。
-        private static void DrawScoring(GroundMatchScoring scoring)
-        {
-            string detail = scoring switch
-            {
-                GroundMatchScoring.Schema => "布局通道代价 = 误差平方 × Weight ÷ Scale²。接触使用当前用途的 Contact 权重与 ContactScale 尺度，步频使用当前用途的 Pace 权重与 PaceScale 尺度。共用项汇总同时命中多个启用组的通道，每个通道计一次。",
-                GroundMatchScoring.Compatibility => "兼容脚姿与预测轨迹，使用地面匹配模块的用途权重和尺度。",
-                _ => "当前帧未进行地面匹配评分。"
-            };
-            EditorGUILayout.LabelField("评分来源", detail, EditorStyles.wordWrappedLabel);
-        }
-
-        // 展示候选的状态、入点、倍率，以及与其他候选可直接比较的代价分项。
-        private static void DrawEntry(string label, in CharacterMatchDebugEntry entry, GroundMatchScoring scoring)
-        {
-            if (string.IsNullOrEmpty(entry.State))
-            {
-                EditorGUILayout.LabelField(label, "无");
-                return;
-            }
-            var cost = entry.Cost;
-            string sample = $"{entry.State} · {entry.Time:F3}s · {entry.Rate:F2}×";
-            if (!string.IsNullOrEmpty(entry.Library)) sample = $"{entry.Library} · {sample}";
-            if (!string.IsNullOrEmpty(entry.Track)) sample += $" · {entry.Track}";
-            float total = cost.Total;
-            if (cost.MissingHistory || float.IsNaN(total) || float.IsInfinity(total))
-            {
-                string reason = cost.MissingHistory ? "前史不足，代价不可比较" : "代价无效";
-                EditorGUILayout.LabelField(label, $"{sample} · {reason}", EditorStyles.wordWrappedLabel);
-                return;
-            }
-            EditorGUILayout.LabelField(label, $"{sample} · 总分 {total:F3}", EditorStyles.wordWrappedLabel);
-            string sharedCosts = $"接触 {cost.Contact:F3} · 步频 {cost.Pace:F3} · 入点 {cost.Entry:F3}";
-            if (scoring == GroundMatchScoring.Schema)
-            {
-                var groups = cost.FeatureBreakdown;
-                EditorGUILayout.LabelField($"布局 {cost.Features:F3}（脚部 {groups.Feet:F3} · 身体 {groups.Body:F3} · 手部 {groups.Hands:F3} · " +
-                    $"轨迹 {groups.Trajectory:F3} · 共用 {groups.Shared:F3}） · {sharedCosts} · 通道位 0x{groups.Channels:X}", EditorStyles.wordWrappedLabel);
-                return;
-            }
-            EditorGUILayout.LabelField($"脚位 {cost.Position:F3} · 脚速 {cost.Velocity:F3} · 骨盆 {cost.Pelvis:F3} · " +
-                $"路径 {cost.Path:F3} · 朝向 {cost.Facing:F3} · {sharedCosts}", EditorStyles.wordWrappedLabel);
         }
 
         // 显示动画运行状态、当前动作和实际播放混合。

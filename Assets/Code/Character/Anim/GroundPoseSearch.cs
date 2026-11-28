@@ -196,27 +196,75 @@ namespace ThreeC.CharacterBehavior
             return track.IsStop && support != GroundTrackSide.Either && track.Side != support ? GroundMatchFilter.Support : GroundMatchFilter.None;
         }
 
+        // 用当前轨道所在库的输入计算续播相位，不扫描其他入点。
+        internal bool TryScoreCurrent(CharacterMotionTrack track, CharacterClipProgress current,
+            in CharacterAnimationPlaybackPlan last, in GroundSearchFrame frame, in GroundPoseQuery query, out float total)
+        {
+            total = 0f;
+            if (!frame.TryLibrary(track.LibraryIndex, out var currentFrame, out var reason, out int channel))
+            {
+#if UNITY_EDITOR
+                CharacterMotionMatchDiagnostics.ContinuingLibraryUnavailable(DebugFrame, track, reason, channel);
+#endif
+                return false;
+            }
+            var cost = currentFrame.ScoreCurrent(track, current.normalizedTime, resources.Pace(current.fullPathHash),
+                out float rate, out float time, last.StopEntryTime, last.StopEntryTravelPhase);
+            cost.Entry = query.EntryPenalty(track);
+            total = cost.Total;
+#if UNITY_EDITOR
+            CharacterMotionMatchDiagnostics.SetContinuing(DebugFrame, track, last.FullBody.Binding.StateName, currentFrame, time, rate, cost);
+#endif
+            return true;
+        }
+
         // 按配置逐库尝试或统一扫描，跳过当前范围没有组候选的库。
         internal CharacterMatchResult FindScope(ref GroundPoseQuery query, ref GroundSearchFrame frame,
             out CharacterMotionTrack winner, bool record)
         {
-            if (query.Selection.UnionBlocked && !query.Selection.Relaxed)
+            var selected = query.Selection;
+#if UNITY_EDITOR
+            var debug = record ? DebugFrame : null;
+            debug?.Trace.BeginScope(selected);
+            if (debug != null && selected.Count == 0)
+                debug.Trace.RejectScope(selected, "没有可尝试的有效库", listLibraries: false);
+#endif
+            if (selected.UnionBlocked && !selected.Relaxed)
             {
+#if UNITY_EDITOR
+                debug?.Trace.RejectScope(selected, $"前置不兼容 · {selected.Scope.UnionIssue}");
+#endif
                 winner = null;
                 return new CharacterMatchResult { Cost = float.PositiveInfinity };
             }
             winner = null;
             var result = new CharacterMatchResult { Cost = float.PositiveInfinity };
-            var selected = query.Selection;
+#if UNITY_EDITOR
+            if (debug != null && !selected.Ordered) debug.Trace.RejectEmptyUnionSources(selected);
+#endif
             for (int i = 0; i < selected.Count; i++)
             {
                 int index = selected.Scope.Indices[i];
-                if (!selected.Scope.AllowsLibrary(index, selected.Relaxed)) continue;
+                if (!selected.Scope.AllowsLibrary(index, selected.Relaxed))
+                {
+#if UNITY_EDITOR
+                    if (debug != null && selected.Ordered)
+                        debug.Trace.RejectSource(selected, index, "前置不合格 · 严格范围无候选组");
+#endif
+                    continue;
+                }
+#if UNITY_EDITOR
+                if (debug != null && selected.Ordered) debug.Trace.BeginOrderedSource(selected, i, index);
+#endif
                 if (!frame.TryLibrary(index, out var scoring, out var reason, out int channel))
                 {
 #if UNITY_EDITOR
-                    if (record && DebugFrame != null)
-                        DebugFrame.CompatibilityIssue = $"{DebugFrame.CompatibilityIssue} [{index}] {reason} {(channel >= 0 ? channel.ToString() : "")}".Trim();
+                    if (debug != null)
+                    {
+                        debug.Trace.RejectSource(selected, index, $"前置不兼容 · {reason}", channel);
+                        if (!selected.Ordered)
+                            debug.Trace.RejectScope(selected, "联合评分的输入库不可用，未开始扫描");
+                    }
 #endif
                     if (!selected.Ordered) break;
                     continue;
@@ -224,6 +272,9 @@ namespace ThreeC.CharacterBehavior
                 var attempt = selected.Ordered ? new GroundPoseQuery(query, selected.ForLibrary(index)) : query;
                 result = Find(attempt, ref scoring, out winner, record);
                 if (winner == null && selected.Ordered) continue;
+#if UNITY_EDITOR
+                if (debug != null && selected.Ordered) debug.Trace.SkipRemainingSources(selected, i + 1);
+#endif
                 query = attempt;
                 frame = scoring;
                 break;
@@ -242,17 +293,18 @@ namespace ThreeC.CharacterBehavior
             var result = Scan(query, frame, out winner, out bool missingHistory, record);
             if (winner != null || !missingHistory) return result;
             frame = frame.WithoutHistory();
-            return Scan(query, frame, out winner, out _, record);
+            return Scan(query, frame, out winner, out _, record, historyRetry: true);
         }
 
         // 使用相同有效维度扫描整组入点，单个非循环入点不能自行丢掉缺失的历史项。
         private CharacterMatchResult Scan(in GroundPoseQuery query, in GroundSearchFrame frame,
-            out CharacterMotionTrack winner, out bool missingHistory, bool record)
+            out CharacterMotionTrack winner, out bool missingHistory, bool record, bool historyRetry = false)
         {
             missingHistory = false;
             using var sample = marker.Auto();
 #if UNITY_EDITOR
-            if (record) DebugFrame?.StartScoring(frame);
+            var debug = record ? DebugFrame : null;
+            debug?.BeginScan(frame);
 #endif
             var best = new CharacterMatchResult { Cost = float.PositiveInfinity };
             winner = null;
@@ -261,7 +313,7 @@ namespace ThreeC.CharacterBehavior
             // 详细诊断需要观察所有淘汰原因；未收录的枚举值也沿用完整扫描。
             int[] eligible = null;
 #if UNITY_EDITOR
-            if (!record || DebugFrame == null)
+            if (debug == null)
 #endif
                 candidates.TryGetValue((query.Use, query.From, query.Target, query.Alternate), out eligible);
             int trackCount = eligible?.Length ?? entries.Count;
@@ -271,11 +323,14 @@ namespace ThreeC.CharacterBehavior
                 var track = entry.Track;
                 var binding = entry.Binding;
                 if (!query.Selection.InSearchedLibrary(track.LibraryIndex)) continue;
+#if UNITY_EDITOR
+                if (debug != null && !query.Selection.Scope.AllowsLibrary(track.LibraryIndex, query.Selection.Relaxed)) continue;
+#endif
                 var filter = Filter(track, binding.StateHash, query, support, indexed: eligible != null);
                 if (filter != GroundMatchFilter.None)
                 {
 #if UNITY_EDITOR
-                    if (record) DebugFrame?.Reject(filter, track.LibraryIndex);
+                    debug?.Reject(filter, track.LibraryIndex);
 #endif
                     continue;
                 }
@@ -293,7 +348,7 @@ namespace ThreeC.CharacterBehavior
                     if (filter != GroundMatchFilter.None)
                     {
 #if UNITY_EDITOR
-                        if (record) DebugFrame?.Reject(filter, track.LibraryIndex);
+                        debug?.Reject(filter, track.LibraryIndex);
 #endif
                         continue;
                     }
@@ -303,14 +358,14 @@ namespace ThreeC.CharacterBehavior
                     {
                         missingHistory = true;
 #if UNITY_EDITOR
-                        if (record) DebugFrame?.Reject(GroundMatchFilter.History, track.LibraryIndex);
+                        debug?.Reject(GroundMatchFilter.History, track.LibraryIndex);
 #endif
                         continue;
                     }
                     cost.Entry = query.EntryPenalty(track);
 #if UNITY_EDITOR
-                    if (record && DebugFrame != null)
-                        DebugFrame.Candidate(new CharacterMatchDebugEntry { State = binding.StateName, Library = track.LibraryLabel,
+                    if (debug != null)
+                        debug.Candidate(new CharacterMatchDebugEntry { State = binding.StateName, Library = track.LibraryLabel,
                             Track = track.TrackLabel, Time = time, Cost = cost, Rate = rate }, track.LibraryIndex, rank);
 #endif
                     if (!Precedes(cost.Total, rank, best.Cost, bestRank)) continue;
@@ -323,6 +378,9 @@ namespace ThreeC.CharacterBehavior
                     };
                 }
             }
+#if UNITY_EDITOR
+            debug?.Trace.RecordScan(debug, query.Selection, best, winner, historyRetry);
+#endif
             return best;
         }
     }
