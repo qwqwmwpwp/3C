@@ -44,8 +44,3 @@ MonoBehaviour:
       Chest: 0.35
       LeftArm: 0.6
       RightArm: 0
-  mappings:
-  - Behavior: 4
-    EntryAction: upper.raise
-    HoldAction: upper.grip
-    Weight: 0.4

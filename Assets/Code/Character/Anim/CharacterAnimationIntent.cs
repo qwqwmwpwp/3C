@@ -83,17 +83,29 @@ namespace ThreeC.CharacterBehavior
         private static float Clamp(float value) => Mathf.Min(1f, InputMath.NonNegative(value, 0f));
     }
 
+    // 基础动作遇到同优先级部位请求时使用的准入规则。
+    public enum CharacterEqualPriorityTakeover
+    {
+        [InspectorName("允许接管")] Allow,
+        [InspectorName("按身体范围与提交顺序竞争")] Ranked,
+        [InspectorName("保留基础动作")] KeepBaseline
+    }
+
     /// <summary>动画系统拥有的语义资源映射，调用方无需知道 Animator 状态路径。</summary>
     [Serializable]
     public sealed class CharacterAnimationActionSettings
     {
         [Tooltip("供外部提交和撤销的唯一语义键，例如 upper.idle。")]
         public string Key;
+        [InspectorName("运动基础覆盖")] public bool IsMotionOverride;
+        [Min(0f), InspectorName("运动覆盖的素材参考速度")] public float ReferenceSpeed;
+        [InspectorName("基础动作的同级接管规则")] public CharacterEqualPriorityTakeover EqualPriorityTakeover;
+        [InspectorName("被接管时的基础动作键")] public string OnTakeoverFallback;
         [InspectorName("申请部位"), Tooltip("全身动作同时申请上下身，共用一个动作实例和接管进度。")]
         public CharacterAnimationBodyRegion Region;
         [InspectorName("局部动作兼容"), Tooltip("上身和下身动作必须互相允许。未被接管的部位继续基础姿势。")]
         public CharacterActionPartners Partners;
-        [SerializeField, InspectorName("单次动作接管"), Tooltip("可选。行为有招式时钟时跟随招式，独立调用时跟随片段进度。")]
+        [SerializeField, InspectorName("单次动作接管"), Tooltip("可选。根据素材入点到末尾的播放时间安排默认接管与交回阶段。")]
         internal CharacterActionHandoffSettings Handoff = new CharacterActionHandoffSettings();
         [Tooltip("数值越大越优先。同优先级先处理全身申请，同范围再按新实例提交顺序决定。")]
         public int Priority = 50;
@@ -126,12 +138,15 @@ namespace ThreeC.CharacterBehavior
         public Vector3 InertiaSuppression { get; }
         public CharacterActionPartners Partners { get; }
         public CharacterActionHandoffSettings Handoff { get; }
+        public CharacterEqualPriorityTakeover EqualPriorityTakeover { get; }
+        public string OnTakeoverFallback { get; }
         public bool WholeBody => Source == CharacterAnimationSource.Baseline || Source == CharacterAnimationSource.FullBodyOverlay;
 
         // 由语义键和已归一的播放源生成可用于仲裁的规则。
         public CharacterAnimationRule(string key, CharacterAnimationSource source, int priority,
             CharacterAnimationInterruptionPolicy interruptionPolicy = CharacterAnimationInterruptionPolicy.Replay,
-            Vector3 inertiaSuppression = default, CharacterActionPartners partners = default, CharacterActionHandoffSettings handoff = null)
+            Vector3 inertiaSuppression = default, CharacterActionPartners partners = default, CharacterActionHandoffSettings handoff = null,
+            string onTakeoverFallback = null, CharacterEqualPriorityTakeover equalPriorityTakeover = CharacterEqualPriorityTakeover.Allow)
         {
             Key = key;
             Source = source;
@@ -141,6 +156,8 @@ namespace ThreeC.CharacterBehavior
             partners.Keys = (string[])partners.Keys?.Clone();
             Partners = partners;
             Handoff = handoff?.Snapshot();
+            OnTakeoverFallback = onTakeoverFallback;
+            EqualPriorityTakeover = equalPriorityTakeover;
         }
     }
 
@@ -166,8 +183,8 @@ namespace ThreeC.CharacterBehavior
         public CharacterActionPlayback Playback { get; }
         public CharacterLocomotionVariant LocomotionVariant { get; }
         public bool IsValid => Rule != null;
-        public bool IsLocomotion => Key == CharacterAnimationIntentConverter.WalkKey ||
-            Key == CharacterAnimationIntentConverter.MoveKey || Key == CharacterAnimationIntentConverter.SprintKey;
+        public bool IsLocomotion => Key == CharacterLocomotionKeys.WalkKey ||
+            Key == CharacterLocomotionKeys.MoveKey || Key == CharacterLocomotionKeys.SprintKey;
 
         public bool Precedes(in CharacterAnimationDemand other)
         {

@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using UnityEngine;
 
+[assembly: InternalsVisibleTo("HumanoidAnimation.Editor")]
 [assembly: InternalsVisibleTo("Assembly-CSharp-Editor")]
 
 namespace ThreeC.CharacterBehavior

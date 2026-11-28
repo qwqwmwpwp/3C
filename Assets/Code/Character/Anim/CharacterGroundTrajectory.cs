@@ -27,21 +27,6 @@ namespace ThreeC.CharacterBehavior
             => new CharacterGroundTrajectory(velocity, IsBraking, IsBrakeLeadIn, IsBrakeObstructed, InitialStopDistance,
                 InitialStopSeconds, ActualStopTravel, MainBrakeTravel, RemainingStopDistance, RemainingStopSeconds, match);
 
-        // 按动画所需的时间窗投影本步运动，保留同一次求解记录的制动信息。
-        internal static CharacterGroundTrajectory FromGround(in CharacterGroundObservation ground)
-            => FromGround(ground, CharacterMatchTrajectory.DefaultWindows);
-
-        // 按当前匹配模块的预测窗投影同一次运动结算。
-        internal static CharacterGroundTrajectory FromGround(in CharacterGroundObservation ground, Vector2 windows)
-        {
-            if (!ground.IsValid) return default;
-            var sample = ground.Prediction.Sample(LookAheadSeconds, windows.x, windows.y);
-            var match = new CharacterMatchTrajectory(sample.NearTravel, sample.FarTravel, ground.Prediction.Facing, sample.NearYaw, sample.FarYaw, windows);
-            return new CharacterGroundTrajectory(sample.Velocity, ground.IsBraking, ground.IsBrakeLeadIn, ground.IsBrakeObstructed,
-                ground.InitialStopDistance, ground.InitialStopSeconds, ground.ActualStopTravel, ground.MainBrakeTravel,
-                ground.RemainingStopDistance, ground.RemainingStopSeconds, match);
-        }
-
         /// <summary>供运动来源提交自身预测。距离为世界水平米，时长为秒；普通移动可只填写未来速度和匹配轨迹。</summary>
         public CharacterGroundTrajectory(Vector3 futureVelocity, bool braking = false, bool leadIn = false, bool obstructed = false,
             float initialDistance = 0f, float initialSeconds = 0f, float travel = 0f, float mainTravel = 0f,

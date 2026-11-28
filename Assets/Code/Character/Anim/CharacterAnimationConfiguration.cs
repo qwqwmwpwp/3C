@@ -2,24 +2,32 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 内置策略在角色装配阶段安装自己的资源与判定配置。
+    internal interface ICharacterPoseConfiguration
+    {
+        // 校验并绑定本角色的共享模块资源。
+        void Configure(CharacterAnimationConfiguration config);
+    }
+
     /// <summary>动画入口的序列化配置快照，在创建流水线时交给各阶段。</summary>
     internal sealed class CharacterAnimationConfiguration
     {
-        internal CompiledAnimationDecisions Decisions { get; }
+        internal CompiledAnimationDecisions Decisions;
         public AnimationModuleAssembly Modules { get; }
+        internal CharacterBasePoseStrategy PoseStrategy;
         public CharacterMatchMode MatchMode;
         internal GroundMatchTuning MatchCosts = new GroundMatchTuning();
         internal GroundPaceLimits PaceLimits;
         internal CharacterTransitionProfiles Transitions;
         internal GroundFeatureLayout FeatureLayout;
         internal GroundCandidatePolicy CandidatePolicy;
-        public bool HasGait => Modules.Gait;
-        public bool HasStartTurn => Modules.StartTurn;
-        public bool HasStop => Modules.Stop;
+        public bool HasGait => Decisions != null && Modules.Gait;
+        public bool HasStartTurn => Decisions != null && Modules.StartTurn;
+        public bool HasStop => Decisions != null && Modules.Stop;
+        internal GroundLibraryBindings GroundBindings;
         internal GroundSearchLibraries SearchLibraries;
-        public bool SamplesFeet => Modules.Match || HasStop;
+        public bool SamplesFeet => SearchLibraries != null || HasStop;
         public CharacterMotionDatabase PlaybackLibrary { get; }
-        public CharacterAttackTable AttackTable;
         // 保留普通转向使用的角度与续播窗口，安装匹配模块时可覆盖。
         public float MatchMargin = 0.12f;
         public float MatchReverseHold = 0.08f;
@@ -30,11 +38,8 @@ namespace ThreeC.CharacterBehavior
         public string MoveState;
         public string WalkState;
         public string SprintState;
-        public string DashState;
         public int LocomotionPriority;
-        public int DashPriority;
         public float Transition;
-        public float DashTransition;
         // 即使只有动作模块，静止与移动动作变体仍使用步态的默认迟滞。
         public float IdleEnterSpeed = 0.08f;
         public float IdleExitSpeed = 0.15f;
@@ -46,7 +51,6 @@ namespace ThreeC.CharacterBehavior
         public float WalkSpeed = 1.55f;
         public float RunSpeed = 4.98f;
         public float SprintSpeed = 6.52f;
-        public float DashClipSpeed;
         public float LocomotionStartSeconds;
         public float LocomotionTurnSeconds;
         public float LocomotionReverseAngle = 120f;
@@ -64,7 +68,6 @@ namespace ThreeC.CharacterBehavior
         public CharacterStopAnimationSettings SprintStop;
         public CharacterLocomotionGaitPhaseSettings[] LocomotionGaitPhases;
         public CharacterAnimationActionSettings[] Actions;
-        public CharacterBehaviorAnimationMapping[] BehaviorAnimations;
         public CharacterBoundIkChannel[] IkChannels;
         internal OrientationWarpTuning Orientation;
         public CharacterInertiaTuning PoseInertia;
@@ -75,18 +78,17 @@ namespace ThreeC.CharacterBehavior
         // 固定本次绑定所使用的模块组合，空组合也拥有独立装配。
         internal CharacterAnimationConfiguration(AnimationModuleAssembly modules, CharacterMotionDatabase library)
         {
-            Decisions = modules.BindDecisions();
             Modules = modules;
             PlaybackLibrary = library;
         }
 
         // 按角色运动配置解析行走与跑步的切换门槛，并提供 IK 使用的坡度上限。
-        internal void BindMovement(CharacterMovementSettings movement, float walkableSlope)
+        internal void BindMovement(float walkSpeed, float walkableSlope)
         {
             WalkableSlope = walkableSlope;
             if (!UseMovementWalkSpeed) return;
             float band = Mathf.Max(0f, RunEnterSpeed - RunExitSpeed);
-            RunEnterSpeed = InputMath.NonNegative(movement?.WalkSpeed ?? RunEnterSpeed, RunEnterSpeed);
+            RunEnterSpeed = InputMath.NonNegative(walkSpeed, RunEnterSpeed);
             RunExitSpeed = Mathf.Max(IdleExitSpeed, RunEnterSpeed - band);
         }
     }

@@ -130,7 +130,8 @@ namespace ThreeC.CharacterBehavior
             SetPace(config.MoveState, GroundMotionUse.Cycle, GroundTrackGait.Run, config.RunSpeed);
             SetPace(config.RunStartState, GroundMotionUse.Start, GroundTrackGait.Run, config.RunSpeed);
             SetPace(config.SprintState, GroundMotionUse.Cycle, GroundTrackGait.Sprint, config.SprintSpeed);
-            SetPace(config.DashState, default, default, config.DashClipSpeed);
+            foreach (var action in config.Actions)
+                if (action.IsMotionOverride) SetPace(action.StateName, default, default, action.ReferenceSpeed);
             foreach (var stop in new[] { config.WalkStop, config.RunStop, config.SprintStop })
                 if (stop != null)
                 {

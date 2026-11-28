@@ -109,7 +109,7 @@ namespace ThreeC.CharacterBehavior
             var purpose = current.Binding.IsStop ? TransitionPurpose.Stop : current.Binding.Variant switch {
                 CharacterLocomotionVariant.Start => TransitionPurpose.Start,
                 CharacterLocomotionVariant.TurnLeft or CharacterLocomotionVariant.TurnRight => TransitionPurpose.Turn,
-                _ => d.IsLocomotion ? TransitionPurpose.Locomotion : d.Key == CharacterAnimationIntentConverter.IdleKey ? TransitionPurpose.Idle : TransitionPurpose.Action };
+                _ => d.IsLocomotion ? TransitionPurpose.Locomotion : d.Key == CharacterLocomotionKeys.IdleKey ? TransitionPurpose.Idle : TransitionPurpose.Action };
             foreach (var p in profiles)
                 if (p != null && (p.Edge == TransitionEdge.Any || (p.Edge == TransitionEdge.Exit) == exit) &&
                     (p.Layer == TransitionLayer.Any || (int)p.Layer == (int)d.Source + 1) &&

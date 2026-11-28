@@ -1,0 +1,44 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5bcafe4f95ac40b5932854a24de6e367, type: 3}
+  m_Name: 盾牌行为动画映射
+  m_EditorClassIdentifier:
+  motionOverrideKey: motion.dash
+  mappings:
+  - Behavior: 4
+    EntryAction: upper.raise
+    HoldAction: upper.grip
+    Weight: 0.4
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 1
+    EntryAction: full.light_attack
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 2
+    EntryAction: full.light_attack_2
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 3
+    EntryAction: full.heavy_attack
+    HoldAction:
+    Weight: 1
+  - Behavior: 8
+    Trigger: 1
+    AttackStateId: 4
+    EntryAction: full.skill_2
+    HoldAction:
+    Weight: 1

@@ -1,0 +1,9 @@
+{
+    "name": "HumanoidAnimation.Runtime",
+    "rootNamespace": "ThreeC.CharacterBehavior",
+    "references": [
+        "Unity.Collections"
+    ],
+    "includePlatforms": [],
+    "autoReferenced": true
+}

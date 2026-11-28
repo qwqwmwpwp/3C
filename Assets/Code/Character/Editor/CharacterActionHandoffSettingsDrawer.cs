@@ -37,24 +37,14 @@ namespace ThreeC.CharacterBehavior
             }
         }
 
-        // 检查该字段所属的行为映射，或同一模块内消费这个动作键的攻击映射。
+        // 仅对游戏映射中使用招式时钟的字段隐藏通用交接设置。
         private static bool UsesAttackTiming(SerializedProperty property)
         {
-            if (!(property.serializedObject.targetObject is ActionSetModule)) return false;
+            if (!(property.serializedObject.targetObject is CharacterBehaviorAnimationProfile)) return false;
             int end = property.propertyPath.LastIndexOf('.');
             if (end < 0) return false;
-            var owner = property.serializedObject.FindProperty(property.propertyPath.Substring(0, end));
-            var key = owner.FindPropertyRelative(nameof(CharacterAnimationActionSettings.Key));
-            if (key == null) return IsAttackMapping(owner);
-            if (key.hasMultipleDifferentValues || string.IsNullOrWhiteSpace(key.stringValue)) return false;
-            var mappings = property.serializedObject.FindProperty("mappings");
-            for (int i = 0; i < mappings.arraySize; i++)
-            {
-                var row = mappings.GetArrayElementAtIndex(i);
-                var action = row.FindPropertyRelative(nameof(CharacterBehaviorAnimationMapping.EntryAction));
-                if (!action.hasMultipleDifferentValues && action.stringValue == key.stringValue && IsAttackMapping(row)) return true;
-            }
-            return false;
+            var row = property.serializedObject.FindProperty(property.propertyPath.Substring(0, end));
+            return row != null && IsAttackMapping(row);
         }
 
         // 只对所有选中对象都指向具名攻击的单次映射采用状态时钟。

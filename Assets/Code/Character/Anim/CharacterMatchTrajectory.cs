@@ -34,8 +34,8 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 以发布预测的实际起点朝向记录世界和局部近窗位移。
-        internal CharacterMatchTrajectory(in CharacterForecastSample origin, in CharacterForecastSample near,
-            in CharacterForecastSample far, Vector2 windows)
+        internal CharacterMatchTrajectory(in AnimationTrajectorySample origin, in AnimationTrajectorySample near,
+            in AnimationTrajectorySample far, Vector2 windows)
         {
             Windows = windows;
             Vector3 forward = Vector3.ProjectOnPlane(origin.Rotation * Vector3.forward, Vector3.up).normalized;

@@ -12,7 +12,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a7e6c86b1c6475ea4fdd17c5d06ab0b, type: 3}
   m_Name: 04 动画表现
   m_EditorClassIdentifier:
+  PoseStrategy: {fileID: 11400000, guid: 40f61777da7e498e85fb13ab4d24401f, type: 2}
   Modules: {fileID: 11400000, guid: 409b6098513c4be3bca6e0b3dc5100cf, type: 2}
+  GroundBindings: {fileID: 11400000, guid: 2142238a6341436a9f748f8624df9b2e, type: 2}
   PlaybackLibrary: {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
   DefaultIdleState: Lower Body.idle
   IkTeleportDistance: 2

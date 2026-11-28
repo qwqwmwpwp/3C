@@ -2,67 +2,70 @@ using System.Collections.Generic;
 
 namespace ThreeC.CharacterBehavior
 {
-    // 保存未消费的物理步，为当前动画批次按提交顺序更新运动意图和步态。
+    // 按提交顺序保存固定步；已交给策略的前缀不会因同帧重选或撤批而再次推进。
     internal sealed class CharacterAnimationStepHistory
     {
         private readonly CharacterAnimationModules modules;
-        private readonly List<(CharacterControllerFrameResult frame, CharacterAnimationMotion motion, bool reset, double time, bool preserve)> steps =
-            new List<(CharacterControllerFrameResult, CharacterAnimationMotion, bool, double, bool)>();
+        private readonly List<(CharacterAnimationMovement frame, CharacterAnimationMotion motion, bool reset, double time,
+            CharacterTrajectoryObservations trajectory)> steps =
+            new List<(CharacterAnimationMovement, CharacterAnimationMotion, bool, double, CharacterTrajectoryObservations)>();
         internal int Count => steps.Count;
 
-        // 将步态消费绑定到可以独立重配的角色动画模块集合。
+        // 绑定当前角色的策略实例集合。
         internal CharacterAnimationStepHistory(CharacterAnimationModules modules) => this.modules = modules;
 
-        // 登记本次已经求解的物理步，或只有轨迹不连续标记的时间点。
-        internal void Add(CharacterControllerFrameResult frame, CharacterAnimationMotion motion, bool reset, double time)
-            => steps.Add((frame, motion, reset, time, false));
+        // 记录一个真实运动步及其原始结算时刻。
+        internal void Add(CharacterAnimationMovement frame, CharacterAnimationMotion motion, bool reset, double time) =>
+            steps.Add((frame, motion, reset, time, default));
 
-        // 丢弃旧连续性的全部待消费步。
+        // 丢弃旧代次尚未消费的固定步。
         internal void Clear() => steps.Clear();
 
-        // 按顺序消化本次采集覆盖的固定步，后到的提交留给下一次采集。
-        internal void Consume(int count, ref CharacterPresentationWork batch, bool deferGait = false)
+        // 在主线程用每个真实固定步自己的时刻预取当前策略声明的轨迹点。
+        internal void CaptureTrajectories(AnimationTrajectoryPublication forecast, int count)
         {
+            var setup = modules.Strategy.Setup;
+            if (!setup.HasTrajectoryRequests) return;
             for (int i = 0; i < count; i++)
             {
                 var step = steps[i];
-                if (step.reset) modules.Matcher.Reset();
-                if (step.frame.FrameNumber != 0)
-                {
-                    modules.Intent.ObserveActionVariantMotion(step.motion);
-                    step.preserve = modules.Bindings.PreservesEntryGait(step.frame);
-                }
-                if (deferGait) steps[i] = step;
-                else ReceiveIntent(step, false, batch);
+                step.trajectory = setup.CaptureTrajectory(forecast.Snapshot, step.time);
+                steps[i] = step;
             }
-            if (deferGait) batch.DeferGait(count);
-            else steps.RemoveRange(0, count);
         }
 
-        // 用与本步绑定结果对应的步态许可推进意图。
-        private void ReceiveIntent(in (CharacterControllerFrameResult frame, CharacterAnimationMotion motion,
-            bool reset, double time, bool preserve) step, bool projectGait, in CharacterPresentationWork batch)
+        // 使用最终轨迹消费固定步；即使策略抛错也不会再次调用同一步。
+        internal void Consume(int count, in CharacterPresentationInput captured, bool project = false)
         {
-            if (step.reset) modules.Intent.InvalidateMotion();
-            if (step.frame.FrameNumber == 0) return;
-            var motion = projectGait && modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)
-                ? batch.Input.ProjectStep(step.frame, step.motion, step.time) : step.motion;
-            modules.Intent.Receive(motion, step.frame.Behavior, step.frame.Input, step.frame.DeltaTime, step.preserve);
+            int consumed = 0;
+            var session = modules.Strategy;
+            try
+            {
+                while (consumed < count)
+                {
+                    var step = steps[consumed++];
+                    if (step.reset) session.InvalidateMotion();
+                    if (step.frame.FrameNumber == 0) continue;
+                    var motion = step.motion;
+                    if (project && session.Detail?.NeedsForecast(motion, step.frame) == true)
+                        motion = session.Detail.ProjectStep(step.frame, motion, step.time, captured);
+                    var trajectory = session.Setup.HasTrajectoryRequests ? step.trajectory :
+                        session.Setup.CaptureTrajectory(captured.Forecast, step.time);
+                    var facts = new CharacterBasePoseInput(step.frame, step.frame.Context, motion, trajectory,
+                        step.time, step.frame.DeltaTime, captured.Observation, default, captured.Bones);
+                    session.Instance.AdvanceStep(facts);
+                }
+            }
+            finally { steps.RemoveRange(0, consumed); }
         }
 
-        // 只补交已处理绑定的固定步意图，绑定和许可仍然按原计划发布一次。
-        internal void FinishDeferredGait(bool projectGait, ref CharacterPresentationWork batch)
-        {
-            for (int i = 0; i < batch.DeferredSteps; i++) ReceiveIntent(steps[i], projectGait, batch);
-            steps.RemoveRange(0, batch.DeferredSteps);
-            batch.FinishGait();
-        }
-
-        // 找出需要先核对发布预测、再更新持久步态的固定步批次。
+        // 对需要稳定预测的地面批次，延后到最终发布时再消费固定步。
         internal bool HasForecastSensitiveSteps()
         {
+            var detail = modules.Strategy.Detail;
+            if (detail == null) return false;
             foreach (var step in steps)
-                if (modules.Intent.MayUsePredictedGait(step.motion, step.frame.Behavior)) return true;
+                if (detail.NeedsForecast(step.motion, step.frame)) return true;
             return false;
         }
     }

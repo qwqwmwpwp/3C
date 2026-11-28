@@ -7,10 +7,21 @@ namespace ThreeC.CharacterBehavior
     public sealed class CharacterAnimationConfig : ScriptableObject
     {
         internal const float DefaultTeleportDistance = 2f;
+        internal int Revision { get; private set; }
+
+#if UNITY_EDITOR
+        // 通知角色重新检查原地编辑过的装配，包括此前被拒绝的配置。
+        private void OnValidate() => Revision++;
+#endif
+
+        [SerializeField, InspectorName("基础姿态策略")] internal CharacterBasePoseStrategy PoseStrategy;
 
         [SerializeField, InspectorName("动画模块组合"), Tooltip("留空时只播放默认待机，也可以在运行时为单个角色装配模块。")]
         internal AnimationModule Modules;
-        [SerializeField, InspectorName("播放库"), Tooltip("提供动作绑定、基础步态和身体遮罩。要参与地面搜索，还需在地面匹配模块中登记此库。更换库或重新烘焙播放索引、遮罩后，重新启用角色行为动画组件。")] internal CharacterMotionDatabase PlaybackLibrary;
+        [SerializeField, InspectorName("播放库"), Tooltip("提供动作绑定、基础步态和身体遮罩。要参与地面搜索，还需在角色地面库绑定中登记此库。更换库或重新烘焙播放索引、遮罩后，重新启用角色行为动画组件。")] internal CharacterMotionDatabase PlaybackLibrary;
+        [SerializeField, InspectorName("地面库绑定")] internal GroundLibraryBindings GroundBindings;
+        /// <summary>提供已装配的烘焙播放资源。</summary>
+        public CharacterMotionDatabase Library => PlaybackLibrary;
         [SerializeField, InspectorName("默认待机状态"), Tooltip("没有模块提供待机状态时使用。留空时采用播放库的下身默认状态。")]
         internal string DefaultIdleState;
         [SerializeField, InspectorName("瞬移重置距离（米）"), Min(0f), Tooltip("单次表现更新移动超过此距离时清空姿态历史。零表示关闭自动检测。")]
@@ -19,19 +30,19 @@ namespace ThreeC.CharacterBehavior
         internal bool ReuseActionMixers;
 
         // 使用角色的模块集合与骨骼绑定创建独立的运行时配置。
-        internal CharacterAnimationConfiguration Bind(CharacterModelBindings model, CharacterProfileOverrides overrides,
-            CharacterAttackTable attack, AnimationModuleAssembly modules)
+        internal CharacterAnimationConfiguration Bind(CharacterModelBindings model, AnimationModuleAssembly modules = null)
         {
             modules ??= ResolveModules();
             var config = new CharacterAnimationConfiguration(modules, PlaybackLibrary)
             {
-                AttackTable = attack,
+                GroundBindings = GroundBindings,
+                PoseStrategy = PoseStrategy,
                 IdleState = ResolveIdleState(),
-                Transition = overrides.Transition.Resolve(0.12f),
+                Transition = 0.12f,
                 ReuseActionMixers = ReuseActionMixers,
                 IkTeleportDistance = IkTeleportDistance
             };
-            modules.Apply(config, model, overrides);
+            modules.Apply(config, model);
             return config;
         }
 
@@ -45,6 +56,17 @@ namespace ThreeC.CharacterBehavior
             if (!string.IsNullOrWhiteSpace(DefaultIdleState)) return DefaultIdleState;
             var layers = PlaybackLibrary ? PlaybackLibrary.Playback?.Layers : null;
             return layers is { Length: > 0 } ? layers[0]?.DefaultState : null;
+        }
+
+        // 从跑步循环读取相邻两次落脚的平均距离；烘焙资源不可用时使用调用方的默认值。
+        public float ReadRunFootfallDistance(float fallback)
+        {
+            if (!PlaybackLibrary) return fallback;
+            string state;
+            try { state = ResolveModules().Gait?.RunState; }
+            catch (System.ArgumentException) { return fallback; }
+            var track = PlaybackLibrary.FindBakedCycle(state);
+            return track != null && track.IsReady ? track.ReferenceSpeed * track.Seconds * 0.5f : fallback;
         }
 
         // 读取当前播放库中匹配循环状态的烘焙参考速度。

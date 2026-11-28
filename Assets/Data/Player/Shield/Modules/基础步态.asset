@@ -16,15 +16,11 @@ MonoBehaviour:
   moveStateName: Lower Body.move
   walkStateName: Lower Body.walk
   sprintStateName: Lower Body.sprint
-  dashStateName: Lower Body.dash
   locomotionPriority: 0
-  dashPriority: 100
   behaviorTransitionDuration: 0.12
-  dashTransitionDuration: 0.04
   walkAnimationSpeed: 1.55
   runAnimationSpeed: 4.98
   sprintAnimationSpeed: 6.52
-  dashAnimationSpeed: 6.52
   useMovementWalkSpeed: 1
   locomotionGaitPhases:
   - StateName: Lower Body.walk

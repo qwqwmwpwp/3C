@@ -7,7 +7,7 @@ namespace ThreeC.CharacterBehavior
     internal sealed class GroundLibraryScope
     {
         internal readonly int[] Indices;
-        internal readonly string Issue, UnionIssue, RelaxedUnionIssue, StrictBlockIssue;
+        internal readonly string Issue, BindingIssue, UnionIssue, RelaxedUnionIssue, StrictBlockIssue;
         private readonly Dictionary<int, HashSet<string>> groups;
 #if UNITY_EDITOR
         internal readonly (int Index, string Name, string Issue)[] Declarations;
@@ -16,7 +16,7 @@ namespace ThreeC.CharacterBehavior
 
         // 固定库内状态范围，并记录严格搜索无法产生候选或无法联合评分的原因。
         private GroundLibraryScope(List<int> indices, List<string> issues,
-            Dictionary<int, HashSet<string>> groups, string unionIssue, string relaxedUnionIssue
+            Dictionary<int, HashSet<string>> groups, string bindingIssue, string unionIssue, string relaxedUnionIssue
 #if UNITY_EDITOR
             , List<(int Index, string Name, string Issue)> declarations
 #endif
@@ -24,6 +24,7 @@ namespace ThreeC.CharacterBehavior
         {
             Indices = indices.ToArray();
             Issue = issues.Count == 0 ? null : string.Join("；", issues);
+            BindingIssue = bindingIssue;
             UnionIssue = unionIssue;
             RelaxedUnionIssue = relaxedUnionIssue;
             this.groups = groups;
@@ -50,32 +51,51 @@ namespace ThreeC.CharacterBehavior
             GroundLibrarySearchMode searchMode, bool useDeclaredLibraries, bool allowRelaxation = false)
         {
             var indices = new List<int>();
+            string bindingIssue = null;
             var issues = new List<string>();
             var groups = new Dictionary<int, HashSet<string>>();
 #if UNITY_EDITOR
             var declarations = new List<(int Index, string Name, string Issue)>();
 #endif
             if (useDeclaredLibraries)
-                foreach (var db in libraries.Databases) Add(db, null, null);
-            else if (!(sources?.Length > 0))
-                issues.Add("候选规则未配置来源库（Sources）");
-            else if (libraries == null)
             {
-                issues.Add("角色未登记来源库");
-#if UNITY_EDITOR
-                foreach (var source in sources)
-                {
-                    var database = source?.Library;
-                    declarations.Add((-1, database ? database.name : "缺失来源库", "角色未登记来源库"));
-                }
-#endif
+                for (int i = 0; i < libraries.Databases.Length; i++)
+                    Add(i, libraries.LibraryKeys[i], null, null, false);
+            }
+            else if (!(sources?.Length > 0))
+            {
+                bindingIssue = "候选规则未配置逻辑来源库";
+                issues.Add(bindingIssue);
             }
             else
-                for (int sourceIndex = 0; sourceIndex < sources.Length; sourceIndex++)
+            {
+                var declared = new HashSet<string>(StringComparer.Ordinal);
+                for (int i = 0; i < sources.Length; i++)
                 {
-                    var source = sources[sourceIndex];
-                    Add(source?.Library, source?.GroupIds, $"来源 {sourceIndex + 1} · ");
+                    var source = sources[i];
+                    string key = source?.LibraryKey;
+                    string location = $"来源 {i + 1} · ";
+                    if (string.IsNullOrWhiteSpace(key) || !declared.Add(key))
+                    {
+                        string error = string.IsNullOrWhiteSpace(key) ? "缺少逻辑库键" : $"重复的逻辑库键 {key}";
+                        bindingIssue ??= location + error;
+                        issues.Add(location + error);
+                        continue;
+                    }
+                    if (source.GroupKeys != null)
+                    {
+                        var listed = new HashSet<string>(StringComparer.Ordinal);
+                        foreach (string group in source.GroupKeys)
+                        {
+                            if (!string.IsNullOrWhiteSpace(group) && listed.Add(group)) continue;
+                            string error = string.IsNullOrWhiteSpace(group) ? "缺少逻辑组键" : $"重复的逻辑组键 {group}";
+                            bindingIssue ??= location + key + " · " + error;
+                            issues.Add(location + key + " · " + error);
+                        }
+                    }
+                    Add(libraries?.FindLibrary(key) ?? -1, key, source.GroupKeys, location, !source.Optional);
                 }
+            }
             string unionIssue = null, relaxedUnionIssue = null;
             if (searchMode == GroundLibrarySearchMode.Union)
             {
@@ -88,58 +108,43 @@ namespace ThreeC.CharacterBehavior
                         issues.Add($"放宽组过滤后，{relaxedUnionIssue}");
                 }
             }
-            return new GroundLibraryScope(indices, issues, groups, unionIssue, relaxedUnionIssue
+            bindingIssue ??= unionIssue ?? relaxedUnionIssue;
+            return new GroundLibraryScope(indices, issues, groups, bindingIssue, unionIssue, relaxedUnionIssue
 #if UNITY_EDITOR
                 , declarations
 #endif
                 );
 
-            // 将稳定 ID 解析为本库状态集合，无效引用仅从严格范围中排除。
-            void Add(CharacterMotionDatabase db, string[] groupIds, string sourceLabel)
+            // 解析完整来源后才发布，缺少可选绑定时连同该来源的放宽搜索一起跳过。
+            void Add(int index, string key, string[] groupKeys, string location, bool required)
             {
-                int i = db ? Array.IndexOf(libraries.Databases, db) : -1;
-                if (i < 0)
-                {
-                    string issue = db ? $"库 {db.name} 未登记" : "未指定或缺失来源库";
-                    issues.Add(sourceLabel + issue);
-#if UNITY_EDITOR
-                    declarations.Add((-1, db ? db.name : "缺失来源库", issue));
-#endif
-                    return;
-                }
-                string label = libraries.Names[i];
-                if (groups.ContainsKey(i))
-                {
-                    issues.Add($"{sourceLabel}{label} 重复指定");
-#if UNITY_EDITOR
-                    declarations.Add((i, label, "重复指定"));
-#endif
-                    return;
-                }
-#if UNITY_EDITOR
-                declarations.Add((i, label, libraries.Issues[i]));
-#endif
+                string label = index >= 0 ? libraries.Names[index] : key;
+                string issue = index < 0 ? "角色缺少该逻辑库绑定" : libraries.Issues[index];
                 HashSet<string> states = null;
-                if (groupIds?.Length > 0)
+                if (issue == null && groupKeys?.Length > 0)
                 {
                     states = new HashSet<string>(StringComparer.Ordinal);
-                    for (int groupIndex = 0; groupIndex < groupIds.Length; groupIndex++)
+                    foreach (string groupKey in groupKeys)
                     {
-                        string id = groupIds[groupIndex];
-                        var group = libraries.FindGroup(i, id);
-                        if (group == null)
-                        {
-                            issues.Add($"{sourceLabel}{label} 第 {groupIndex + 1} 个组 ID 无法解析：{(string.IsNullOrWhiteSpace(id) ? "空" : id)}");
-                            continue;
-                        }
+                        var group = libraries.FindGroup(index, groupKey, out issue);
+                        if (group == null) break;
                         foreach (var variant in group.Variants ?? Array.Empty<CharacterMotionTrack>())
-                            foreach (var path in variant?.States ?? Array.Empty<string>())
+                            foreach (string path in variant?.States ?? Array.Empty<string>())
                                 if (!string.IsNullOrWhiteSpace(path)) states.Add(path);
                     }
                 }
-                if (libraries.Issues[i] != null) { issues.Add($"{sourceLabel}{label} {libraries.Issues[i]}"); return; }
-                indices.Add(i);
-                groups.Add(i, states);
+#if UNITY_EDITOR
+                declarations.Add((index, label, issue));
+#endif
+                if (issue != null)
+                {
+                    string detail = $"{location}{label} · {issue}";
+                    issues.Add(detail);
+                    if (required) bindingIssue ??= detail;
+                    return;
+                }
+                indices.Add(index);
+                groups.Add(index, states);
             }
 
             // 分别核对严格和放宽阶段能提供候选的库所用评分布局。

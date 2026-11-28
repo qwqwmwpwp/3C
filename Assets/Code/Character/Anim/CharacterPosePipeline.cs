@@ -24,6 +24,7 @@ namespace ThreeC.CharacterBehavior
         private readonly bool sampleFeet;
         private readonly GroundMatchTuning matchTuning;
         private readonly GroundFeatureHistory featureHistory;
+        private readonly CharacterStrategyBoneHistory strategyBones;
         private readonly CharacterVisualRoot visualRoot;
         private readonly CharacterTransitionProfiles transitionTuning;
         private NativeArray<CharacterFootObservation> rawHistory;
@@ -44,7 +45,7 @@ namespace ThreeC.CharacterBehavior
         public CharacterPosePipeline(Animator animator, CharacterAnimationPlayer player, CharacterClipPlayback clips, Transform owner,
             CharacterBoundIkChannel[] channels, float walkableSlope, OrientationWarpTuning orientationTuning,
             CharacterInertiaTuning poseInertia, CharacterInertiaBones inertiaBones, CharacterAnimationConfiguration config,
-            float modelDropLimit, CharacterPosePipeline previous = null)
+            float modelDropLimit, CharacterPosePipeline previous = null, CharacterBasePoseSetup strategySetup = null)
         {
             this.animator = animator;
             this.player = player;
@@ -59,6 +60,7 @@ namespace ThreeC.CharacterBehavior
             sampleFeet = config.SamplesFeet || config.Modules.TransitionInertia;
             matchTuning = config.MatchCosts;
             featureHistory = new GroundFeatureHistory(config.SearchLibraries?.Layouts);
+            strategyBones = new CharacterStrategyBoneHistory(strategySetup);
             visualRoot = config.Modules.VisualRoot ? new CharacterVisualRoot(config.Modules.VisualRoot) : null;
             transitionTuning = config.Modules.TransitionInertia ? config.Transitions : null;
         }
@@ -104,11 +106,20 @@ namespace ThreeC.CharacterBehavior
         // 主线程拷贝自定义布局所需的姿态，后台规划始终只读托管快照。
         internal GroundFeatureQuery[] ReadFeatures(in CharacterFootObservation current) => featureHistory.Read(current, rawHistory);
 
+        // 交付当前模型最近一次求值的骨姿，静止角色无需先提交一个运动步。
+        internal CharacterBoneObservations ReadStrategyBones(in CharacterAnimationMotion motion) =>
+            strategyBones.Requested && (!motion.IsValid || !hasMotionVersion || motionVersion == motion.SimulationVersion) &&
+            !frozen && avatar == animator.avatar && !player.NeedsRebind ? strategyBones.Read() : default;
+
+        // 切换时钟或运动来源时清除通用骨骼历史，等待下一次姿态求值。
+        internal void ClearStrategyObservations() => strategyBones.Clear();
+
         // 读取本帧片段遮罩与曲线，准备求值前的惯性、IK 和脚姿采样参数。
         public void Prepare(in CharacterAnimationComposition selection, CharacterAnimationMotion motion,
             in CharacterAnimationPlaybackPlan plan, in CharacterPlaybackFrameStep step)
         {
-            if (!Ik.HasChannels && orientation == null && poseInertia == null && !sampleFeet && visualRoot == null && transitionTuning == null) return;
+            if (!Ik.HasChannels && orientation == null && poseInertia == null && !sampleFeet && !strategyBones.Requested &&
+                visualRoot == null && transitionTuning == null) return;
             if (!triedBinding || animator.avatar != avatar)
                 Bind();
             if (!graph.IsValid()) return;
@@ -128,10 +139,12 @@ namespace ThreeC.CharacterBehavior
             Vector2 contacts = default;
             float warpAngle = 0f;
             var probeWarp = new CharacterFootWarp(Quaternion.identity, Quaternion.identity, Vector3.zero);
-            bool prepareJob = visualRoot != null || transitionBones.Length > 0 || orientation != null || poseBindings.Length > 0 || Ik.HasFeet || readsFeet;
+            bool prepareJob = visualRoot != null || transitionBones.Length > 0 || orientation != null || poseBindings.Length > 0 ||
+                Ik.HasFeet || readsFeet || strategyBones.Requested;
             if (prepareJob)
             {
                 var job = playable.GetJobData<CharacterPoseJob>();
+                job.StrategyBones.Time = sampleTime;
                 if (job.VisualRoot.Bound)
                 {
                     visualRoot.Advance(clips, motion, animator.transform, deltaTime);
@@ -184,7 +197,8 @@ namespace ThreeC.CharacterBehavior
                 CharacterFootSampler sampler = default;
                 bool validFeet = sampleFeet && CharacterFootSampler.TryBind(animator, out sampler);
                 var orientationBones = CharacterOrientationBones.Bind(animator, orientationTuning);
-                if (!any && !orientationBones.Bound && !rootBone.Bound && transitions.Length == 0 && bones.Length == 0 && !validFeet) { DisposeBuffers(); return; }
+                if (!any && !orientationBones.Bound && !rootBone.Bound && transitions.Length == 0 && bones.Length == 0 &&
+                    !validFeet && !strategyBones.Requested) { DisposeBuffers(); return; }
                 poseBindings = new NativeArray<CharacterPoseBoneBinding>(bones, Allocator.Persistent);
                 poseHistory = new NativeArray<CharacterPoseBoneHistory>(bones.Length, Allocator.Persistent);
                 feet = new NativeArray<CharacterFootObservation>(validFeet ? 1 : 0, Allocator.Persistent);
@@ -196,6 +210,7 @@ namespace ThreeC.CharacterBehavior
                 graph = clips.Graph;
                 playable = AnimationScriptPlayable.Create(graph, new CharacterPoseJob
                     { Skeleton = Ik.Skeleton, Correction = Ik.CreateCorrection(animator, owner), Feet = sampler, Features = featureSampler,
+                        StrategyBones = strategyBones.Bind(animator),
                         VisualRoot = rootBone, Transition = new CharacterTransitionInertia { Bones = transitionBones },
                         Orientation = orientationBones,
                         PoseBindings = poseBindings, PoseHistory = poseHistory });
@@ -220,6 +235,7 @@ namespace ThreeC.CharacterBehavior
                 return;
             }
             if (frozen == value) return;
+            strategyBones.Clear();
             visualRoot?.Reset();
             CharacterTransitionInertia.Reset(transitionBones);
             orientation?.Reset();
@@ -246,6 +262,7 @@ namespace ThreeC.CharacterBehavior
         // 清除旧模拟版本的握持、脚姿和惯性状态。
         public void ClearPose()
         {
+            strategyBones.Clear();
             visualRoot?.Reset();
             CharacterTransitionInertia.Reset(transitionBones);
             orientation?.Reset();
@@ -292,6 +309,7 @@ namespace ThreeC.CharacterBehavior
         // 释放动画作业使用的原生缓冲区。
         private void DisposeBuffers()
         {
+            strategyBones.Dispose();
             featureHistory.Dispose();
             if (transitionBones.IsCreated) transitionBones.Dispose();
             if (rawHistory.IsCreated) rawHistory.Dispose();

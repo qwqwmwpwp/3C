@@ -76,4 +76,15 @@ MonoBehaviour:
     StateExitTransitionDuration: 1
     LayerBlendSeconds: 0
     InterruptionPolicy: 0
-  mappings: []
+  - Key: motion.dash
+    IsMotionOverride: 1
+    ReferenceSpeed: 6.52
+    EqualPriorityTakeover: 1
+    OnTakeoverFallback: $gait.idle
+    Region: 0
+    Priority: 100
+    StateName: Lower Body.dash
+    StartNormalizedTime: 0
+    StateTransitionDuration: 0.04
+    StateExitTransitionDuration: 0.04
+    LayerBlendSeconds: 0

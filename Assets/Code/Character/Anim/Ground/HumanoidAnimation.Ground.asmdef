@@ -1,0 +1,8 @@
+{
+    "name": "HumanoidAnimation.Ground",
+    "rootNamespace": "ThreeC.CharacterBehavior",
+    "references": [
+        "HumanoidAnimation.Runtime"
+    ],
+    "autoReferenced": true
+}

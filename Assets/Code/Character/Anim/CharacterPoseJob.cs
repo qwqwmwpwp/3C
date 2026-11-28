@@ -14,6 +14,7 @@ namespace ThreeC.CharacterBehavior
         public CharacterPoseInertiaFrame Inertia;
         public CharacterFootSampler Feet;
         public GroundFeatureSampler Features;
+        public CharacterStrategyBoneSampler StrategyBones;
         public CharacterVisualRootBone VisualRoot;
         public CharacterTransitionInertia Transition;
         public CharacterOrientationBones Orientation;
@@ -26,6 +27,7 @@ namespace ThreeC.CharacterBehavior
         // 原始姿态先入历史，再依次执行切换惯性、视觉根、剩余腿向、胸臂表现和最终 IK。
         public void ProcessAnimation(AnimationStream stream)
         {
+            if (!Frozen) StrategyBones.Capture(stream);
             if (!Frozen && Feet.History.Length > 0)
             {
                 var before = Feet.History[0];

@@ -3,78 +3,59 @@ namespace ThreeC.CharacterBehavior
     // 表示单次播放从排队到实际下发及结束的状态。
     public enum CharacterActionPlaybackStatus { Pending, Started, Completed, Interrupted, Withdrawn }
 
-    // 区分新的表现请求、行为开始及已有执行的续播。
-    public enum CharacterPlaybackStartSource { ExplicitRequest, BehaviorGrant, Rebind, ArbitrationRecovery }
-
-    // 标明真正使本次播放结束的事实；终态来源在回执提交后固定。
+    // 标明本次实际播放结束的原因。
     public enum CharacterPlaybackEndSource
     {
-        None, BehaviorWindowEnded, ClipFinished, ArbitrationLost, ExplicitWithdrawal, BehaviorWithdrawn,
-        BehaviorInterrupted, ModuleRemoved, StateReset, ResourceUnavailable, Rebind, Paused,
-        BatchDiscarded, Teleport, Knockback, ExternalControl, ComponentDisabled
+        None, WindowExpired, ClipFinished, ArbitrationLost, ExplicitWithdrawal, ModuleRemoved,
+        StateReset, ResourceUnavailable, Rebind, Paused, BatchDiscarded, MotionBoundary, ComponentDisabled
     }
 
-    // 固定表现需求发出时的请求、行为执行和攻击招式归属。
-    internal readonly struct CharacterPlaybackOrigin
+    // 提交独立的单次动作，时长表示从指定素材入点到末尾所用的秒数。
+    public readonly struct CharacterOneShotRequest
     {
-        internal readonly int StateVersion, Version;
-        internal readonly CharacterBehaviorId Behavior;
-        internal readonly long Execution, Request, Move;
+        public readonly string Key;
+        public readonly float Weight;
+        public readonly float? StartPhase, Duration, Transition; // 过渡以秒为单位，空值使用动作配置。
 
-        // 纯表现请求只填写代次；行为和招式的零编号表示没有对应来源。
-        internal CharacterPlaybackOrigin(int stateVersion, int version, CharacterBehaviorId behavior = default,
-            long execution = 0, long request = 0, long move = 0)
+        // 冻结请求参数，后续装配变化不改变已经受理的播放时钟。
+        public CharacterOneShotRequest(string key, float weight = 1f, float? startPhase = null,
+            float? duration = null, float? transition = null)
         {
-            StateVersion = stateVersion;
-            Version = version;
-            Behavior = behavior;
-            Execution = execution;
-            Request = request;
-            Move = move;
+            Key = key;
+            Weight = weight;
+            StartPhase = startPhase;
+            Duration = duration;
+            Transition = transition;
         }
     }
 
-    /// <summary>一次单次播放的回执；行为时间窗结束可以发生在首条播放指令之前。</summary>
+    /// <summary>记录已受理请求的真实起播和唯一终态。</summary>
     public sealed class CharacterActionPlayback
     {
         private static long lastPlaybackId;
-        internal CharacterPlaybackOrigin Origin { get; }
         internal CharacterPlaybackClock Clock;
         internal readonly int ClipId;
         internal CharacterClipProgress? Cursor { get; private set; }
         internal CharacterPlaybackEndSource StopSource { get; private set; }
         internal CharacterActionPlaybackStatus StopStatus { get; private set; }
         internal double LastEvaluatedAt { get; private set; }
+        internal bool EndSampleEvaluated { get; private set; }
         internal float? EntryCoverage; // 仅在首次真实求值后锁定，图重建不重置正在执行的权重过渡。
-        internal float InitialPhase; // 仅用于中途装配时跳过请求之前的事件。
         public string Key { get; }
         public long InstanceId { get; } // 原有的动作键内序号。
         public long PlaybackId { get; } // 可跨动作键、动画重绑及组件启停追踪。
-        public int StateVersion => Origin.StateVersion;
-        public int SimulationVersion => Origin.Version;
-        public CharacterBehaviorId BehaviorId => Origin.Behavior;
-        public long ExecutionId => Origin.Execution;
-        public long RequestId => Origin.Request;
-        public long MoveInstanceId => Origin.Move;
-        public CharacterPlaybackStartSource StartSource { get; }
         public CharacterPlaybackEndSource EndSource { get; private set; }
         public CharacterActionPlaybackStatus Status { get; private set; }
         public bool HasStarted { get; private set; }
         internal CharacterActionPlaybackStatus ObservedStatus => pendingStatus ?? Status;
-        internal bool WasPreempted { get; set; }
-        internal float LastObservedPhase { get; private set; }
         private CharacterActionPlaybackStatus? pendingStatus;
         private CharacterPlaybackEndSource pendingSource;
-        private bool observedTarget;
 
-        // 为这次申请分配播放编号，并冻结动作键和原始业务身份。
-        internal CharacterActionPlayback(string key, long instanceId, CharacterPlaybackOrigin origin,
-            CharacterPlaybackStartSource startSource, CharacterPlaybackClock clock = default, int clipId = 0)
+        // 为本次播放分配独立编号并保存已解析的素材身份和时钟。
+        internal CharacterActionPlayback(string key, long instanceId, CharacterPlaybackClock clock, int clipId)
         {
             Key = key;
             InstanceId = instanceId;
-            Origin = origin;
-            StartSource = startSource;
             Clock = clock;
             ClipId = clipId;
             PlaybackId = System.Threading.Interlocked.Increment(ref lastPlaybackId);
@@ -86,18 +67,19 @@ namespace ThreeC.CharacterBehavior
         // 记录合法采样的截止与唯一终止原因；相同时刻的显式打断优先于自然窗口退出。
         internal void Cancel(double at, CharacterActionPlaybackStatus status, CharacterPlaybackEndSource source)
         {
-            if (at > Clock.StopAt || at == Clock.StopAt && StopSource != CharacterPlaybackEndSource.BehaviorWindowEnded) return;
+            if (at > Clock.StopAt || at == Clock.StopAt && StopSource != CharacterPlaybackEndSource.WindowExpired) return;
             Clock.Cancel(at);
             StopStatus = status;
             StopSource = source;
         }
 
         // 图求值后只接收当前句柄与素材的真实游标，暂停和同素材重绑保留该值。
-        internal void RecordCursor(in CharacterClipProgress sample, double at)
+        internal void RecordCursor(in CharacterClipProgress sample, double at, bool evaluatedEnd)
         {
             if (sample.PlaybackId != PlaybackId || sample.ClipId != ClipId || sample.loop) return;
             Cursor = sample;
             LastEvaluatedAt = at;
+            EndSampleEvaluated |= evaluatedEnd;
         }
 
         // 只在播放端实际下发指令后确认首次开始。
@@ -128,19 +110,6 @@ namespace ThreeC.CharacterBehavior
             EndSource = discarded == CharacterPlaybackEndSource.None ? pendingSource : discarded;
             pendingStatus = null;
             return true;
-        }
-
-        // 只读取仍在播放的实例，已进入终态的回执忽略迟到的片段观测。
-        internal CharacterActionPlaybackStatus Observe(int state, in CharacterLayerObservation layer)
-        {
-            if (ObservedStatus != CharacterActionPlaybackStatus.Started || !layer.Ready) return ObservedStatus;
-            var current = layer.Destination;
-            if (current.fullPathHash != state)
-                return observedTarget ? CharacterActionPlaybackStatus.Interrupted : Status;
-            observedTarget = true;
-            LastObservedPhase = current.normalizedTime;
-            if (current.loop) return CharacterActionPlaybackStatus.Interrupted;
-            return current.normalizedTime >= 1f ? CharacterActionPlaybackStatus.Completed : Status;
         }
     }
 }

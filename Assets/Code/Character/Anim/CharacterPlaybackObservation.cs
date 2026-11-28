@@ -3,17 +3,23 @@ using UnityEngine;
 namespace ThreeC.CharacterBehavior
 {
     // 标识实际求值的片段、句柄与精确素材秒数，归一化相位供选姿和结束判定。
-    internal readonly struct CharacterClipProgress
+    public readonly struct CharacterClipProgress
     {
-        public readonly int fullPathHash;
-        public readonly float normalizedTime;
-        public readonly bool loop;
-        internal readonly int ClipId;
-        internal readonly long PlaybackId;
-        internal readonly double Seconds;
+        internal readonly int fullPathHash;
+        internal readonly float normalizedTime;
+        internal readonly bool loop;
+        public float NormalizedTime => normalizedTime;
+        public bool Looping => loop;
+        public readonly int ClipId;
+        public readonly long PlaybackId;
+        public readonly double Seconds;
+        public readonly bool AtNaturalEnd;
+
+        // 比对策略装配时取得的状态和此声部当前播放的状态。
+        public bool Plays(CharacterPoseHandle state) => state.IsValid && fullPathHash == state.Hash;
 
         // 捕获素材声部的实际时钟，不从行为目标或上一帧计划反推。
-        public CharacterClipProgress(int hash, float progress, bool looping, int clipId, long playbackId, double seconds)
+        internal CharacterClipProgress(int hash, float progress, bool looping, int clipId, long playbackId, double seconds, bool atNaturalEnd = false)
         {
             fullPathHash = hash;
             normalizedTime = progress;
@@ -21,12 +27,13 @@ namespace ThreeC.CharacterBehavior
             ClipId = clipId;
             PlaybackId = playbackId;
             Seconds = seconds;
+            AtNaturalEnd = atNaturalEnd;
         }
 
     }
 
     // 保存一个片段混合源的当前姿态、淡入目标和对应长度。
-    internal readonly struct CharacterLayerObservation
+    public readonly struct CharacterLayerObservation
     {
         public readonly CharacterClipProgress Current, Next;
         public readonly float SourceLength, DestinationLength;
@@ -49,19 +56,23 @@ namespace ThreeC.CharacterBehavior
     }
 
     /// <summary>同一渲染帧、下发任何播放指令前取得的播放观测。</summary>
-    internal readonly struct CharacterPlaybackObservation
+    public readonly struct CharacterPlaybackObservation
     {
-        public readonly CharacterLayerObservation Full, Lower, Upper, Overlay;
+        internal readonly CharacterLayerObservation Full, Lower, Upper, Overlay;
+        public CharacterLayerObservation Baseline => Full;
+        public CharacterLayerObservation LowerBody => Lower;
+        public CharacterLayerObservation UpperBody => Upper;
+        public CharacterLayerObservation FullBodyOverlay => Overlay;
         public readonly bool? LeftSupport;
         public readonly bool EarlyStance;
 
-        // 仅在收步相关阶段把同一帧的承重脚观测交给地面选姿。
-        internal CharacterPlaybackObservation ForPhase(CharacterLocomotionPhase phase)
+        // 按策略需要保留或隐藏承重脚观测，其他播放游标来自同一帧。
+        internal CharacterPlaybackObservation WithFootObservation(bool include)
         {
-            bool release = phase == CharacterLocomotionPhase.BrakeLeadIn || phase == CharacterLocomotionPhase.Stopping;
-            return new CharacterPlaybackObservation(Full, Lower, Upper, Overlay, release ? LeftSupport : null, release && EarlyStance);
+            return new CharacterPlaybackObservation(Full, Lower, Upper, Overlay, include ? LeftSupport : null, include && EarlyStance);
         }
 
+        // 固定本次采集的基础层、三个动作层和承重脚观测。
         public CharacterPlaybackObservation(CharacterLayerObservation full, CharacterLayerObservation lower,
             CharacterLayerObservation upper, CharacterLayerObservation overlay, bool? leftSupport, bool earlyStance)
         {

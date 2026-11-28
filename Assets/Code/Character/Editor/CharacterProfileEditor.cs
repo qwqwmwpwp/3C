@@ -30,9 +30,9 @@ namespace ThreeC.CharacterBehavior
                 Debug.LogWarning($"{profile.name} / {problem}", profile);
             }
             CharacterAnimationConfiguration animation = null;
-            try { animation = profile.BindAnimation(new CharacterModelBindings(), new CharacterProfileOverrides()); }
+            try { animation = profile.AnimationConfig ? profile.AnimationConfig.Bind(new CharacterModelBindings()) : null; }
             catch (ArgumentException error) { Report(error.Message); }
-            CharacterComboValidation.Check(profile.AttackTable, animation, Report);
+            CharacterComboAnimationValidation.Check(profile.AttackTable, animation, Report, profile.AnimationActions);
             if (!found) Debug.Log($"{profile.name}：连招路线和攻击映射检查通过。", profile);
         }
     }

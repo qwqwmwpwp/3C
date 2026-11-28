@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    /// <summary>提供单个已提交固定步的平面运动观测及其动画表现轨迹。</summary>
+    /// <summary>提供已提交固定步的三维运动、地面投影及动画表现轨迹。</summary>
     public readonly struct CharacterAnimationMotion
     {
         /// <summary>是否来自当前模拟连续性内的有效已提交固定步；默认值与暂停观测无效。</summary>
@@ -10,6 +10,11 @@ namespace ThreeC.CharacterBehavior
         public long FrameNumber { get; }
         /// <summary>本步提交时的模拟连续性代次；跨代次的速度和方向不可用于检测反向。</summary>
         public int SimulationVersion { get; }
+        internal Vector3 WorldVelocity { get; }
+        internal Vector3 WorldExpectedVelocity { get; }
+        internal Vector3 WorldAcceleration { get; }
+        internal Vector3 WorldFacing { get; }
+        internal Vector3 WorldExpectedFacing { get; }
         /// <summary>实际与期望世界平面速度，单位米/秒。</summary>
         public Vector3 ActualVelocity { get; }
         public Vector3 ExpectedVelocity { get; }
@@ -24,7 +29,10 @@ namespace ThreeC.CharacterBehavior
         public Vector3 ActualAcceleration { get; }
         /// <summary>角色相对实际移动方向：x 向右，y 向前；静止时为零。</summary>
         public Vector2 LocalMoveDirection { get; }
-        /// <summary>朝向至期望移动方向的有符号角，单位度；没有期望移动时为零。</summary>
+        /// <summary>求解后的实际世界平面朝向及本步期望朝向。</summary>
+        public Vector3 Facing { get; }
+        public Vector3 ExpectedFacing { get; }
+        /// <summary>实际朝向至期望朝向的有符号角，单位度。</summary>
         public float FacingDeltaDegrees { get; }
         /// <summary>沿期望方向损失的速度比例，0 为畅通，1 为完全受阻。</summary>
         public float Obstruction { get; }
@@ -32,8 +40,8 @@ namespace ThreeC.CharacterBehavior
         public CollisionFlags CollisionFlags { get; }
         public CharacterGroundTrajectory Trajectory { get; }
 
-        // 将固定步位移换算为平面速度、加速度和受阻程度，并关联同一步的表现轨迹。
-        internal CharacterAnimationMotion(in CharacterControllerFrameResult frame, in CharacterGroundTrajectory trajectory,
+        // 以原始位移求世界三维运动，另按既有平面规则形成地面步态所需观测。
+        internal CharacterAnimationMotion(in CharacterAnimationMovement frame, in CharacterGroundTrajectory trajectory,
             Vector3 previousVelocity = default, float velocitySampleInterval = 0f)
         {
             RetainedStrideSpeed = null;
@@ -41,23 +49,32 @@ namespace ThreeC.CharacterBehavior
             FrameNumber = frame.FrameNumber;
             SimulationVersion = frame.SimulationVersion;
             float inverseTime = frame.DeltaTime > 0.000001f ? 1f / frame.DeltaTime : 0f;
+            WorldVelocity = frame.ActualDisplacement * inverseTime;
+            WorldExpectedVelocity = frame.ExpectedDisplacement * inverseTime;
+            WorldFacing = frame.Facing.sqrMagnitude > 0.000001f ? frame.Facing.normalized : Vector3.forward;
+            WorldExpectedFacing = frame.ExpectedFacing?.normalized ??
+                (WorldExpectedVelocity.sqrMagnitude > 0.000001f ? WorldExpectedVelocity.normalized : WorldFacing);
             ActualVelocity = Vector3.ProjectOnPlane(frame.ActualDisplacement, Vector3.up) * inverseTime;
             ExpectedVelocity = Vector3.ProjectOnPlane(frame.ExpectedDisplacement, Vector3.up) * inverseTime;
             HasAcceleration = IsValid && velocitySampleInterval > 0f;
-            PreviousActualVelocity = HasAcceleration ? previousVelocity : default;
-            ActualAcceleration = HasAcceleration ? (ActualVelocity - previousVelocity) / velocitySampleInterval : default;
-            Vector3 forward = Vector3.ProjectOnPlane(frame.FacingDirection, Vector3.up).normalized;
+            WorldAcceleration = HasAcceleration ? (WorldVelocity - previousVelocity) / velocitySampleInterval : default;
+            PreviousActualVelocity = HasAcceleration ? Vector3.ProjectOnPlane(previousVelocity, Vector3.up) : default;
+            ActualAcceleration = HasAcceleration ? (ActualVelocity - PreviousActualVelocity) / velocitySampleInterval : default;
+            Vector3 forward = Vector3.ProjectOnPlane(frame.Facing, Vector3.up).normalized;
             if (forward.sqrMagnitude < 0.000001f)
                 forward = Vector3.forward;
             Vector3 right = Vector3.Cross(Vector3.up, forward);
             Vector3 direction = ActualVelocity.normalized;
             LocalMoveDirection = new Vector2(Vector3.Dot(direction, right), Vector3.Dot(direction, forward));
-            FacingDeltaDegrees = ExpectedVelocity.sqrMagnitude > 0.000001f
-                ? Vector3.SignedAngle(forward, ExpectedVelocity, Vector3.up) : 0f;
+            Facing = forward;
+            ExpectedFacing = frame.ExpectedFacing.HasValue
+                ? Vector3.ProjectOnPlane(frame.ExpectedFacing.Value, Vector3.up).normalized
+                : ExpectedVelocity.sqrMagnitude > 0.000001f ? ExpectedVelocity.normalized : forward;
+            FacingDeltaDegrees = Vector3.SignedAngle(Facing, ExpectedFacing, Vector3.up);
             float expectedSpeed = ExpectedVelocity.magnitude;
             Obstruction = expectedSpeed > 0.000001f
                 ? 1f - Mathf.Clamp01(Vector3.Dot(ActualVelocity, ExpectedVelocity / expectedSpeed) / expectedSpeed) : 0f;
-            CollisionFlags = frame.CollisionFlags;
+            CollisionFlags = frame.Contacts;
             Trajectory = trajectory;
         }
 
@@ -86,6 +103,7 @@ namespace ThreeC.CharacterBehavior
         private CharacterAnimationMotion motion;
         private float previousStepDuration;
         private readonly Transform owner;
+        internal ICharacterDetailedPose Detail { get; set; }
         private Vector3 lastPosition;
         private bool discardNextStep, jumpAwaitingCommit;
 
@@ -100,14 +118,13 @@ namespace ThreeC.CharacterBehavior
         internal void ConfigureTeleport(float distance) => teleportDistanceSquared = distance > 0f ? distance * distance : 0f;
 
         // 重建时恢复同代次最近固定步的地面投影或外部轨迹，下一步开始采样速度。
-        public void Reset(CharacterControllerFrameResult latestFrame, int currentSimulationVersion,
-            CharacterGroundTrajectory externalTrajectory = default)
+        public void Reset(CharacterAnimationMovement latestFrame, int currentSimulationVersion)
         {
             lastFrameNumber = latestFrame.FrameNumber; // 重建后从下一次提交开始取速度。
             simulationVersion = currentSimulationVersion;
             ClearSamples();
             if (latestFrame.FrameNumber > 0 && latestFrame.SimulationVersion == currentSimulationVersion)
-                motion = new CharacterAnimationMotion(null, StepTrajectory(latestFrame, externalTrajectory));
+                motion = new CharacterAnimationMotion(null, StepTrajectory(latestFrame));
             lastPosition = owner.position;
             discardNextStep = jumpAwaitingCommit = false;
         }
@@ -135,8 +152,7 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 对每个新固定步取一次地面投影或外部轨迹，并按连续性更新速度采样。
-        public bool Receive(CharacterControllerFrameResult frame, int currentSimulationVersion, bool simulating, out bool resetPose,
-            CharacterGroundTrajectory externalTrajectory = default)
+        public bool Receive(CharacterAnimationMovement frame, int currentSimulationVersion, bool simulating, out bool resetPose)
         {
             SynchronizeVersion(currentSimulationVersion);
             Vector3 position = owner.position;
@@ -160,7 +176,7 @@ namespace ThreeC.CharacterBehavior
             bool jumped = teleportDistanceSquared > 0f && frame.ActualDisplacement.sqrMagnitude > teleportDistanceSquared;
             bool consecutive = frame.FrameNumber == lastFrameNumber + 1;
             lastFrameNumber = frame.FrameNumber;
-            var trajectory = StepTrajectory(frame, externalTrajectory);
+            var trajectory = StepTrajectory(frame);
             bool skip = resetPose || jumped || discardNextStep;
             resetPose |= jumped && !jumpAwaitingCommit;
             discardNextStep = jumpAwaitingCommit = false;
@@ -170,13 +186,13 @@ namespace ThreeC.CharacterBehavior
                 return frame.FrameNumber > 0; // 继续交付本步行为边沿，位移交给下一次正常采样。
             }
             float interval = consecutive && previousStepDuration > 0f ? (previousStepDuration + frame.DeltaTime) * 0.5f : 0f;
-            motion = frame.FrameNumber > 0 ? new CharacterAnimationMotion(frame, trajectory, motion.ActualVelocity, interval) : default;
+            motion = frame.FrameNumber > 0 ? new CharacterAnimationMotion(frame, trajectory, motion.WorldVelocity, interval) : default;
             previousStepDuration = motion.IsValid ? frame.DeltaTime : 0f;
             return motion.IsValid;
         }
 
         // 只交付当前代次和步号对应的采样，重复读取沿用该步原始表现轨迹。
-        public CharacterAnimationMotion Read(CharacterControllerFrameResult latestFrame,
+        public CharacterAnimationMotion Read(CharacterAnimationMovement latestFrame,
             int currentSimulationVersion, bool simulating)
         {
             SynchronizeVersion(currentSimulationVersion);
@@ -186,8 +202,8 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 从同一已提交固定步取出内置驱动的地面投影或外部驱动附带的轨迹。
-        private static CharacterGroundTrajectory StepTrajectory(in CharacterControllerFrameResult frame, in CharacterGroundTrajectory externalTrajectory) =>
-            frame.Ground.IsValid ? CharacterGroundTrajectory.FromGround(frame.Ground) : externalTrajectory;
+        private CharacterGroundTrajectory StepTrajectory(in CharacterAnimationMovement frame) =>
+            Detail?.StepTrajectory(frame) ?? frame.Trajectory;
 
         private void SynchronizeVersion(int currentSimulationVersion)
         {

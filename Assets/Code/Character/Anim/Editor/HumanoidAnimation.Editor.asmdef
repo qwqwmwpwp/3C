@@ -1,0 +1,12 @@
+{
+    "name": "HumanoidAnimation.Editor",
+    "rootNamespace": "ThreeC.CharacterBehavior",
+    "references": [
+        "HumanoidAnimation.Runtime",
+        "HumanoidAnimation.Ground"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "autoReferenced": true
+}

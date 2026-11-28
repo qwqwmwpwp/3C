@@ -2,6 +2,13 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
+    // 记录基础姿势提交的收步结果，供播放与编辑器观测。
+    internal enum CharacterReleaseDecision
+    {
+        None, ContinueStride, WaitForEvaluation, EnterOnContact, EnterOnBraking, FollowStop,
+        FeetOverridden, Finished, MissingStop, Interrupted, EnterOnMatch
+    }
+
     internal enum CharacterAnimationPlaybackCommand { Keep, Play, CrossFade }
 
     // 记录最终播放命令由哪项资源、规则或匹配决策产生。
@@ -112,7 +119,7 @@ namespace ThreeC.CharacterBehavior
 
         // 延续原图的部位与蒙版，从已显示的素材时刻重建同素材声部。
         internal CharacterAnimationLayerPlan(in CharacterAnimationLayerPlan source, in CharacterLayerObservation seen,
-            CharacterClipPlayback clips, CharacterAnimationComposer composer, in CharacterAnimationPlaybackPlan frame,
+            CharacterClipPlayback clips,
             in CharacterPlaybackFrameStep step)
         {
             this = source;
@@ -129,25 +136,7 @@ namespace ThreeC.CharacterBehavior
             Command = CharacterAnimationPlaybackCommand.Keep;
             RestoredSeconds = cursor.Seconds;
             if (handle == null) return;
-            var timing = source.Demand.Timing;
-            if (handle.Clock.Valid)
-                timing = new CharacterActionTiming(handle.Clock.Sample(step.End), handle.Cursor, handle.InitialPhase);
-            else if (timing.WeightPhase.HasValue)
-            {
-                bool followClip = !timing.ClipPhase.HasValue;
-                float phase = timing.WeightPhase.Value;
-                var latest = composer.CurrentTiming(handle);
-                if (followClip && seen.DestinationLength > 0f)
-                {
-                    float rate = clips.Pace(source.StateHash).Rate(frame.StrideSpeed, frame.StartSpeed, frame.StopRate, out _);
-                    phase = Mathf.Clamp01((float)((cursor.Seconds + step.GraphDelta * rate) / seen.DestinationLength));
-                }
-                else if (latest.WeightPhase.HasValue)
-                    phase = Mathf.Lerp(phase, latest.WeightPhase.Value, (float)step.Fraction);
-                timing = new CharacterActionTiming(timing.StartClipPhase, phase,
-                    latest.Handoff.Valid ? latest.Handoff : timing.Handoff, timing.StartAtZero, timing.Resumed, followClip);
-            }
-            Demand = Demand.WithTiming(timing);
+            Demand = Demand.WithTiming(new CharacterActionTiming(handle.Clock.Sample(step.End), handle.Cursor));
             Weight = Demand.Weight;
         }
 
@@ -195,12 +184,12 @@ namespace ThreeC.CharacterBehavior
 
         // 按上次真实提交的分层关系生成本段截止时刻的姿态，完成或换素材的声部退出。
         internal CharacterAnimationPlaybackPlan(in CharacterAnimationPlaybackPlan source, CharacterLayerObservation[] seen,
-            CharacterClipPlayback clips, CharacterAnimationComposer composer, in CharacterPlaybackFrameStep step)
+            CharacterClipPlayback clips, in CharacterPlaybackFrameStep step)
         {
             this = source;
-            FullBody = new CharacterAnimationLayerPlan(source.FullBody, seen[(int)source.FullBody.Demand.Source], clips, composer, source, step);
-            UpperOwner = new CharacterAnimationLayerPlan(source.UpperOwner, seen[(int)source.UpperOwner.Demand.Source], clips, composer, source, step);
-            LowerOwner = new CharacterAnimationLayerPlan(source.LowerOwner, seen[(int)source.LowerOwner.Demand.Source], clips, composer, source, step);
+            FullBody = new CharacterAnimationLayerPlan(source.FullBody, seen[(int)source.FullBody.Demand.Source], clips, step);
+            UpperOwner = new CharacterAnimationLayerPlan(source.UpperOwner, seen[(int)source.UpperOwner.Demand.Source], clips, step);
+            LowerOwner = new CharacterAnimationLayerPlan(source.LowerOwner, seen[(int)source.LowerOwner.Demand.Source], clips, step);
         }
 
         // 保存已获选的基础和覆盖计划，给每个部位确定最终姿态来源。

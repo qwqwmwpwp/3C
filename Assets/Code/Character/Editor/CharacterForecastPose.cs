@@ -7,6 +7,7 @@ namespace ThreeC.CharacterBehavior
     {
         private readonly CharacterBehaviorAnimator owner;
         private CharacterAnimationConfiguration config;
+        private readonly CharacterBehaviorAnimationProfile actions;
         private readonly CharacterForecastSettings settings;
         private string cachedPath;
         private AnimationClip last;
@@ -18,9 +19,10 @@ namespace ThreeC.CharacterBehavior
         internal CharacterForecastPose(CharacterBehaviorAnimator owner, CharacterBehaviorDriver driver)
         {
             this.owner = owner;
-            try { config = owner.ActiveConfiguration ?? owner.Configuration(driver); }
+            try { config = owner.ActiveConfiguration ?? owner.Configuration(); }
             catch (System.ArgumentException error) { Debug.LogWarning(error.Message, owner); }
             settings = driver.ForecastSettings;
+            actions = driver.Profile ? driver.Profile.AnimationActions : null;
         }
 
         // 按预测输入选择已烘焙状态并计算预览采样时间。
@@ -44,7 +46,7 @@ namespace ThreeC.CharacterBehavior
             {
                 float speed = Vector3.ProjectOnPlane(pose.Velocity, Vector3.up).magnitude;
                 if (!config.HasGait) path = config.IdleState;
-                else if ((pose.Behaviors & CharacterBehaviorId.Dash) != 0) path = config.DashState;
+                else if ((pose.Behaviors & CharacterBehaviorId.Dash) != 0) path = FindActionPath(actions ? actions.MotionOverrideKey : null);
                 else if (speed <= Mathf.Max(0.03f, config.IdleEnterSpeed)) path = config.IdleState;
                 else
                 {
@@ -78,14 +80,15 @@ namespace ThreeC.CharacterBehavior
         // 按稳定状态编号解析预测姿态应使用的动作路径。
         private string AttackPath(int stateId)
         {
-            if (config.BehaviorAnimations == null || config.Actions == null) return null;
-            foreach (var binding in config.BehaviorAnimations)
-            {
-                if (binding == null || binding.BehaviorId != CharacterBehaviorId.Attack ||
-                    (binding.AttackStateId != 0 && binding.AttackStateId != stateId)) continue;
-                foreach (var action in config.Actions)
-                    if (action != null && action.Key == binding.EntryAction) return action.StateName;
-            }
+            return FindActionPath(actions ? actions.FindAttackAction(stateId) : null);
+        }
+
+        // 从运行时装配中读取所选语义动作对应的姿态路径。
+        private string FindActionPath(string key)
+        {
+            if (string.IsNullOrEmpty(key) || config.Actions == null) return null;
+            foreach (var action in config.Actions)
+                if (action != null && action.Key == key) return action.StateName;
             return null;
         }
 

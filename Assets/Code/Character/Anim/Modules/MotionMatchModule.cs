@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    // 声明角色的地面搜索库、匹配规则和评分配置。
+    // 声明可复用的地面匹配规则和评分配置。
     [CreateAssetMenu(menuName = "3C/动画模块/地面动作匹配", fileName = "地面动作匹配")]
     public sealed class MotionMatchModule : AnimationModule
     {
@@ -17,8 +17,6 @@ namespace ThreeC.CharacterBehavior
         private float matchReverseHold = 0.08f;
         [InspectorName("改向选姿夹角（度）"), SerializeField, Range(15f, 180f), Tooltip("持续移动中触发选姿的输入与速度改向角（度）。")]
         private float matchTurnAngle = 55f;
-        [SerializeField, InspectorName("可搜索动作库"), Tooltip("按声明顺序登记搜索用的动作库。角色播放库也需加入列表才参与搜索。启用匹配时，留空会回退到常规步态。")]
-        internal CharacterMotionDatabase[] searchLibraries;
         [SerializeField, InspectorName("候选条件表")] internal GroundCandidateTable candidates;
 
         [SerializeField, InspectorName("匹配特征与用途权重")] private GroundMatchTuning costs = new GroundMatchTuning();
@@ -34,8 +32,10 @@ namespace ThreeC.CharacterBehavior
         internal void Apply(CharacterAnimationConfiguration config)
         {
             var database = config.PlaybackLibrary;
-            config.SearchLibraries = new GroundSearchLibraries(database, searchLibraries);
+            config.SearchLibraries = new GroundSearchLibraries(database, config.GroundBindings);
             config.CandidatePolicy = GroundCandidatePolicy.Bind(candidates, config.SearchLibraries, config.Decisions);
+            string issue = config.SearchLibraries.BindingIssue ?? config.CandidatePolicy.Issue;
+            if (issue != null) throw new GroundBindingException(issue);
             config.FeatureLayout = config.SearchLibraries.Layout;
             config.MatchCosts = costs?.Snapshot() ?? new GroundMatchTuning();
             config.PaceLimits = paceLimits;

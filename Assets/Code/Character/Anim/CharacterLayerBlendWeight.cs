@@ -8,16 +8,12 @@ namespace ThreeC.CharacterBehavior
         private float velocity;
         private float startWeight, startSpeed, carrySeconds, duration, elapsed;
         private float timedTarget, timedSeconds;
-        private string actionKey;
-        private long actionInstance;
-        private float phase, entryPhase;
         private float? heldWeight;
 
         public void Reset()
         {
             velocity = 0f;
             timedSeconds = 0f;
-            actionKey = null;
             heldWeight = null;
         }
 
@@ -29,7 +25,6 @@ namespace ThreeC.CharacterBehavior
                 float remaining = timedSeconds > 0f ? Mathf.Max(0f, duration - elapsed) : 0f;
                 Begin(current, velocity != 0f ? Mathf.Min(remaining, secondsUntilCovered) : 0f);
                 timedSeconds = 0f;
-                actionKey = null;
             }
             return AdvanceTimed(dt, heldWeight.Value);
         }
@@ -37,7 +32,7 @@ namespace ThreeC.CharacterBehavior
         public float Advance(float current, in CharacterAnimationLayerPlan plan, float dt)
         {
             heldWeight = null;
-            if (plan.HasState && plan.Demand.HasHandoff) return AdvanceAction(current, plan.Demand, dt);
+            if (plan.HasState && plan.Demand.HasHandoff) return AdvanceAction(plan.Demand);
             float target = plan.HasState ? plan.Weight : 0f;
             float seconds = plan.LayerBlendSeconds;
             if (seconds <= 0f)
@@ -52,7 +47,6 @@ namespace ThreeC.CharacterBehavior
                 timedSeconds = seconds;
                 Begin(current, Mathf.Abs(target - current) * seconds);
             }
-            actionKey = null;
             return AdvanceTimed(dt, target);
         }
 
@@ -64,45 +58,12 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 从本层实际覆盖量按动作时钟推进权重，并记录下一帧承接的速度。
-        private float AdvanceAction(float current, in CharacterAnimationDemand demand, float dt)
+        private float AdvanceAction(in CharacterAnimationDemand demand)
         {
-            var timing = demand.Timing;
-            if (timing.Sample.Valid)
-            {
-                actionKey = demand.Key;
-                actionInstance = demand.InstanceId;
-                duration = timedSeconds = 0f;
-                float sampledWeight = timing.Sample.Weight(demand.EntryCoverage, out float slope);
-                velocity = slope * demand.MaximumWeight;
-                return sampledWeight * demand.MaximumWeight;
-            }
-            var handoff = timing.Handoff;
-            float sample = timing.WeightPhase.GetValueOrDefault();
-            bool sameAction = actionKey == demand.Key && actionInstance == demand.InstanceId;
-            float phaseRate = sameAction && dt > 0f ? Mathf.Max(0f, (sample - phase) / dt) : 1f / handoff.Duration;
-            if (!sameAction)
-            {
-                actionKey = demand.Key;
-                actionInstance = demand.InstanceId;
-                // 起点在上一帧的播放边界；当前帧的行为相位可能已经走过一小段前摇。
-                entryPhase = Mathf.Max(0f, sample - dt * phaseRate);
-                bool inherit = velocity != 0f && demand.MaximumWeight > 0f && !timing.StartAtZero &&
-                    !timing.Resumed && sample < handoff.FullFrom;
-                Begin(current, inherit ? (handoff.FullFrom - entryPhase) * handoff.Duration : 0f);
-            }
-            phase = sample;
-            timedSeconds = 0f;
-            if (duration > 0f && sample < handoff.FullFrom)
-            {
-                float seconds = Mathf.Max(0f, sample - entryPhase) * handoff.Duration;
-                float weight = CharacterBlendCurve.Sample(seconds, duration, true, carrySeconds)
-                    .Apply(startWeight, startSpeed, demand.MaximumWeight, out float weightSpeed);
-                velocity = weightSpeed * phaseRate * handoff.Duration;
-                return weight;
-            }
-            float coverage = handoff.WeightAt(sample, demand.EntryCoverage, out float phaseSlope);
-            velocity = demand.MaximumWeight * phaseSlope * phaseRate;
-            return demand.MaximumWeight * coverage;
+            duration = timedSeconds = 0f;
+            float weight = demand.Timing.Sample.Weight(demand.EntryCoverage, out float slope);
+            velocity = slope * demand.MaximumWeight;
+            return weight * demand.MaximumWeight;
         }
 
         private void Begin(float weight, float seconds)

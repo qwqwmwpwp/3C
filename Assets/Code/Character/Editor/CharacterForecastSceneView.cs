@@ -158,7 +158,7 @@ namespace ThreeC.CharacterBehavior
         // 使用角色当前动画配置的瞬移距离判断预测历史是否连续。
         private static float TeleportDistance()
         {
-            if (binding) return binding.PreviewTeleportDistance(driver);
+            if (binding) return binding.PreviewTeleportDistance();
             var profile = driver.Profile;
             return profile && profile.AnimationConfig ? profile.AnimationConfig.IkTeleportDistance
                 : CharacterAnimationConfig.DefaultTeleportDistance;

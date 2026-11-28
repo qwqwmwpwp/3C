@@ -28,7 +28,7 @@ namespace ThreeC.CharacterBehavior
             if (layer.Binding.Gait.IsValid) return layer.Binding.Gait.IsPlanted(left, phase) ? 1f : 0f;
             if (layer.Binding.IsStop && phase < CharacterStopPoseSample.SupportTransferPhase)
                 return left == (layer.Binding.Variant == CharacterLocomotionVariant.StopLeft) ? 1f : 0f;
-            if (layer.Demand.Key == CharacterAnimationIntentConverter.IdleKey) return 1f;
+            if (layer.Demand.Key == CharacterLocomotionKeys.IdleKey) return 1f;
             return blending ? 0f : -1f; // 老资源缺少接触数据时，过渡结束后再使用动画流的许可。
         }
 

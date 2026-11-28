@@ -30,9 +30,10 @@ namespace ThreeC.CharacterBehavior
 
         internal override void Include(AnimationModuleAssembly assembly) => assembly.Add(this);
 
-        internal void Apply(CharacterAnimationConfiguration config, CharacterProfileOverrides overrides)
+        // 将起步与转身的片段和时长写入动画配置。
+        internal void Apply(CharacterAnimationConfiguration config)
         {
-            config.LocomotionStartSeconds = overrides.StartSeconds.Resolve(locomotionStartSeconds);
+            config.LocomotionStartSeconds = locomotionStartSeconds;
             config.LocomotionTurnSeconds = locomotionTurnSeconds;
             config.LocomotionReverseAngle = locomotionReverseAngle;
             config.WalkStartState = walkStartStateName;

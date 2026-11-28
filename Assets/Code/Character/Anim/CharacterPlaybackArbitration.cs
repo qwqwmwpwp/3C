@@ -18,7 +18,7 @@ namespace ThreeC.CharacterBehavior
         private readonly List<Interval> ranked = new List<Interval>();
         private readonly List<(double at, CharacterAnimationDemand demand)> baselines = new();
 
-        // 保存本帧已观察到的基础动作切换，包括两次提交之间开始又结束的突进。
+        // 保存本帧已观察到的基础动作切换，包括两次提交之间开始又结束的运动覆盖。
         internal void ChangeBaseline(in CharacterAnimationDemand demand, double at) => baselines.Add((at, demand));
 
         // 按正常仲裁的相同优先顺序插入新请求。
@@ -27,6 +27,14 @@ namespace ThreeC.CharacterBehavior
             int i = ranked.Count;
             while (i > 0 && demand.Precedes(ranked[i - 1].Demand)) i--;
             ranked.Insert(i, new Interval { Demand = demand, Start = start });
+        }
+
+        // 在旧片段事件补播期间查找已登记实例的真正生效时刻。
+        internal double StartOf(in CharacterAnimationDemand demand)
+        {
+            foreach (var entry in ranked)
+                if (entry.Demand.SubmissionOrder == demand.SubmissionOrder) return entry.Start;
+            return double.NegativeInfinity;
         }
 
         // 关闭请求的活动区间，保留它对本次提交前其他声部的真实影响。
@@ -38,7 +46,7 @@ namespace ThreeC.CharacterBehavior
 
         // 逐个检查所有可能改变部位归属的起止边界；只有真正赢得仲裁的竞争者才会截断旧实例。
         internal double? FirstLoss(in CharacterAnimationDemand old, in CharacterAnimationDemand previousBase,
-            in CharacterAnimationDemand nextBase, in CharacterAnimationDemand idle, double now, Predicate<string> hasBinding)
+            in CharacterAnimationDemand nextBase, double now, Predicate<string> hasBinding)
         {
             var handle = old.Playback;
             double at = handle.LastEvaluatedAt;
@@ -58,10 +66,9 @@ namespace ThreeC.CharacterBehavior
                     if (interval.Start > at) next = Math.Min(next, interval.Start);
                     if (until > at) next = Math.Min(next, until);
                     if (at < interval.Start || at >= until || !hasBinding(interval.Demand.Key)) continue;
-                    if (claims.TryClaim(interval.Demand, baseline) && baseline.Key == CharacterAnimationIntentConverter.DashKey)
-                        baseline = idle;
+                    claims.TryClaim(interval.Demand, baseline);
                 }
-                var owners = claims.Compose(baseline);
+                var owners = claims.Compose(baseline, baseline);
                 if (old.Source != CharacterAnimationSource.LowerBody && owners.UpperOwner.Playback != handle ||
                     old.Source != CharacterAnimationSource.UpperBody && owners.LowerOwner.Playback != handle) return at;
                 at = next;

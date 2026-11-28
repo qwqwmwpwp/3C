@@ -16,4 +16,5 @@ MonoBehaviour:
   comboTable: {fileID: 11400000, guid: 67ab7b3c6a1d4207bff53004da339c7d, type: 2}
   movementConfig: {fileID: 11400000, guid: 84ab0168b7af423ea7220ed963050220, type: 2}
   animationConfig: {fileID: 11400000, guid: c84e754933a04188a3214a2d117105b9, type: 2}
+  animationActions: {fileID: 11400000, guid: 8f1c8941771949da8e4134cb3d31e84a, type: 2}
   forecastConfig: {fileID: 11400000, guid: 2125bd3ee4024a22b38e01e455aa32d7, type: 2}

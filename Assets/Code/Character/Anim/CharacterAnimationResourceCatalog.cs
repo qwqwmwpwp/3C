@@ -39,6 +39,15 @@ namespace ThreeC.CharacterBehavior
             Gait = gait;
         }
 
+        // 直接使用已在本角色资源库登记的状态句柄，不在工作线程查询 Unity 对象。
+        internal CharacterAnimationBinding(int state, string label)
+        {
+            this = default;
+            StateHash = state;
+            StateName = label;
+            ExitTransition = 1f;
+        }
+
         private const float StopTransitionLimit = 0.12f;
 
         // 为收步片段设置制动标记和离开相位，优先读取烘焙值。
@@ -65,6 +74,7 @@ namespace ThreeC.CharacterBehavior
         private const float LocomotionVariantEntryLimit = 0.04f;
 
         private readonly bool requiresMovement;
+        internal bool RequiresGround { get; set; }
         private readonly CharacterClipPlayback clips;
         private readonly CharacterMotionDatabase playbackLibrary;
         private readonly GroundSearchLibraries searchLibraries;
@@ -127,26 +137,23 @@ namespace ThreeC.CharacterBehavior
                 if (pair.Value.IsValid)
                     phasesByState[Animator.StringToHash(pair.Key)] = pair.Value;
             WalkSpeed = NominalSpeed(config.WalkSpeed);
-            AddBehavior(CharacterAnimationIntentConverter.IdleKey, config.IdleState, config.LocomotionPriority, config.Transition);
-            AddBehavior(CharacterAnimationIntentConverter.MoveKey, config.MoveState, config.LocomotionPriority, config.Transition,
+            AddBehavior(CharacterLocomotionKeys.IdleKey, config.IdleState, config.LocomotionPriority, config.Transition);
+            AddBehavior(CharacterLocomotionKeys.MoveKey, config.MoveState, config.LocomotionPriority, config.Transition,
                 gait: GetGait(gaitPhases, config.MoveState));
-            AddBehavior(CharacterAnimationIntentConverter.WalkKey, config.WalkState, config.LocomotionPriority, config.Transition,
+            AddBehavior(CharacterLocomotionKeys.WalkKey, config.WalkState, config.LocomotionPriority, config.Transition,
                 gait: GetGait(gaitPhases, config.WalkState));
-            AddBehavior(CharacterAnimationIntentConverter.SprintKey, config.SprintState, config.LocomotionPriority, config.Transition,
+            AddBehavior(CharacterLocomotionKeys.SprintKey, config.SprintState, config.LocomotionPriority, config.Transition,
                 gait: GetGait(gaitPhases, config.SprintState));
-            AddBehavior(CharacterAnimationIntentConverter.DashKey, config.DashState, config.DashPriority,
-                config.DashTransition, config.DashTransition);
-
             float variantTransition = Mathf.Min(config.Transition, LocomotionVariantEntryLimit); // 短起步和急转需要更快淡入。
-            AddVariant(CharacterAnimationIntentConverter.WalkKey, CharacterLocomotionVariant.Start, config.WalkStartState,
+            AddVariant(CharacterLocomotionKeys.WalkKey, CharacterLocomotionVariant.Start, config.WalkStartState,
                 config.WalkStartNormalizedTime, variantTransition, GetGait(gaitPhases, config.WalkStartState));
-            AddVariant(CharacterAnimationIntentConverter.MoveKey, CharacterLocomotionVariant.Start, config.RunStartState,
+            AddVariant(CharacterLocomotionKeys.MoveKey, CharacterLocomotionVariant.Start, config.RunStartState,
                 config.RunStartNormalizedTime, variantTransition, GetGait(gaitPhases, config.RunStartState));
             AddVariant(null, CharacterLocomotionVariant.TurnLeft, config.TurnLeftState, 0f, variantTransition);
             AddVariant(null, CharacterLocomotionVariant.TurnRight, config.TurnRightState, 0f, variantTransition);
-            AddStops(CharacterAnimationIntentConverter.WalkKey, config.WalkStop, config.Transition);
-            AddStops(CharacterAnimationIntentConverter.MoveKey, config.RunStop, config.Transition);
-            AddStops(CharacterAnimationIntentConverter.SprintKey, config.SprintStop, config.Transition);
+            AddStops(CharacterLocomotionKeys.WalkKey, config.WalkStop, config.Transition);
+            AddStops(CharacterLocomotionKeys.MoveKey, config.RunStop, config.Transition);
+            AddStops(CharacterLocomotionKeys.SprintKey, config.SprintStop, config.Transition);
             AddActions(config, logContext);
         }
 
@@ -178,7 +185,7 @@ namespace ThreeC.CharacterBehavior
                     continue;
                 }
                 actionKeys.Add(action.Key);
-                var source = action.Region switch
+                var source = action.IsMotionOverride ? CharacterAnimationSource.Baseline : action.Region switch
                 {
                     CharacterAnimationBodyRegion.UpperBody => CharacterAnimationSource.UpperBody,
                     CharacterAnimationBodyRegion.LowerBody => CharacterAnimationSource.LowerBody,
@@ -191,16 +198,16 @@ namespace ThreeC.CharacterBehavior
                     handoff = null;
                 }
                 rules.Add(action.Key, new CharacterAnimationRule(action.Key, source, action.Priority,
-                    action.InterruptionPolicy, action.InertiaSuppression.ToVector(), action.Partners, handoff));
+                    action.InterruptionPolicy, action.InertiaSuppression.ToVector(), action.Partners, handoff, action.OnTakeoverFallback, action.EqualPriorityTakeover));
                 bindings.Add(action.Key, new CharacterAnimationBinding(action));
                 if (!string.IsNullOrWhiteSpace(action.MovingStateName))
                     movingBindings.Add(action.Key, new CharacterAnimationBinding(action, stateOverride: action.MovingStateName));
-                if (!action.Key.StartsWith("$", StringComparison.Ordinal))
+                if (!action.IsMotionOverride)
                     externalKeys.Add(action.Key);
             }
         }
 
-        // 把意图转换器直接驱动的步态和突进绑定到基础姿势源。
+        // 把意图转换器直接驱动的步态绑定到基础姿势源。
         private void AddBehavior(string key, string state, int priority, float transition, float exitTransition = 1f,
             CharacterLocomotionGaitPhase gait = default)
         {
@@ -290,14 +297,11 @@ namespace ThreeC.CharacterBehavior
                     validVariants.Add(item.Key, WithBakedStopTrack(item.Value));
             foreach (var item in movingBindings)
                 if (CanUse(item.Value)) validMoving.Add(item.Key);
-            if (validBindings.TryGetValue(CharacterAnimationIntentConverter.MoveKey, out CharacterAnimationBinding run))
+            if (validBindings.TryGetValue(CharacterLocomotionKeys.MoveKey, out CharacterAnimationBinding run))
             {
-                UseRunIfMissingOrShared(CharacterAnimationIntentConverter.WalkKey, run);
-                UseRunIfMissingOrShared(CharacterAnimationIntentConverter.SprintKey, run);
+                UseRunIfMissingOrShared(CharacterLocomotionKeys.WalkKey, run);
+                UseRunIfMissingOrShared(CharacterLocomotionKeys.SprintKey, run);
             }
-            if (!validBindings.ContainsKey(CharacterAnimationIntentConverter.DashKey) &&
-                validBindings.TryGetValue(CharacterAnimationIntentConverter.IdleKey, out var idle))
-                validBindings.Add(CharacterAnimationIntentConverter.DashKey, idle);
             foreach (var pair in validBindings)
             {
                 CacheLength(pair.Value.StateHash);
@@ -317,8 +321,8 @@ namespace ThreeC.CharacterBehavior
                             groundTracks.Add((hash, entry.Frozen));
                             CacheLength(hash);
                         }
-            ready = Require(CharacterAnimationIntentConverter.IdleKey) &&
-                (!requiresMovement || Require(CharacterAnimationIntentConverter.MoveKey) && Require(CharacterAnimationIntentConverter.DashKey));
+            ready = !RequiresGround || Require(CharacterLocomotionKeys.IdleKey) &&
+                (!requiresMovement || Require(CharacterLocomotionKeys.MoveKey));
         }
 
         // 为收步状态合入同一播放库中有效的制动采样。
@@ -348,6 +352,14 @@ namespace ThreeC.CharacterBehavior
             validBindings[key] = run;
         }
 
+        // 主线程装配时解析配置的语义键或播放库中的完整状态路径。
+        internal int ResolveStrategyState(string key)
+        {
+            if (string.IsNullOrWhiteSpace(key)) return 0;
+            int state = bindings.TryGetValue(key, out var binding) ? binding.StateHash : Animator.StringToHash(key);
+            return clips.HasState(state) ? state : 0;
+        }
+
         // 判断此动作能否参与权重接管。
         public bool IsWeightedAction(string key) => key != null && rules.TryGetValue(key, out var rule) &&
             rule.Source != CharacterAnimationSource.Baseline;
@@ -360,6 +372,30 @@ namespace ThreeC.CharacterBehavior
         // 以实际资源标识核对已冻结的播放请求；不匹配时不得复用旧素材游标。
         internal int OneShotClipId(string key, bool singleOnly = false) => key != null && oneShotClips.TryGetValue(key, out var clip) &&
             (!singleOnly || clip.single) ? clip.id : 0;
+
+        // 按资源入点、实际播放倍率和请求覆盖项构造从入点到末尾的独立时钟。
+        internal bool TryClock(in CharacterOneShotRequest request, double start, out CharacterPlaybackClock clock, out int clipId)
+        {
+            clock = default;
+            clipId = 0;
+            if (!CanPlayOnce(request.Key)) return false;
+            var binding = validBindings[request.Key];
+            float phase = request.StartPhase ?? binding.Start;
+            if (!(phase >= 0f && phase <= 1f)) return false;
+            float length = StateSeconds(binding.StateHash) ?? 0f;
+            float rate = Pace(binding.StateHash).Rate(null, null, 1f, out _);
+            float duration = request.Duration ?? (length * (1f - phase) / rate);
+            var handoff = rules[request.Key].Handoff;
+            float fullDuration = phase < 1f ? duration / (1f - phase) : duration;
+            float transition = request.Transition ?? (handoff != null ? Mathf.Max(0f, handoff.FullFrom - phase) * fullDuration :
+                Mathf.Max(binding.LayerBlend, binding.Transition * length));
+            clock = new CharacterPlaybackClock(start, duration, transition, phase, handoff?.StartAtZero == true);
+            if (handoff != null && clock.Valid)
+                clock.FadeOut(start + Mathf.Max(0f, handoff.ReleaseFrom - phase) * fullDuration,
+                    (1f - Mathf.Max(handoff.ReleaseFrom, phase)) * fullDuration);
+            clipId = OneShotClipId(request.Key);
+            return clock.Valid && clipId != 0;
+        }
 
         // 主线程在每次帧采集和显式调用时核对实际素材，后台只查本批身份和值。
         internal void CaptureOneShots()
@@ -394,8 +430,8 @@ namespace ThreeC.CharacterBehavior
             {
                 string gaitKey = null;
                 if (demand.LocomotionVariant == CharacterLocomotionVariant.Start)
-                    gaitKey = demand.Key == CharacterAnimationIntentConverter.SprintKey
-                        ? CharacterAnimationIntentConverter.MoveKey : demand.Key;
+                    gaitKey = demand.Key == CharacterLocomotionKeys.SprintKey
+                        ? CharacterLocomotionKeys.MoveKey : demand.Key;
                 if (validVariants.TryGetValue((gaitKey, demand.LocomotionVariant), out CharacterAnimationBinding variant))
                     return variant;
             }
@@ -435,7 +471,7 @@ namespace ThreeC.CharacterBehavior
             var side = left == true ? CharacterLocomotionVariant.StopLeft : CharacterLocomotionVariant.StopRight;
             if (left.HasValue && validVariants.TryGetValue((key, side), out var stop))
                 return stop;
-            return validBindings[CharacterAnimationIntentConverter.IdleKey];
+            return validBindings[CharacterLocomotionKeys.IdleKey];
         }
 
         private static float NominalSpeed(float value) => Mathf.Max(0.01f, InputMath.NonNegative(value, 1f));

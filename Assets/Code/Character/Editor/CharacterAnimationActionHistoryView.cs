@@ -7,7 +7,7 @@ namespace ThreeC.CharacterBehavior
     internal sealed class CharacterAnimationActionHistoryView
     {
         private readonly CharacterActionTraceEntry[] entries = new CharacterActionTraceEntry[CharacterActionTrace.Capacity];
-        private CharacterBehaviorAnimator selected;
+        private CharacterAnimationAdapter selected;
         private bool expanded;
         private int count;
 
@@ -21,7 +21,7 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 展开时只为所选角色采集，在布局阶段取得有界历史。
-        internal void Draw(CharacterBehaviorAnimator target)
+        internal void Draw(CharacterAnimationAdapter target)
         {
             expanded = EditorGUILayout.Foldout(expanded, "行为请求与播放历史（最近 64 项）");
             var next = expanded ? target : null;

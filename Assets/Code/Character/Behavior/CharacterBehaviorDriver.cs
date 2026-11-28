@@ -22,7 +22,7 @@ namespace ThreeC.CharacterBehavior
         [Header("当前实例覆盖")]
         [SerializeField, InspectorName("实例覆盖")] private CharacterProfileOverrides profileOverrides = new CharacterProfileOverrides();
 
-        [SerializeField, InspectorName("并行预测与动画决策")] private bool useWorkerThreads = true;
+        [SerializeField, InspectorName("并行预测")] private bool useWorkerThreads = true;
         private CharacterBlackboard blackboard = new CharacterBlackboard();
         internal CharacterRuntimeConfiguration Configuration => new CharacterRuntimeConfiguration(
             blackboard.Configuration, profile, profileOverrides, allowGuard, useWorkerThreads);
@@ -388,10 +388,5 @@ namespace ThreeC.CharacterBehavior
         internal string DescribeForecast() => predictor?.Diagnostics.Describe(MovementForecast);
 #endif
 
-        // 在 Inspector 修改实例过渡覆盖时约束其有效范围。
-        private void OnValidate()
-        {
-            if (profileOverrides != null) profileOverrides.Transition.Value = Mathf.Clamp01(profileOverrides.Transition.Value);
-        }
     }
 }

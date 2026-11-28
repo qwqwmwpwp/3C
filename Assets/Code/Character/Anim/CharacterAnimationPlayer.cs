@@ -38,8 +38,8 @@ namespace ThreeC.CharacterBehavior
         private bool bound, boundWithController;
         private bool paused;
         private float speedBeforePause;
-        private string oneShotWarning;
         private CharacterAnimationPlaybackPlan lastEvaluated;
+        private long cursorVersion;
         private readonly CharacterPlaybackFrameBudget budget = new CharacterPlaybackFrameBudget();
         internal CharacterPlaybackFrameStep Remaining => budget.Remaining;
 
@@ -85,52 +85,31 @@ namespace ThreeC.CharacterBehavior
             bound = true;
         }
 
-        // 按实际播放顺序核对仍获选的单次动作，并把终态交给仲裁器随播放提交。
-        internal bool ReconcileOneShots(in CharacterAnimationPlaybackPlan previous, in CharacterPlaybackObservation seen,
-            in CharacterAnimationComposition selected, CharacterAnimationComposer composer)
-        {
-            if (previous.UpperBody.Demand.Playback == null &&
-                previous.LowerBody.Demand.Playback == null && previous.Overlay.Demand.Playback == null) return false;
-            bool changed = InspectOneShot(previous.Overlay, seen.Overlay, selected.Overlay, composer);
-            changed |= InspectOneShot(previous.LowerBody, seen.Lower, selected.LowerBody, composer);
-            changed |= InspectOneShot(previous.UpperBody, seen.Upper, selected.UpperBody, composer);
-            return changed;
-        }
-
-        // 用已提交动作的观测确认完成或打断，并记录误绑循环片段的诊断。
-        private bool InspectOneShot(in CharacterAnimationLayerPlan previous, in CharacterLayerObservation layer,
-            CharacterAnimationDemand selected, CharacterAnimationComposer composer)
-        {
-            var playback = previous.Demand.Playback;
-            if (playback == null || playback.Clock.Valid || playback.Status != CharacterActionPlaybackStatus.Started ||
-                selected.Playback != playback) return false;
-            var status = playback.Observe(previous.StateHash, layer);
-            if (status == CharacterActionPlaybackStatus.Started) return false;
-            if (layer.Destination.fullPathHash == previous.StateHash && layer.Destination.loop)
-                oneShotWarning = $"单次动作 {playback.Key} 绑定了循环状态 {previous.StateName}，已中止。";
-            var source = status == CharacterActionPlaybackStatus.Completed ? CharacterPlaybackEndSource.ClipFinished :
-                layer.Destination.loop && layer.Destination.fullPathHash == previous.StateHash
-                    ? CharacterPlaybackEndSource.ResourceUnavailable : CharacterPlaybackEndSource.ArbitrationLost;
-            return composer.End(playback.Key, playback.InstanceId, status, source);
-        }
-
         // 已播声部按时间先后共同推进；每段图事件返回后重新核对仲裁、资源和批次代次。
-        internal bool DrainRetired(CharacterAnimationComposer composer, CharacterAnimationRequest behavior, double now,
+        internal (bool NeedsSelection, long PublishedEndVersion) DrainRetired(CharacterAnimationComposer composer,
+            CharacterAnimationRequest behavior, double now,
             CharacterPosePipeline pose, CharacterAnimationMotion motion, System.Func<bool> current, ref CharacterAnimationPlaybackPlan committed)
         {
             bool changed = false;
             while (current())
             {
-                composer.RetireDue(now, behavior);
+                bool activated = composer.RetireDue(now, behavior);
+                changed |= activated;
                 var retiring = composer.Retiring;
-                if (retiring.Count == 0) break;
+                if (retiring.Count == 0)
+                {
+                    if (activated) continue;
+                    break;
+                }
                 changed = true;
                 double from = double.PositiveInfinity, to = double.PositiveInfinity;
                 for (int i = retiring.Count - 1; i >= 0; i--)
                 {
                     var handle = retiring[i];
                     bool available = CanResume(handle);
-                    if (!available || handle.Clock.End <= handle.LastEvaluatedAt)
+                    // 角色预算已结算时，仍允许给已显示的声部一次零步长的真实末端采样。
+                    bool needsEndSample = handle.Clock.NaturalEnd <= handle.Clock.StopAt && !handle.EndSampleEvaluated;
+                    if (!available || handle.Clock.End <= handle.LastEvaluatedAt && !needsEndSample)
                     {
                         composer.FinishRetired(handle, available || !handle.HasStarted);
                         continue;
@@ -138,12 +117,15 @@ namespace ThreeC.CharacterBehavior
                     from = System.Math.Min(from, handle.LastEvaluatedAt);
                     to = System.Math.Min(to, handle.Clock.End);
                 }
-                if (retiring.Count == 0) break;
+                if (retiring.Count == 0) continue;
+                to = System.Math.Min(to, composer.NextActivation);
                 foreach (var handle in retiring)
                     if (handle.LastEvaluatedAt > from) to = System.Math.Min(to, handle.LastEvaluatedAt);
                 if (budget.NextFrameEnd > from) to = System.Math.Min(to, budget.NextFrameEnd);
                 var step = budget.Until(to);
-                var plan = new CharacterAnimationPlaybackPlan(lastEvaluated, seen, clips, composer, step);
+                if (to > from && step.End <= from) break; // 等下帧提供剩余预算。
+                long before = cursorVersion;
+                var plan = new CharacterAnimationPlaybackPlan(lastEvaluated, seen, clips, step);
                 clips.Apply(plan, step, visibleWeights);
                 if (!clips.Graph.IsValid())
                 {
@@ -152,14 +134,13 @@ namespace ThreeC.CharacterBehavior
                 }
                 var owners = new CharacterAnimationComposition(plan.FullBody.Demand, plan.UpperOwner.Demand, plan.LowerOwner.Demand);
                 pose.Prepare(owners, motion, plan, step);
-                composer.BeginSegment(to);
-                try { EvaluatePose(plan, step); }
-                finally { composer.EndSegment(now); }
+                EvaluatePose(plan, step, composer, now);
                 if (!current()) break;
                 committed = plan;
+                if (cursorVersion == before) break; // 原生时钟未推进时，本帧不再消耗同一预算。
                 // 新请求及撤销已记下本段真实时刻，下一轮重新计算最早截止。
             }
-            return changed;
+            return (changed, composer.PublishedEndVersion);
         }
 
         // 核对上次真实提交的句柄、素材与当前播放库；从未显示的请求没有可补采的区间。
@@ -196,7 +177,11 @@ namespace ThreeC.CharacterBehavior
             var observation = seen[(int)layer.Demand.Source];
             if (observation.Ready && observation.Destination.fullPathHash == layer.StateHash)
             {
-                playback.RecordCursor(observation.Destination, time);
+                var sample = layer.Demand.Timing.Sample;
+                double previousAt = playback.LastEvaluatedAt;
+                bool hadEnd = playback.EndSampleEvaluated;
+                playback.RecordCursor(observation.Destination, time, sample.Valid && sample.Time >= playback.Clock.NaturalEnd);
+                if (playback.LastEvaluatedAt > previousAt || playback.EndSampleEvaluated != hadEnd) cursorVersion++;
                 if (playback.Clock.Valid && playback.Cursor.HasValue) playback.EntryCoverage ??= layer.Demand.EntryCoverage;
             }
         }
@@ -215,14 +200,6 @@ namespace ThreeC.CharacterBehavior
             if (emission.UpperBody) composer.Start(plan.UpperBody.Demand.Playback);
         }
 
-        // 在播放提交结束后报告本次观测到的循环绑定错误。
-        internal void FlushWarnings(Object context)
-        {
-            if (oneShotWarning == null) return;
-            Debug.LogWarning(oneShotWarning, context);
-            oneShotWarning = null;
-        }
-
         // 推进各层到计划指定的状态并返回本帧实际开始的播放。
         internal CharacterAnimationPlaybackEmission ApplyPlan(in CharacterAnimationPlaybackPlan plan, in CharacterPlaybackFrameStep step) =>
             clips.Apply(plan, step);
@@ -236,15 +213,41 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 通知片段图释放旧动作声部，但保留已装配资源和图本身。
-        internal void ClearMotionSources() => clips.ClearMotionSources();
+        internal void ClearMotionSources(bool resetTime)
+        {
+            clips.ClearMotionSources();
+            if (resetTime) ClearFrameHistory();
+        }
+
+        // 已求值的基础片段仍对任一身体分区有贡献时，才允许提交策略历史。
+        internal bool UsedBasePose(int state)
+        {
+            var baseline = seen[(int)CharacterAnimationSource.Baseline];
+            return state != 0 && baseline.Destination.fullPathHash == state && baseline.BlendProgress > 0f &&
+                visibleWeights[(int)CharacterAnimationSource.FullBodyOverlay] < 1f &&
+                (visibleWeights[(int)CharacterAnimationSource.UpperBody] < 1f ||
+                visibleWeights[(int)CharacterAnimationSource.LowerBody] < 1f);
+        }
 
         // 在各层权重和 IK 输入均就绪后求值本帧姿态。
-        internal void EvaluatePose(CharacterAnimationPlaybackPlan plan, CharacterPlaybackFrameStep step) => clips.Evaluate(() =>
+        internal bool EvaluatePose(CharacterAnimationPlaybackPlan plan, CharacterPlaybackFrameStep step,
+            CharacterAnimationComposer composer, double frameEnd)
         {
-            budget.Commit(step);
-            lastEvaluated = plan;
-            ObserveSegment(plan, step.End);
-        });
+            bool evaluated = false;
+            composer.BeginSegment(step.End);
+            try
+            {
+                clips.Evaluate(() =>
+                {
+                    evaluated = true;
+                    budget.Commit(step);
+                    lastEvaluated = plan;
+                    ObserveSegment(plan, step.End);
+                });
+            }
+            finally { composer.EndSegment(frameEnd); }
+            return evaluated;
+        }
 
 #if UNITY_EDITOR
         // 采集已求值片段的实际权重供编辑器发布。
@@ -258,6 +261,12 @@ namespace ThreeC.CharacterBehavior
         internal void ResetPlayback()
         {
             clips.Close();
+            ClearFrameHistory();
+        }
+
+        // 角色绝对时间域变化时清空图预算、上次实际姿势和各声部游标。
+        private void ClearFrameHistory()
+        {
             budget.Reset();
             lastEvaluated = default;
             System.Array.Clear(seen, 0, seen.Length);

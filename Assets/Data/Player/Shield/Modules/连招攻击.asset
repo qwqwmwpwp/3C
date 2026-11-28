@@ -65,28 +65,3 @@ MonoBehaviour:
       Chest: 1
       LeftArm: 1
       RightArm: 1
-  mappings:
-  - Behavior: 8
-    Trigger: 1
-    AttackStateId: 1
-    EntryAction: full.light_attack
-    HoldAction:
-    Weight: 1
-  - Behavior: 8
-    Trigger: 1
-    AttackStateId: 2
-    EntryAction: full.light_attack_2
-    HoldAction:
-    Weight: 1
-  - Behavior: 8
-    Trigger: 1
-    AttackStateId: 3
-    EntryAction: full.heavy_attack
-    HoldAction:
-    Weight: 1
-  - Behavior: 8
-    Trigger: 1
-    AttackStateId: 4
-    EntryAction: full.skill_2
-    HoldAction:
-    Weight: 1

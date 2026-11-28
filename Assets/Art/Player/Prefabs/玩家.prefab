@@ -285,6 +285,7 @@ GameObject:
   - component: {fileID: 5335689174459230759}
   - component: {fileID: 3027059712909069648}
   - component: {fileID: 2596395804047667453}
+  - component: {fileID: 7037965582290349801}
   - component: {fileID: 7638749128900610033}
   - component: {fileID: 5515404412966574154}
   - component: {fileID: 8305169670729772280}
@@ -507,12 +508,6 @@ MonoBehaviour:
     GroundAcceleration:
       Enabled: 0
       Value: 0
-    StartSeconds:
-      Enabled: 0
-      Value: 0
-    Transition:
-      Enabled: 0
-      Value: 0
 --- !u!114 &2596395804047667453
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -526,6 +521,10 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   animator: {fileID: 3159608684234527808}
+  animationConfig: {fileID: 11400000, guid: c84e754933a04188a3214a2d117105b9, type: 2}
+  useWorkerThreads: 1
+  walkSpeed: 2
+  walkableSlope: 45
   modelDropLimit: 0.08
   modelBindings:
     Inertia:
@@ -554,6 +553,18 @@ MonoBehaviour:
       Tip: {fileID: 6243611463809395506}
       AnimationTarget: {fileID: 0}
       SceneTarget: {fileID: 0}
+--- !u!114 &7037965582290349801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 814725717875531968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: dc49a062fb0443679379b49482fa4a9b, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &860608873121642723
 GameObject:
   m_ObjectHideFlags: 0

@@ -28,6 +28,3 @@ MonoBehaviour:
     Run: {x: 0.8, y: 1.2}
     Sprint: {x: 0.8, y: 1.2}
     ExcessPenalty: 1
-  searchLibraries:
-  - {fileID: 11400000, guid: aaec0abe6a8e498db4858df95433ac5f, type: 2}
-  - {fileID: 11400000, guid: 3041a502c8445351a18df1a74b04659e, type: 2}

@@ -34,6 +34,7 @@ namespace ThreeC.CharacterBehavior
             public Vector3 InertiaSuppression;
             public float StartWeight, StartWeightSpeed, Weight, WeightSpeed, LogicalRate;
             public bool Timed;
+            public double? NativeEnd; // 本声部向原生节点提交素材末端后，读回的引擎时间。
             // 单次素材只有在图时钟实际走到末端时才报告完成，避免浮点转换提前结算末尾事件。
             public CharacterClipProgress Progress
             {
@@ -42,7 +43,9 @@ namespace ThreeC.CharacterBehavior
                     double seconds = Clip.GetTime();
                     double phase = Motion.Length > 0f ? seconds / Motion.Length : 0d;
                     float observed = Timed && phase < 1d ? Mathf.Min(0.99999994f, (float)phase) : (float)phase;
-                    return new CharacterClipProgress(Hash, observed, Motion.Loop, ClipId, PlaybackId, seconds);
+                    bool atEnd = NativeEnd.HasValue && seconds >= NativeEnd.Value;
+                    if (atEnd) observed = 1f;
+                    return new CharacterClipProgress(Hash, observed, Motion.Loop, ClipId, PlaybackId, seconds, atEnd);
                 }
             }
         }
@@ -208,17 +211,23 @@ namespace ThreeC.CharacterBehavior
                 Mixer.SetInputWeight(voice.Port, voice.Weight);
                 bool ended = voice.Playback != null && voice.Playback.EndSource != CharacterPlaybackEndSource.None;
                 double rate = voice.Timed || ended ? 0d : playback.Pace(voice.Hash).Rate(frame.StrideSpeed, frame.StartSpeed, frame.StopRate, out _);
-                if (!ended && voice == target && timing.ClipPhase.HasValue && dt > 0f)
+                voice.StepStart = voice.Clip.GetTime();
+                if (!ended && timed && voice == target && timing.Sample.Time >= timing.Sample.Clock.NaturalEnd)
                 {
-                    double seconds = timed ? timing.Sample.MaterialSeconds(voice.Motion.Length) : (double)timing.ClipPhase.Value * voice.Motion.Length;
-                    double current = voice.Clip.GetTime();
-                    rate = System.Math.Max(0d, seconds - current) / dt;
-                    // 自然终点仅在实际素材末端向上取一位，防止除再乘遗漏最后一个事件。
-                    if (timed && timing.Sample.Time >= timing.Sample.Clock.NaturalEnd && current + rate * dt < seconds)
-                        rate = System.BitConverter.Int64BitsToDouble(System.BitConverter.DoubleToInt64Bits(rate) + 1);
+                    // 末段只定位一次，保留上次采样时间供原生事件遍历。图在该精确终点求值。
+                    if (!voice.NativeEnd.HasValue)
+                    {
+                        voice.Motion.Seek(voice.Motion.Length);
+                        voice.NativeEnd = voice.Clip.GetTime();
+                    }
+                    rate = 0d;
+                }
+                else if (!ended && timed && voice == target && dt > 0f)
+                {
+                    double seconds = timing.Sample.MaterialSeconds(voice.Motion.Length);
+                    rate = System.Math.Max(0d, seconds - voice.StepStart) / dt;
                 }
                 voice.LogicalRate = (float)rate;
-                voice.StepStart = voice.Clip.GetTime();
                 voice.Motion.Advance(rate, dt);
                 voice.StepEnd = voice.Motion.EvaluationTime(dt);
             }

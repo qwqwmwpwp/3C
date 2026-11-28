@@ -2,12 +2,14 @@ using UnityEngine;
 
 namespace ThreeC.CharacterBehavior
 {
-    [CreateAssetMenu(menuName = "3C/动画模块/行为与动作集", fileName = "行为与动作集")]
+    // 将可复用的语义动作与部位仲裁规则加入动画装配。
+    [CreateAssetMenu(menuName = "动画模块/动作集", fileName = "动作集")]
     public sealed class ActionSetModule : AnimationModule
     {
         [SerializeField, InspectorName("动作映射")] private CharacterAnimationActionSettings[] actions;
-        [SerializeField, InspectorName("行为触发")] private CharacterBehaviorAnimationMapping[] mappings;
 
-        internal override void Include(AnimationModuleAssembly assembly) => assembly.Add(this, actions, mappings);
+
+        // 按配置顺序注册动作资源。
+        internal override void Include(AnimationModuleAssembly assembly) => assembly.Add(this, actions);
     }
 }

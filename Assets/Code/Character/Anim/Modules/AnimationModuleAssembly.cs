@@ -13,7 +13,6 @@ namespace ThreeC.CharacterBehavior
         private readonly HashSet<AnimationModule> visiting = new HashSet<AnimationModule>();
         private readonly HashSet<AnimationModule> visited = new HashSet<AnimationModule>();
         private readonly List<CharacterAnimationActionSettings> actions = new List<CharacterAnimationActionSettings>();
-        private readonly List<CharacterBehaviorAnimationMapping> mappings = new List<CharacterBehaviorAnimationMapping>();
         private readonly List<CharacterIkTuning> channels = new List<CharacterIkTuning>();
         private readonly Dictionary<string, ActionSetModule> owners = new Dictionary<string, ActionSetModule>(StringComparer.Ordinal);
         private readonly HashSet<CharacterIkLimb> limbs = new HashSet<CharacterIkLimb>();
@@ -36,22 +35,11 @@ namespace ThreeC.CharacterBehavior
             return Resolve(roots, null);
         }
 
-        // 展开根模块并校验装配中各条行为映射的触发条件和动作键。
-        internal static AnimationModuleAssembly Resolve(IEnumerable<AnimationModule> roots, HashSet<AnimationModule> excluded, bool checkActionReferences = true)
+        // 展开根模块并检查重复能力及动作定义。
+        internal static AnimationModuleAssembly Resolve(IEnumerable<AnimationModule> roots, HashSet<AnimationModule> excluded)
         {
             var result = new AnimationModuleAssembly(excluded);
             foreach (var root in roots) result.Visit(root);
-            for (int i = 0; i < result.mappings.Count; i++)
-            {
-                var row = result.mappings[i];
-                if (!row.HasValidTrigger)
-                    throw new ArgumentException($"第 {i + 1} 条行为映射（{row.BehaviorId} / {row.AttackStateId}）需要单一许可行为和有效动作键。");
-                if (checkActionReferences)
-                {
-                    result.RequireAction(row.EntryAction, row, i);
-                    result.RequireAction(row.HoldAction, row, i);
-                }
-            }
             return result;
         }
 
@@ -68,13 +56,6 @@ namespace ThreeC.CharacterBehavior
                     foreach (var child in group.Children) pending.Push(child);
             }
             return false;
-        }
-
-        // 校验映射引用的非空动作键已由组合中的模块提供。
-        private void RequireAction(string key, CharacterBehaviorAnimationMapping row, int index)
-        {
-            if (!string.IsNullOrWhiteSpace(key) && !owners.ContainsKey(key))
-                throw new ArgumentException($"第 {index + 1} 条行为映射（{row.BehaviorId} / {row.AttackStateId}）引用了组合中缺少的动作 {key}。");
         }
 
         internal void Visit(AnimationModule module)
@@ -111,8 +92,8 @@ namespace ThreeC.CharacterBehavior
         internal void Add(TransitionInertiaModule module) => TransitionInertia = Single(TransitionInertia, module);
         internal void Add(PoseInertiaModule module) => Inertia = Single(Inertia, module);
 
-        // 校验动作键与申请部位，再收集模块的动作定义和行为映射。
-        internal void Add(ActionSetModule owner, CharacterAnimationActionSettings[] definitions, CharacterBehaviorAnimationMapping[] triggers)
+        // 校验动作键与申请部位，再收集模块的动作定义。
+        internal void Add(ActionSetModule owner, CharacterAnimationActionSettings[] definitions)
         {
             foreach (var action in definitions ?? Array.Empty<CharacterAnimationActionSettings>())
             {
@@ -126,9 +107,6 @@ namespace ThreeC.CharacterBehavior
                 owners.Add(action.Key, owner);
                 actions.Add(action);
             }
-            if (triggers != null)
-                foreach (var row in triggers)
-                    if (row != null) mappings.Add(row);
         }
 
         internal void Add(CharacterIkTuning[] settings)
@@ -143,14 +121,10 @@ namespace ThreeC.CharacterBehavior
         }
 
         // 将选中的模块语义和模型绑定写入本角色的配置快照。
-        internal void Apply(CharacterAnimationConfiguration config, CharacterModelBindings model, CharacterProfileOverrides overrides)
+        internal void Apply(CharacterAnimationConfiguration config, CharacterModelBindings model)
         {
-            if (Gait) Gait.Apply(config, overrides);
-            if (StartTurn) StartTurn.Apply(config, overrides);
-            if (Stop) Stop.Apply(config);
-            if (Match) Match.Apply(config);
+            if (config.PoseStrategy is ICharacterPoseConfiguration strategy) strategy.Configure(config);
             config.Actions = actions.ToArray();
-            config.BehaviorAnimations = mappings.ToArray();
             config.IkChannels = model.BindChannels(channels.ToArray());
             config.InertiaBones = model.Inertia;
             config.Orientation = Orientation ? Orientation.Tuning : null;

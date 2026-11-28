@@ -7,13 +7,19 @@ namespace ThreeC.CharacterBehavior
     // 在主线程冻结角色显式登记的搜索库及独立播放身份，保留逐库拒绝原因。
     internal sealed class GroundSearchLibraries
     {
-        internal const string NoDeclaredLibraries = "地面匹配已启用，但“可搜索动作库”为空，将使用常规步态规则。";
+        internal const string NoDeclaredLibraries = "地面匹配已启用，但“角色地面库绑定”为空，将使用常规步态规则。";
 #if UNITY_EDITOR
         internal static Func<CharacterMotionDatabase, IReadOnlyDictionary<string, string>> EditorBakeIssues;
         private readonly IReadOnlyDictionary<string, string>[] bakeIssues;
 #endif
         private static int revision;
+        internal static int Revision => System.Threading.Volatile.Read(ref revision);
         private readonly int boundRevision;
+        private readonly GroundLibraryBindings bindingAsset;
+        private readonly Dictionary<string, int> libraryIndices = new Dictionary<string, int>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string>[] groupBindings;
+        internal readonly string[] LibraryKeys;
+        internal readonly string BindingIssue;
         private readonly BindingStamp[] stamps;
         private readonly BindingStamp primaryStamp;
         private readonly CharacterMotionDatabase primary;
@@ -64,23 +70,29 @@ namespace ThreeC.CharacterBehavior
         internal static void InvalidateBindings() => System.Threading.Interlocked.Increment(ref revision);
 
         // 核对显式库引用与顺序，未声明和空列表都对应零库的快照。
-        internal bool Current(CharacterMotionDatabase[] declared)
+        internal bool Current(GroundLibraryBindings bindings)
         {
-            if (boundRevision != System.Threading.Volatile.Read(ref revision) || !primaryStamp.Current(primary)) return false;
+            if (boundRevision != Revision || bindingAsset != bindings || !primaryStamp.Current(primary)) return false;
+            var declared = bindings ? bindings.Libraries : null;
             if ((declared?.Length ?? 0) != Databases.Length) return false;
             for (int i = 0; i < Databases.Length; i++)
-                if (Databases[i] != declared[i] || !stamps[i].Current(Databases[i])) return false;
+                if (Databases[i] != declared[i]?.Database || !stamps[i].Current(Databases[i])) return false;
             return true;
         }
 
         // 校验显式登记库的组身份、Avatar、烘焙状态和评分布局，保留原声明索引。
-        internal GroundSearchLibraries(CharacterMotionDatabase primary, CharacterMotionDatabase[] declared, bool snapshotSamples = true)
+        internal GroundSearchLibraries(CharacterMotionDatabase primary, GroundLibraryBindings bindings, bool snapshotSamples = true)
         {
             this.primary = primary;
             primaryStamp = new BindingStamp(primary);
-            Databases = declared?.Length > 0 ? (CharacterMotionDatabase[])declared.Clone() : Array.Empty<CharacterMotionDatabase>();
+            bindingAsset = bindings;
+            var declared = bindings && bindings.Libraries != null ? bindings.Libraries : Array.Empty<GroundLibraryBinding>();
+            Databases = Array.ConvertAll(declared, entry => entry?.Database);
+            LibraryKeys = Array.ConvertAll(declared, entry => entry?.Key);
             int count = Databases.Length;
-            boundRevision = System.Threading.Volatile.Read(ref revision);
+            boundRevision = Revision;
+            groupBindings = new Dictionary<string, string>[count];
+            BindingIssue = IndexBindings(declared);
             stamps = new BindingStamp[count];
 #if UNITY_EDITOR
             bakeIssues = new IReadOnlyDictionary<string, string>[count];
@@ -99,7 +111,7 @@ namespace ThreeC.CharacterBehavior
             {
                 var db = Databases[i];
                 stamps[i] = new BindingStamp(db);
-                Names[i] = $"[{i}] {(db ? db.name : "未配置")}";
+                Names[i] = $"[{i}] {LibraryKeys[i]} → {(db ? db.name : "未配置")}";
                 Issues[i] = !db ? "未配置数据库" : !seen.Add(db) ? "重复登记同一数据库" : null;
                 if (Issues[i] != null) continue;
                 if (db.Groups) groupIndices[i] = db.Groups.IndexGroups(out Issues[i]);
@@ -128,10 +140,60 @@ namespace ThreeC.CharacterBehavior
             Issue = notes.Count == 0 ? null : string.Join("；", notes);
         }
 
-        // 仅在来源库自身的组索引中解析稳定 ID。
-        internal GroundAnimationGroup FindGroup(int libraryIndex, string groupId) =>
-            groupId != null && groupIndices[libraryIndex] is { } indices && indices.TryGetValue(groupId, out int index)
-                ? Databases[libraryIndex].Groups.Groups[index] : null;
+        // 固定逻辑库和组的对应关系，在角色装配前拒绝无法区分的声明。
+        private string IndexBindings(GroundLibraryBinding[] entries)
+        {
+            var issues = new List<string>();
+            var databases = new HashSet<CharacterMotionDatabase>();
+            for (int i = 0; i < entries.Length; i++)
+            {
+                var entry = entries[i];
+                string key = entry?.Key;
+                if (string.IsNullOrWhiteSpace(key)) issues.Add($"第 {i + 1} 个地面库绑定缺少逻辑库键");
+                else if (libraryIndices.ContainsKey(key)) issues.Add($"重复的逻辑库键 {key}");
+                else libraryIndices.Add(key, i);
+                if (entry != null && entry.Database && !databases.Add(entry.Database)) issues.Add($"逻辑库 {key} 重复绑定数据库 {entry.Database.name}");
+                var groupMap = new Dictionary<string, string>(StringComparer.Ordinal);
+                groupBindings[i] = groupMap;
+                foreach (var group in entry?.Groups ?? Array.Empty<GroundGroupBinding>())
+                {
+                    if (string.IsNullOrWhiteSpace(group?.Key)) issues.Add($"库 {key} 的组绑定缺少逻辑组键");
+                    else if (groupMap.ContainsKey(group.Key)) issues.Add($"库 {key} 内重复的逻辑组键 {group.Key}");
+                    else groupMap.Add(group.Key, group.GroupId);
+                }
+            }
+            return issues.Count == 0 ? null : string.Join("；", issues);
+        }
+
+        // 从角色绑定解析逻辑库下标，保留作者在绑定资源中设置的顺序。
+        internal int FindLibrary(string key) =>
+            !string.IsNullOrWhiteSpace(key) && libraryIndices.TryGetValue(key, out int index) ? index : -1;
+
+        // 仅在本逻辑库内解析角色绑定的稳定组 ID，并定位缺失的绑定或来源组。
+        internal GroundAnimationGroup FindGroup(int libraryIndex, string key, out string issue)
+        {
+            if (string.IsNullOrWhiteSpace(key) || !groupBindings[libraryIndex].TryGetValue(key, out string groupId))
+                issue = $"缺少逻辑组绑定 {key}";
+            else if (groupId == null || groupIndices[libraryIndex] == null ||
+                !groupIndices[libraryIndex].TryGetValue(groupId, out int index))
+                issue = $"逻辑组 {key} 的库内组 ID 无效或已失效（{groupId}）";
+            else
+            {
+                issue = null;
+                return Databases[libraryIndex].Groups.Groups[index];
+            }
+            return null;
+        }
+
+#if UNITY_EDITOR
+        // 编辑器也检查当前规则尚未使用的组映射，便于提前发现过期的稳定 ID。
+        internal IEnumerable<string> GroupBindingIssues()
+        {
+            for (int i = 0; i < groupBindings.Length; i++)
+                foreach (string key in groupBindings[i].Keys)
+                    if (FindGroup(i, key, out string issue) == null) yield return $"{Names[i]}：{issue}";
+        }
+#endif
 
         // 校验同一轮候选的通道、单位、历史和未来时窗、权重、尺度及有效维度。
         internal static string ComparisonIssue(GroundFeatureLayout a, GroundFeatureLayout b)

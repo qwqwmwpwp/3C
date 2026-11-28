@@ -30,14 +30,14 @@ namespace ThreeC.CharacterBehavior
 
         internal static GroundTrackGait GaitOf(string key) => key switch
         {
-            CharacterAnimationIntentConverter.WalkKey => GroundTrackGait.Walk,
-            CharacterAnimationIntentConverter.MoveKey => GroundTrackGait.Run,
-            CharacterAnimationIntentConverter.SprintKey => GroundTrackGait.Sprint,
+            CharacterLocomotionKeys.WalkKey => GroundTrackGait.Walk,
+            CharacterLocomotionKeys.MoveKey => GroundTrackGait.Run,
+            CharacterLocomotionKeys.SprintKey => GroundTrackGait.Sprint,
             _ => GroundTrackGait.Any
         };
 
         // 根据当前与目标步态确定统一查询用途，并保留实际输入的步态门槛。
-        internal static GroundPoseQuery Moving(bool starting, CharacterMoveGait input, string fallback,
+        internal static GroundPoseQuery Moving(bool starting, AnimationGait input, string fallback,
             CharacterMotionTrack source, CharacterAnimationMotion motion, float walkLimit, float sprintEntry)
         {
             var path = motion.Trajectory.Match;
@@ -46,10 +46,10 @@ namespace ThreeC.CharacterBehavior
             float future = path.Near.magnitude / path.Windows.x;
             bool fasterGait = future > walkLimit + 0.001f && motion.Trajectory.FutureVelocity.magnitude > walkLimit;
             var alternate = GroundTrackGait.Any;
-            if (input == CharacterMoveGait.Walk) target = GroundTrackGait.Walk;
+            if (input == AnimationGait.Walk) target = GroundTrackGait.Walk;
             else if (fasterGait)
             {
-                target = input == CharacterMoveGait.Sprint && motion.Trajectory.FutureVelocity.magnitude >= sprintEntry
+                target = input == AnimationGait.Sprint && motion.Trajectory.FutureVelocity.magnitude >= sprintEntry
                     ? GroundTrackGait.Sprint : GroundTrackGait.Run;
                 if (speed <= walkLimit) alternate = GroundTrackGait.Walk;
                 else if (target == GroundTrackGait.Sprint && speed < sprintEntry) alternate = GroundTrackGait.Run;
